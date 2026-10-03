@@ -9,6 +9,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, mkdirSync } from "n
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { chromium } from "playwright";
+import { Record, RecordMetadataKey, SpecialMoveType, exportKIF } from "tsshogi";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const engine = process.env.E2E_ENGINE ?? path.join(root, "tools/mock-usi-engine.mjs");
@@ -50,7 +51,20 @@ try {
     ? readdirSync(kifuDir).filter((f) => /\.(kif|kifu|ki2|csa|jkf)$/i.test(f)).map((f) => ({ name: f, data: readFileSync(path.join(kifuDir, f)).toString("base64") }))
     : [];
   if (!files.length) {
-    await api("POST", "/api/import", { text: "position startpos moves 7g7f 3c3d 2g2f 4c4d 2f2e 2b3c 3i4h 8b4b 5i6h 5a6b 6h7h 6b7b 8h3c+ 2a3c 2e2d 2c2d 2h2d" });
+    // Two short games with Q on each side; in the first Q hangs the bishop on move 3 for the mock engine to find.
+    const lines = [
+      ["Q", "rival", "2026/09/01", "7g7f 3c3d 8h5e 2b5e 2g2f 8b2b 6i7h 5e4d"],
+      ["rival", "Q", "2026/09/02", "7g7f 3c3d 8h3c+ 2a3c 2g2f 4c4d 2f2e 8b4b"],
+    ];
+    for (const [black, white, date, usi] of lines) {
+      const rec = Record.newByUSI("position startpos moves " + usi);
+      rec.metadata.setStandardMetadata(RecordMetadataKey.BLACK_NAME, black);
+      rec.metadata.setStandardMetadata(RecordMetadataKey.WHITE_NAME, white);
+      rec.metadata.setStandardMetadata(RecordMetadataKey.START_DATETIME, date);
+      rec.goto(Number.MAX_SAFE_INTEGER);
+      rec.append(SpecialMoveType.RESIGN);
+      files.push({ name: `${date.replaceAll("/", "")}.kif`, data: Buffer.from(exportKIF(rec)).toString("base64") });
+    }
   }
   const imp = await api("POST", "/api/import", { files });
   check(imp.results.every((r) => r.status === "added"), `imported ${imp.results.length} file(s)`);
