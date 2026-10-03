@@ -1,0 +1,40 @@
+{
+  "name": "kifu-study",
+  "version": "0.1.0",
+  "description": "Local kifu library, engine analysis, mistake cards and study notebooks",
+  "main": "dist/electron/main.mjs",
+  "scripts": {
+    "dev": "node tools/dev.mjs",
+    "build": "vite build && node tools/build-server.mjs",
+    "start": "npm run build && electron .",
+    "serve": "npm run build && node dist/server/main.mjs",
+    "test": "vitest run",
+    "e2e": "npm run build && node test/e2e/run.mjs",
+    "typecheck": "vue-tsc --noEmit",
+    "rules": "python3 tools/convert-classifier-rules.py"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "encoding-japanese": "^2.4.0",
+    "marked": "^18.0.14",
+    "tsshogi": "^2.3.4",
+    "vue": "^3.5.43"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/encoding-japanese": "^2.2.1",
+    "@types/node": "^26.6.4",
+    "@vitejs/plugin-vue": "^6.0.9",
+    "electron": "^44.5.1",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15",
+    "typescript": "5.9",
+    "vite": "^8.3.2",
+    "vitest": "^5.0.3",
+    "vue-tsc": "^3.3.12"
+  },
+  "type": "module",
+  "private": true
+}

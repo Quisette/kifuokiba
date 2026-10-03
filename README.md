@@ -1,3 +1,75 @@
 # 棋譜帖 Kifu Study
 
-Local shogi game study app.
+A local desktop app for studying your own shogi games: import kifu, let a USI engine find your mistakes, drill them as cards, and keep study notes with live boards.
+
+Everything stays on your machine, in one SQLite file.
+
+## What it does
+
+- **Library.** Import KIF, KIFU, KI2, CSA, JKF, SFEN or USI by drag-drop, file picker or paste. Shift_JIS and UTF-8 are detected automatically, and duplicates are skipped.
+  - Each game gets its 戦型, the castles on both sides over time, and its tactics (149 rules converted from HiraganaSuisho and sylwi-kifu-vue).
+  - Filter by side, result, opening, castle, opponent, tag, source or date, and save a filter as a collection.
+- **Analysis.** A background queue runs your USI engine (YaneuraOu, 水匠 etc.) over every position. Evaluations are cached per position.
+  - Moves are graded 緩手 / 疑問手 / 悪手 / 大悪手 with ShogiHome's win-rate thresholds, plus missed mates and missed wins.
+  - Each game gets accuracy, a turning point and an eval graph.
+- **Game view.** ShogiHome's board, keyboard navigation (← → Home End, `[` `]` to jump between mistakes, `f` to flip), and engine candidate moves.
+  - You can try your own move and get an engine verdict, edit comments, search for the same position across games, and export KIF/CSA with the evals written as ShogiHome-style comments.
+- **Mistake cards.** Your 悪手 and worse become cards automatically. You can also make one from any position.
+  - In review you play your answer on the board. The best move, or any move the engine says is within the tolerance, counts as correct. You can replay the engine line.
+  - Scheduling is SM-2. Leeches are counted.
+- **Stats.** Win rate by side, opening, opponent's opening, castle, matchup, time control and opponent, plus a monthly trend and where in the game you lose points.
+- **Notebooks.** Markdown pages with live boards, using the personal-shogi-note directives:
+
+  ```
+  :::shogi-view{game=12 ply=48}
+  :::
+
+  :::shogi-view{move=4}
+  position startpos moves 7g7f 3c3d 2g2f 4c4d 2f2e
+  :::
+
+  :kifu[game:12]{start=1 stop=20}
+  ```
+
+## Run it
+
+Requires Node 22.5 or newer (for `node:sqlite`).
+
+```sh
+npm install
+npm start          # build and open the Electron app
+npm run serve      # or: build and serve at http://127.0.0.1:3210 in a browser
+npm run dev        # Vite with hot reload on :5173, API on :3210
+```
+
+`serve` reads `PORT`, `KIFU_STUDY_DATA` (default `~/.kifu-study`) and `KIFU_STUDY_DB`. The Electron app keeps its database in the OS user-data folder.
+
+On first launch, open Settings, enter your player names, and set the path to a USI engine.
+
+## Tests
+
+```sh
+npm test           # unit + API tests (vitest); uses tools/mock-usi-engine.mjs
+npm run typecheck
+npm run e2e        # builds, starts the server, drives every screen in Chromium, saves screenshots to test-results/e2e
+```
+
+`E2E_ENGINE=/path/to/engine E2E_KIFU=/dir/of/kifu npm run e2e` runs the browser test against a real engine and your own files. `CHROMIUM_PATH` picks the browser.
+
+The mock engine only counts material and looks one capture ahead. It proves the plumbing works, not the quality of the analysis.
+
+`tools/selfplay.ts` makes demo games by engine self-play.
+
+## Layout
+
+```
+src/core/       record import/export, summaries, grading, SM-2, classifier (shared, no I/O)
+src/server/     SQLite store, library, analysis queue, USI engine client, cards, stats, HTTP API
+src/electron/   Electron shell: starts the server and opens a window
+src/renderer/   Vue 3 UI; vendor/shogihome holds the board component
+tools/          build, mock engine, classifier rule converter, self-play generator
+```
+
+## Licenses
+
+The app itself is MIT. Code and images from ShogiHome, HiraganaSuisho and sylwi-kifu-vue are MIT; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

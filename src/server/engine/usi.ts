@@ -1,0 +1,207 @@
+// A USI engine wrapper for analysis: one position at a time, no pondering.
+// The process handling (ChildProcess) and info parsing come from ShogiHome
+// (MIT); the state handling is a smaller version of ShogiHome's EngineProcess.
+import { ChildProcess } from "./process.js";
+import { parseInfoCommand } from "./info.js";
+import { USIInfoCommand } from "../../core/usi.js";
+
+export type EngineOption = { name: string; type: string; default?: string };
+
+export type SearchLimit = {
+  movetimeMs?: number;
+  nodes?: number;
+  depth?: number;
+};
+
+export type SearchLine = {
+  multipv: number;
+  /** From the side to move's point of view. */
+  scoreCP?: number;
+  scoreMate?: number;
+  pv: string[];
+  depth?: number;
+  nodes?: number;
+};
+
+export type SearchResult = {
+  bestmove: string; // "resign" / "win" possible
+  lines: SearchLine[]; // index 0 = multipv 1
+};
+
+const LAUNCH_TIMEOUT_MS = 30_000;
+
+export class UsiEngine {
+  private proc: ChildProcess | null = null;
+  private lineHandlers: ((line: string) => void)[] = [];
+  private queue: Promise<unknown> = Promise.resolve();
+  private closed = false;
+  name = "";
+  author = "";
+  options: EngineOption[] = [];
+  log: string[] = [];
+
+  constructor(
+    readonly path: string,
+    private readonly setOptions: Record<string, string | number> = {},
+  ) {}
+
+  get running(): boolean {
+    return !!this.proc && !this.closed;
+  }
+
+  private send(line: string) {
+    this.log.push("> " + line);
+    if (this.log.length > 200) this.log.shift();
+    this.proc?.send(line);
+  }
+
+  private waitFor(pred: (line: string) => boolean, timeoutMs: number, onLine?: (line: string) => void): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const timer =
+        timeoutMs > 0
+          ? setTimeout(() => {
+              cleanup();
+              reject(new Error(`engine timeout (${this.path})`));
+            }, timeoutMs)
+          : undefined;
+      const handler = (line: string) => {
+        onLine?.(line);
+        if (pred(line)) {
+          cleanup();
+          resolve(line);
+        }
+      };
+      const onClose = () => {
+        cleanup();
+        reject(new Error("engine process exited"));
+      };
+      const cleanup = () => {
+        if (timer) clearTimeout(timer);
+        this.lineHandlers = this.lineHandlers.filter((h) => h !== handler);
+        this.closeHandlers = this.closeHandlers.filter((h) => h !== onClose);
+      };
+      this.lineHandlers.push(handler);
+      this.closeHandlers.push(onClose);
+    });
+  }
+  private closeHandlers: (() => void)[] = [];
+
+  async start(): Promise<void> {
+    this.proc = new ChildProcess(this.path);
+    this.proc.on("receive", (line: string) => {
+      this.log.push("< " + line);
+      if (this.log.length > 200) this.log.shift();
+      for (const h of [...this.lineHandlers]) h(line);
+    });
+    const failed = new Promise<never>((_, reject) => {
+      this.proc!.on("error", (e: Error) => reject(e));
+    });
+    failed.catch(() => undefined);
+    this.proc.on("close", () => {
+      this.closed = true;
+      for (const h of [...this.closeHandlers]) h();
+    });
+    this.send("usi");
+    await Promise.race([
+      this.waitFor(
+        (l) => l === "usiok",
+        LAUNCH_TIMEOUT_MS,
+        (l) => {
+          if (l.startsWith("id name ")) this.name = l.slice(8);
+          else if (l.startsWith("id author ")) this.author = l.slice(10);
+          else if (l.startsWith("option name ")) {
+            const m = /^option name (.+?) type (\S+)(?: default (\S*))?/.exec(l);
+            if (m) this.options.push({ name: m[1], type: m[2], default: m[3] });
+          }
+        },
+      ),
+      failed,
+    ]);
+    for (const [k, v] of Object.entries(this.setOptions)) {
+      if (this.options.some((o) => o.name === k)) {
+        this.send(`setoption name ${k} value ${v}`);
+      }
+    }
+    this.send("isready");
+    await Promise.race([this.waitFor((l) => l === "readyok", LAUNCH_TIMEOUT_MS), failed]);
+    this.send("usinewgame");
+  }
+
+  hasOption(name: string): boolean {
+    return this.options.some((o) => o.name === name);
+  }
+
+  /**
+   * Search one position. `position` is a USI position command body, e.g.
+   * "startpos moves 7g7f" or "sfen ... moves ...". Calls are serialised.
+   */
+  search(
+    position: string,
+    limit: SearchLimit,
+    opts: { multipv?: number; onInfo?: (info: USIInfoCommand) => void } = {},
+  ): Promise<SearchResult> {
+    const run = async () => {
+      if (!this.running) throw new Error("engine is not running");
+      const multipv = opts.multipv ?? 1;
+      if (this.hasOption("MultiPV")) this.send(`setoption name MultiPV value ${multipv}`);
+      const lines = new Map<number, SearchLine>();
+      this.send(`position ${position}`);
+      const go = limit.nodes
+        ? `go nodes ${limit.nodes}`
+        : limit.depth
+          ? `go depth ${limit.depth}`
+          : `go movetime ${limit.movetimeMs ?? 1000}`;
+      this.send(go);
+      const budget = (limit.movetimeMs ?? 0) + 60_000;
+      const best = await this.waitFor(
+        (l) => l.startsWith("bestmove"),
+        budget,
+        (l) => {
+          if (!l.startsWith("info ")) return;
+          const info = parseInfoCommand(l.slice(5));
+          opts.onInfo?.(info);
+          if (info.lowerbound || info.upperbound) return;
+          if (info.scoreCP === undefined && info.scoreMate === undefined) return;
+          const k = info.multipv ?? 1;
+          lines.set(k, {
+            multipv: k,
+            scoreCP: info.scoreMate === undefined ? info.scoreCP : undefined,
+            scoreMate: info.scoreMate,
+            pv: info.pv ?? lines.get(k)?.pv ?? [],
+            depth: info.depth,
+            nodes: info.nodes,
+          });
+        },
+      );
+      const bestmove = best.split(" ")[1] ?? "resign";
+      const sorted = [...lines.values()].sort((a, b) => a.multipv - b.multipv);
+      if (sorted.length && bestmove !== "resign" && bestmove !== "win" && sorted[0].pv[0] !== bestmove) {
+        sorted[0].pv = [bestmove];
+      }
+      return { bestmove, lines: sorted };
+    };
+    const p = this.queue.then(run, run);
+    this.queue = p.catch(() => undefined);
+    return p;
+  }
+
+  stop(): void {
+    if (this.running) this.send("stop");
+  }
+
+  async quit(): Promise<void> {
+    if (!this.proc || this.closed) return;
+    this.send("quit");
+    const proc = this.proc;
+    await new Promise<void>((resolve) => {
+      const t = setTimeout(() => {
+        proc.kill();
+        resolve();
+      }, 3000);
+      this.closeHandlers.push(() => {
+        clearTimeout(t);
+        resolve();
+      });
+    });
+  }
+}

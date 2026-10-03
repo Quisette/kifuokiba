@@ -1,0 +1,115 @@
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { createApp } from "../src/server/app.js";
+import { makeKif, sjis, SHIKEN_VS_FUNA } from "./fixtures.js";
+
+const MOCK = path.resolve("tools/mock-usi-engine.mjs");
+
+let app: ReturnType<typeof createApp>;
+let base = "";
+const api = async (method: string, p: string, body?: unknown) => {
+  const r = await fetch(base + p, { method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+  const j = await r.json();
+  if (!r.ok) throw new Error(`${method} ${p}: ${JSON.stringify(j)}`);
+  return j;
+};
+const waitIdle = async () => {
+  for (let i = 0; i < 600; i++) {
+    const s = await api("GET", "/api/analysis");
+    if (!s.running && !s.queued.length) return s;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  throw new Error("analysis did not finish");
+};
+
+beforeAll(async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "kifu-study-"));
+  app = createApp({ dbPath: path.join(dir, "t.db") });
+  base = `http://127.0.0.1:${await app.listen()}`;
+  await api("PUT", "/api/settings", { myNames: ["me"], engine: { path: MOCK, options: {}, movetimeMs: 50, nodes: 0, multipv: 1 }, autoAnalyze: false });
+});
+afterAll(async () => app.close());
+
+describe("library API", () => {
+  it("imports, dedups and classifies", async () => {
+    const kif = makeKif({ moves: SHIKEN_VS_FUNA, black: "me 三段", white: "rival", date: "2026/09/01 21:05", event: "将棋ウォーズ(10分切れ負け)" });
+    const r1 = await api("POST", "/api/import", { files: [{ name: "a.kif", data: Buffer.from(sjis(kif)).toString("base64") }] });
+    expect(r1.results[0].status).toBe("added");
+    const r2 = await api("POST", "/api/import", { text: kif.replace(/\r\n/g, "\n") });
+    expect(r2.results[0].status).toBe("duplicate");
+    const games = await api("GET", "/api/games");
+    expect(games).toHaveLength(1);
+    expect(games[0].mySide).toBe("black");
+    expect(games[0].myResult).toBe("loss");
+    expect(games[0].opponent).toBe("rival");
+    expect(games[0].white_opening).toBe("四間飛車");
+    expect(games[0].black_castle).toBe("舟囲い");
+    const filtered = await api("GET", "/api/games?castle=" + encodeURIComponent("本美濃"));
+    expect(filtered).toHaveLength(1);
+    const none = await api("GET", "/api/games?result=win");
+    expect(none).toHaveLength(0);
+  });
+
+  it("rejects garbage", async () => {
+    const r = await api("POST", "/api/import", { text: "hello world" });
+    expect(r.results[0].status).toBe("error");
+  });
+
+  it("analyses with a USI engine, grades moves and makes cards", async () => {
+    // ▲3三角成?? drops the bishop to △同桂.
+    const kif = makeKif({ moves: "7g7f 3c3d 8h3c+ 2a3c 2g2f", black: "me", white: "x", date: "2026/09/02" });
+    const r = await api("POST", "/api/import", { text: kif });
+    const id = r.results[0].id;
+    await api("POST", "/api/analysis", { ids: [id] });
+    await waitIdle();
+    const g = await api("GET", `/api/games/${id}`);
+    expect(g.analysis_status).toBe("done");
+    expect(g.plies.every((p: { score: number | null; mate: number | null }) => p.score !== null || p.mate !== null)).toBe(true);
+    expect(g.plies[3].level).toBeGreaterThanOrEqual(3);
+    expect(g.plies[3].label).toMatch(/悪手/);
+    const cards = await api("GET", "/api/cards");
+    expect(cards.length).toBeGreaterThanOrEqual(1);
+    const card = cards.find((c: { ply: number }) => c.ply === 3);
+    expect(card.side).toBe("black");
+    // Answering with the game move is wrong; answering with the best move is right.
+    const wrong = await api("POST", `/api/cards/${card.id}/answer`, { usi: card.played_usi });
+    expect(wrong.correct).toBe(false);
+    const right = await api("POST", `/api/cards/${card.id}/answer`, { usi: card.best_usi });
+    expect(right.correct).toBe(true);
+    const next = await api("POST", `/api/cards/${card.id}/rate`, { rating: "good" });
+    expect(next.intervalDays).toBe(1);
+    const counts = await api("GET", "/api/cards/counts");
+    expect(counts.reviewedToday).toBe(1);
+
+    // Re-analysing uses the eval cache: same results.
+    await api("POST", "/api/analysis", { ids: [id], force: true });
+    await waitIdle();
+    const g2 = await api("GET", `/api/games/${id}`);
+    expect(g2.plies.map((p: { score: number }) => p.score)).toEqual(g.plies.map((p: { score: number }) => p.score));
+
+    // Export carries evals in ShogiHome's comment format and re-imports with them.
+    const res = await fetch(`${base}/api/games/${id}/export?format=kif&utf8=1`);
+    const text = await res.text();
+    expect(text).toContain("#評価値=");
+    expect(text).toContain("【");
+  });
+
+  it("computes stats", async () => {
+    const s = await api("GET", "/api/stats");
+    expect(s.totals.games).toBe(2);
+    expect(s.totals.losses).toBe(1);
+    expect(s.totals.wins).toBe(1);
+    expect(s.bySide.find((x: { name: string }) => x.name === "先手").games).toBe(2);
+  });
+
+  it("stores notebook pages and position search", async () => {
+    const p = await api("POST", "/api/pages", { title: "四間飛車 notes", body: "intro" });
+    await api("POST", `/api/pages/${p.id}/append`, { text: ":::shogi-view{game=1 ply=8}\n:::" });
+    const got = await api("GET", `/api/pages/${p.id}`);
+    expect(got.body).toContain("shogi-view");
+    const hits = await api("GET", "/api/position-search?sfen=" + encodeURIComponent("lnsgkgsnl/1r5b1/pppppp1pp/6p2/9/2P6/PP1PPPPPP/1B5R1/LNSGKGSNL b - 3"));
+    expect(hits.length).toBe(2);
+  });
+});
