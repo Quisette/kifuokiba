@@ -13,7 +13,8 @@ import { Pages } from "./pages.js";
 import { loadSettings, saveSettings, AppSettings } from "./settings.js";
 import { RecordFileFormat } from "../core/recordFile.js";
 import { UsiEngine } from "./engine/usi.js";
-import { Position } from "tsshogi";
+import { InitialPositionSFEN, Position } from "tsshogi";
+import { explore } from "./explorer.js";
 
 export type AppOptions = { dbPath: string; staticDir?: string; port?: number; host?: string };
 
@@ -120,6 +121,14 @@ export function createApp(opts: AppOptions) {
     lib.setComment(id(p), Number(p[1]), (body as { comment: string }).comment ?? "");
     return { ok: true };
   });
+  route("GET", "/api/explorer", (_r, url) => {
+    const side = url.searchParams.get("side") ?? "";
+    return explore(lib, url.searchParams.get("sfen") || InitialPositionSFEN.STANDARD, {
+      side: side === "black" || side === "white" ? side : "",
+      source: url.searchParams.get("source") ?? "",
+    });
+  });
+
   route("GET", "/api/position-search", (_r, url) => {
     const sfen = url.searchParams.get("sfen") ?? "";
     const hits = lib.findPosition(sfen);

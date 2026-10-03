@@ -542,7 +542,7 @@ export class Library {
     if (!pos) return usi;
     const m = pos.createMoveByUSI(usi);
     if (!m) return usi;
-    return (pos.color === Color.BLACK ? "☗" : "☖") + formatMove(pos, m);
+    return formatMove(pos, m); // already starts with ☗/☖
   }
 
   static pvText(sfen: string, pv: string): string {

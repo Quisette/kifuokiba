@@ -134,6 +134,16 @@ try {
   await page.waitForTimeout(300);
   await shot("06-stats");
 
+  await page.goto(base + "/#/explorer");
+  await page.waitForSelector("table.moves tbody tr");
+  check((await page.$$("table.moves tbody tr")).length >= 1, "explorer lists first moves");
+  await page.click("table.moves tbody tr >> nth=0");
+  await page.waitForFunction(() => location.hash.includes("moves="));
+  await page.waitForSelector("table.moves tbody tr, .empty");
+  await page.waitForTimeout(400);
+  check((await page.$$(".crumbs a")).length === 2, "clicking a move walks the tree");
+  await shot("06b-explorer");
+
   const p = await api("POST", "/api/pages", {
     notebook: "四間飛車",
     title: "Demo page",

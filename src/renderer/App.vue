@@ -23,6 +23,7 @@
     <Game v-else-if="route.name === 'game'" :key="route.params[0]" :id="Number(route.params[0])" />
     <Review v-else-if="route.name === 'review'" />
     <Stats v-else-if="route.name === 'stats'" />
+    <Explorer v-else-if="route.name === 'explorer'" />
     <Notebooks v-else-if="route.name === 'notes'" />
     <Settings v-else-if="route.name === 'settings'" />
     <div v-else class="page"><div class="empty">Page not found. <a href="#/">Home</a></div></div>
@@ -39,6 +40,7 @@ import Library from "./views/Library.vue";
 import Game from "./views/Game.vue";
 import Review from "./views/Review.vue";
 import Stats from "./views/Stats.vue";
+import Explorer from "./views/Explorer.vue";
 import Notebooks from "./views/Notebooks.vue";
 import Settings from "./views/Settings.vue";
 
@@ -47,6 +49,7 @@ const nav = [
   { name: "library", label: "棋譜庫 Library" },
   { name: "review", label: "復習 Review" },
   { name: "stats", label: "統計 Stats" },
+  { name: "explorer", label: "定跡 Explorer" },
   { name: "notes", label: "研究 Notes" },
   { name: "settings", label: "設定 Settings" },
 ];

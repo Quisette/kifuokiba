@@ -163,6 +163,7 @@
           <textarea id="gnotes" v-model="notesDraft" rows="3" placeholder="What did you learn from this game?" @blur="saveNotes"></textarea>
           <a :href="`#/library?opponent=${encodeURIComponent(game.opponent || '')}`" v-if="game.opponent" style="font-size: 12px">All games vs {{ game.opponent }} →</a>
           <a href="#" style="font-size: 12px; margin-left: 10px" @click.prevent="findPosition">Other games with this position →</a>
+          <a :href="explorerLink" style="font-size: 12px; margin-left: 10px">Explore from here →</a>
           <div v-if="posHits" class="hits">
             <div v-if="!posHits.length" class="muted">No other games reached it.</div>
             <a v-for="h in posHits" :key="h.gameId" :href="`#/game/${h.gameId}`" class="tag">#{{ h.gameId }} {{ h.game.black }} vs {{ h.game.white }} ({{ h.ply }}手)</a>
@@ -194,7 +195,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
-import { Move, Position, formatPV } from "tsshogi";
+import { InitialPositionSFEN, Move, Position, formatPV } from "tsshogi";
 import { api, evalText, GameDetail, live, toast, winRate } from "../api";
 import { route } from "../router";
 import ShogiBoard from "../components/ShogiBoard.vue";
@@ -205,6 +206,15 @@ const props = defineProps<{ id: number }>();
 const game = ref<GameDetail | null>(null);
 const error = ref("");
 const cursor = ref(Number(route.query.get("ply") ?? 0));
+const explorerLink = computed(() => {
+  if (!game.value) return "#/explorer";
+  const p = new URLSearchParams();
+  if (!game.value.initial_sfen.startsWith(InitialPositionSFEN.STANDARD.split(" ").slice(0, 3).join(" "))) p.set("sfen", game.value.initial_sfen);
+  const ms = game.value.plies.slice(1, cursor.value + 1).map((x) => x.usi);
+  if (ms.length) p.set("moves", ms.join(","));
+  if (game.value.mySide) p.set("side", game.value.mySide);
+  return "#/explorer?" + p.toString();
+});
 const flip = ref(false);
 const mode = ref<"winrate" | "cp">("winrate");
 const newTag = ref("");

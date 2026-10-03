@@ -112,4 +112,22 @@ describe("library API", () => {
     const hits = await api("GET", "/api/position-search?sfen=" + encodeURIComponent("lnsgkgsnl/1r5b1/pppppp1pp/6p2/9/2P6/PP1PPPPPP/1B5R1/LNSGKGSNL b - 3"));
     expect(hits.length).toBe(2);
   });
+
+  it("explores my games move by move", async () => {
+    const root = await api("GET", "/api/explorer");
+    expect(root.games).toBe(2);
+    expect(root.moves).toHaveLength(1);
+    expect(root.moves[0]).toMatchObject({ usi: "7g7f", text: "☗７六歩", games: 2, mine: 2, wins: 1, losses: 1 });
+    expect(root.engine?.bestUsi).toBeTruthy();
+
+    const after = "lnsgkgsnl/1r5b1/pppppp1pp/6p2/9/2P6/PP1PPPPPP/1B5R1/LNSGKGSNL b - 3";
+    const x = await api("GET", "/api/explorer?sfen=" + encodeURIComponent(after));
+    expect(x.games).toBe(2);
+    expect(x.moves.map((m: { usi: string }) => m.usi).sort()).toEqual(["2g2f", "8h3c+"]);
+    expect(x.moves.every((m: { games: number; mine: number }) => m.games === 1 && m.mine === 1)).toBe(true);
+
+    const white = await api("GET", "/api/explorer?side=white");
+    expect(white.games).toBe(0);
+    expect(white.moves).toEqual([]);
+  });
 });
