@@ -119,6 +119,31 @@ describe("library API", () => {
     expect(hits.length).toBe(2);
   });
 
+  it("flags leeches and exports cards for Anki", async () => {
+    const games = await api("GET", "/api/games");
+    const card = await api("POST", "/api/cards", { gameId: games[0].id, ply: 5, note: "watch the bishop" });
+    let r;
+    for (let i = 0; i < 4; i++) r = await api("POST", `/api/cards/${card.id}/rate`, { rating: "again" });
+    expect(r.lapses).toBe(4);
+    expect(r.becameLeech).toBe(true);
+    const leeches = await api("GET", "/api/cards?leech=1");
+    expect(leeches.map((c: { id: number }) => c.id)).toContain(card.id);
+    expect(leeches.every((c: { leech: boolean }) => c.leech)).toBe(true);
+
+    const res = await fetch(base + "/api/cards/export/anki");
+    expect(res.headers.get("content-type")).toContain("tab-separated");
+    const tsv = await res.text();
+    const lines = tsv.trim().split("\n");
+    expect(lines.slice(0, 2)).toEqual(["#separator:tab", "#html:true"]);
+    const rows = lines.filter((l) => !l.startsWith("#"));
+    expect(rows.length).toBeGreaterThanOrEqual(2);
+    for (const row of rows) expect(row.split("\t")).toHaveLength(3);
+    const mine = rows.find((l) => l.includes("watch the bishop"))!;
+    expect(mine).toContain("<pre");
+    expect(mine).toContain("後手の持駒");
+    expect(mine.split("\t")[2]).toContain("kifu-study");
+  });
+
   it("explores my games move by move", async () => {
     const root = await api("GET", "/api/explorer");
     expect(root.games).toBe(2);

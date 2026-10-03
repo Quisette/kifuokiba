@@ -1,4 +1,4 @@
-import { Position } from "tsshogi";
+import { Position, Record, exportBOD } from "tsshogi";
 import { Library } from "./library.js";
 import { AnalysisQueue } from "./analysis.js";
 import { reviewSm2, Rating, ratingFromLoss } from "../core/sm2.js";
@@ -28,7 +28,10 @@ export type CardRow = {
   created_at: number;
 };
 
-export type CardFilter = { kind?: string; phase?: string; opening?: string; due?: boolean };
+export type CardFilter = { kind?: string; phase?: string; opening?: string; due?: boolean; leech?: boolean };
+
+/** Lapses after which a card counts as a leech (Anki's default is 8; mistakes from your own games deserve attention sooner). */
+export const LEECH_LAPSES = 4;
 
 export class Cards {
   constructor(
@@ -46,6 +49,7 @@ export class Cards {
       .filter((c) => !filter.phase || c.phase === filter.phase)
       .filter((c) => !filter.opening || c.strategy.includes(filter.opening))
       .filter((c) => !filter.due || (c.due_at <= now && !c.suspended))
+      .filter((c) => !filter.leech || c.lapses >= LEECH_LAPSES)
       .map((c) => this.present(c));
   }
 
@@ -54,7 +58,7 @@ export class Cards {
       `SELECT COUNT(*) total,
               SUM(CASE WHEN due_at <= ? AND suspended = 0 THEN 1 ELSE 0 END) due,
               SUM(CASE WHEN repetitions = 0 AND lapses = 0 THEN 1 ELSE 0 END) fresh,
-              SUM(CASE WHEN lapses >= 4 THEN 1 ELSE 0 END) leeches,
+              SUM(CASE WHEN lapses >= ${LEECH_LAPSES} THEN 1 ELSE 0 END) leeches,
               MIN(CASE WHEN suspended = 0 THEN due_at END) nextDueAt
        FROM cards`,
       now,
@@ -80,6 +84,7 @@ export class Cards {
       bestText: Library.moveText(c.sfen, c.best_usi),
       playedText: Library.moveText(c.sfen, c.played_usi),
       pvText: Library.pvText(c.sfen, c.pv),
+      leech: c.lapses >= LEECH_LAPSES,
     };
   }
 
@@ -148,7 +153,9 @@ export class Cards {
       );
       this.lib.db.run("INSERT INTO reviews (card_id, at, rating, answer_usi, loss) VALUES (?,?,?,?,?)", id, now, rating, answerUsi, loss);
     });
-    return next;
+    // Flag the lapse that turns a card into a leech (and every LEECH_LAPSES after) so the UI can step in.
+    const becameLeech = next.lapses > c.lapses && next.lapses % LEECH_LAPSES === 0;
+    return { ...next, becameLeech };
   }
 
   /** A hand-made card: the position before `ply`; the answer is the engine's best move, else the game move. */
@@ -193,5 +200,36 @@ export class Cards {
 
   delete(id: number) {
     this.lib.db.run("DELETE FROM cards WHERE id = ?", id);
+  }
+
+  /**
+   * Anki import file: tab-separated with Anki's header lines, HTML fields.
+   * Front = the position as a KIF board (BOD) and the question; Back = the answer and the engine line.
+   */
+  exportAnki(filter: CardFilter = {}): string {
+    const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const field = (t: string) => t.replace(/\t/g, " ").replace(/\r?\n/g, "<br>");
+    const lines = ["#separator:tab", "#html:true", "#notetype:Basic", "#tags column:3"];
+    for (const c of this.list(filter)) {
+      if (c.suspended) continue;
+      const pos = Position.newBySFEN(c.sfen);
+      if (!pos) continue;
+      const rec = new Record(pos);
+      const bod = exportBOD(rec, { returnCode: "\n" });
+      const who = c.side === "black" ? "☗先手" : "☖後手";
+      const front =
+        `<pre style="font-family:monospace;line-height:1.15">${esc(bod)}</pre>` +
+        `<div>${esc(who)}番 · ${esc(c.black)} vs ${esc(c.white)} ${esc(c.date ?? "")} · ${c.ply}手目</div>` +
+        `<div><b>Find a better move than ${esc(c.playedText)}</b></div>`;
+      const back =
+        `<div><b>${esc(c.bestText)}</b></div>` +
+        (c.pvText ? `<div>読み筋 ${esc(c.pvText)}</div>` : "") +
+        `<div>In the game: ${esc(c.playedText)} (−${c.loss.toFixed(1)} pts)</div>` +
+        (c.note ? `<div>Note: ${esc(c.note)}</div>` : "") +
+        `<div style="color:#888;font-size:small">sfen ${esc(c.sfen)}</div>`;
+      const tags = ["kifu-study", c.kind, c.phase, ...(c.strategy ? [c.strategy.replace(/\s+/g, "_")] : [])].join(" ");
+      lines.push([field(front), field(back), tags].join("\t"));
+    }
+    return lines.join("\n") + "\n";
   }
 }

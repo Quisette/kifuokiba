@@ -13,6 +13,7 @@
           <option value="phase:endgame">終盤 only</option>
           <option value="kind:missed_mate">Missed mates</option>
           <option value="kind:manual">My own cards</option>
+          <option value="leech:1">Leeches (missed 4+ times)</option>
         </select>
       </label>
       <label class="field">
@@ -22,6 +23,7 @@
           <option :value="true">Practise all</option>
         </select>
       </label>
+      <a class="btn small" href="/api/cards/export/anki" download="kifu-study-cards.txt" title="Tab-separated file for Anki's File → Import">Export to Anki</a>
     </div>
 
     <div v-if="loading" class="empty">Loading…</div>
@@ -39,6 +41,7 @@
           From {{ card.black }} vs {{ card.white }} {{ card.date ? "· " + card.date.slice(0, 10) : "" }} · before move {{ card.ply }} ·
           <a :href="`#/game/${card.game_id}?ply=${card.ply - 1}`">open game here</a>
           <span v-if="card.kind === 'missed_mate'" class="mark l4" style="margin-left: 6px">詰みあり</span>
+          <span v-if="card.leech" class="mark l3" style="margin-left: 6px" :title="`Missed ${card.lapses} times`">leech</span>
         </div>
         <ShogiBoard
           :sfen="shownSfen"
@@ -88,6 +91,15 @@
             <button type="button" class="btn small" @click="suspend">Suspend card</button>
           </div>
         </div>
+        <div v-if="answer && card.leech" class="panel box leech">
+          <div class="cap">Missed {{ card.lapses }} times</div>
+          <div style="font-size: 13px">Drilling alone isn't sticking. Write down the idea you keep missing (it shows on the card next time), study the game around it, or suspend the card.</div>
+          <textarea v-model="noteDraft" rows="2" placeholder="e.g. 角の利きが通っている時は先に受ける" @blur="saveNote"></textarea>
+          <div class="row">
+            <a class="btn small" :href="`#/game/${card.game_id}?ply=${card.ply - 1}`">Study the game</a>
+            <button type="button" class="btn small" @click="saveNote">Save note</button>
+          </div>
+        </div>
         <div v-if="answer" class="grades">
           <div class="cap" style="grid-column: 1 / -1">How well did you know it?</div>
           <button
@@ -121,7 +133,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { Position } from "tsshogi";
 import { api, Card, qs, Settings, toast } from "../api";
 import { reviewSm2, Rating } from "../../core/sm2";
@@ -241,9 +253,26 @@ function preview(r: Rating) {
   return mins < 60 ? `${Math.round(mins)}分` : `${n.intervalDays}日`;
 }
 
+const noteDraft = ref("");
+watch(card, (c) => (noteDraft.value = c?.note ?? ""), { immediate: true });
+async function saveNote() {
+  const c = card.value;
+  if (!c || noteDraft.value === c.note) return;
+  await api.patch(`/api/cards/${c.id}`, { note: noteDraft.value });
+  c.note = noteDraft.value;
+  toast("Note saved to the card");
+}
+
 async function rate(r: Rating) {
   if (!card.value) return;
-  await api.post(`/api/cards/${card.value.id}/rate`, { rating: r, usi: answer.value?.usi ?? "", loss: answer.value?.loss ?? null });
+  const res = await api.post<{ becameLeech: boolean; lapses: number }>(`/api/cards/${card.value.id}/rate`, {
+    rating: r,
+    usi: answer.value?.usi ?? "",
+    loss: answer.value?.loss ?? null,
+  });
+  if (res.becameLeech) toast(`Missed ${res.lapses} times, so this card is now a leech. Next time, write down the idea or study the game.`, 6000);
+  card.value.lapses = res.lapses;
+  card.value.leech = card.value.leech || res.becameLeech;
   counts.value = await api.get("/api/cards/counts");
   // "Again" comes back at the end of this session.
   if (r === "again" && !cram.value) queue.value.push({ ...card.value, repetitions: 0 });
@@ -306,6 +335,9 @@ const nextDue = computed(() => {
   align-items: flex-end;
   gap: 12px 18px;
   margin-bottom: 16px;
+}
+.leech {
+  border-color: var(--loss);
 }
 .progress-label {
   font-size: 22px;

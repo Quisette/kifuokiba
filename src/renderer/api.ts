@@ -130,6 +130,8 @@ export type Card = {
   bestText: string;
   playedText: string;
   pvText: string;
+  /** Failed often enough that drilling alone isn't working. */
+  leech: boolean;
 };
 
 export type AnalysisStatus = {

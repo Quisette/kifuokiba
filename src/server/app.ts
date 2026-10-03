@@ -220,8 +220,14 @@ export function createApp(opts: AppOptions) {
       phase: url.searchParams.get("phase") ?? undefined,
       opening: url.searchParams.get("opening") ?? undefined,
       due: url.searchParams.get("due") === "1",
+      leech: url.searchParams.get("leech") === "1",
     }),
   );
+  route("GET", "/api/cards/export/anki", (_r, url) => ({
+    __raw: Buffer.from(cards.exportAnki({ kind: url.searchParams.get("kind") ?? undefined, phase: url.searchParams.get("phase") ?? undefined })),
+    type: "text/tab-separated-values; charset=utf-8",
+    name: "kifu-study-cards.txt",
+  }));
   route("GET", "/api/cards/counts", () => cards.counts());
   route("POST", "/api/cards", (_r, _u, _p, body) => {
     const b = body as { gameId: number; ply: number; note?: string };
