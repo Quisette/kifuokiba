@@ -302,7 +302,7 @@ export class Library {
     const plies = this.db.all<{
       ply: number; usi: string; text: string; sfen: string; comment: string; elapsed_ms: number;
       score: number | null; mate: number | null; best_usi: string; pv: string; eval_source: string;
-      loss: number | null; level: number;
+      loss: number | null; level: number; missed: "" | "mate" | "win";
     }>("SELECT * FROM plies WHERE game_id = ? ORDER BY ply", id);
     const tags = this.db.all<{ tag: string }>("SELECT tag FROM tags WHERE game_id = ? ORDER BY tag", id).map((t) => t.tag);
     const cards = this.db.all<{ id: number; ply: number }>("SELECT id, ply FROM cards WHERE game_id = ?", id);
@@ -431,7 +431,8 @@ export class Library {
     const cardSides = new Set<string>(mySide ? [mySide] : this.myNames().length ? [] : ["black", "white"]);
     this.db.tx(() => {
       for (const g of grades) {
-        this.db.run("UPDATE plies SET loss = ?, level = ? WHERE game_id = ? AND ply = ?", g.loss, g.level, id, g.ply);
+        const missed = g.missedMate ? "mate" : g.missedWin ? "win" : "";
+        this.db.run("UPDATE plies SET loss = ?, level = ?, missed = ? WHERE game_id = ? AND ply = ?", g.loss, g.level, missed, id, g.ply);
         const prev = plies[g.ply - 1];
         const cur = plies[g.ply];
         const isCard = (g.level >= s.cardMinLevel || g.missedMate) && cardSides.has(g.color) && prev.best_usi && prev.best_usi !== cur.usi;

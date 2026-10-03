@@ -78,6 +78,8 @@ export type Ply = {
   eval_source: string;
   loss: number | null;
   level: number;
+  /** The move threw away a mate ("mate") or a won position ("win"), whatever its level. */
+  missed: "" | "mate" | "win";
   label: string;
   situation: string;
   side: "black" | "white" | "";

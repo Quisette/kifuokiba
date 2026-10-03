@@ -93,6 +93,7 @@
             <span class="m serif">{{ p.ply === 0 ? "開始局面" : p.text }}</span>
             <span v-if="p.comment.trim() && p.ply" class="cm" title="Has comment">✎</span>
             <span v-if="p.level >= 2" class="mark" :class="'l' + p.level">{{ p.label }}</span>
+            <span v-if="p.missed" class="mark l4" :title="p.missed === 'mate' ? 'Missed a forced mate' : 'Threw away a won position'">{{ missedLabel(p.missed) }}</span>
             <span class="ev">{{ p.ply ? evalText(p.score, p.mate) : "" }}</span>
           </li>
         </ol>
@@ -110,9 +111,10 @@
               <span class="serif">{{ moverWin }}%</span>
               <span class="muted" style="font-size: 13px">{{ evalText(cur.score, cur.mate) }} · {{ cur.situation }}</span>
             </div>
-            <div v-if="next && next.level" class="played">
+            <div v-if="next && (next.level || next.missed)" class="played">
               Next: <b class="serif">{{ next.text }}</b>
-              <span class="mark" :class="'l' + next.level">{{ next.label }}</span>
+              <span v-if="next.level" class="mark" :class="'l' + next.level">{{ next.label }}</span>
+              <span v-if="next.missed" class="mark l4">{{ missedLabel(next.missed) }}</span>
               <span class="muted">−{{ next.loss?.toFixed(1) }} pts</span>
             </div>
             <div v-if="cur.pvText" class="pv">最善 {{ cur.pvText }}</div>
@@ -134,6 +136,9 @@
           <div class="sum">
             <div><span class="muted">Accuracy</span> ☗ {{ fmtPct(game.accuracy_black) }} · ☖ {{ fmtPct(game.accuracy_white) }}</div>
             <div><span class="muted">悪手+</span> ☗ {{ mistakeCount("black") }} · ☖ {{ mistakeCount("white") }}</div>
+            <div v-if="game.plies.some((p) => p.missed)">
+              <span class="muted">詰み・勝ち逃し</span> ☗ {{ missedCount("black") }} · ☖ {{ missedCount("white") }}
+            </div>
             <div v-if="game.turning_ply">
               <span class="muted">Turning point</span>
               <a href="#" @click.prevent="jump(game.turning_ply!)">{{ game.turning_ply }}手 {{ game.plies[game.turning_ply]?.text }}</a>
@@ -268,7 +273,7 @@ function step(d: number) {
   jump(cursor.value + d);
 }
 
-const mistakes = computed(() => game.value!.plies.filter((p) => p.level >= 3 && (!game.value!.mySide || p.side === game.value!.mySide)).map((p) => p.ply));
+const mistakes = computed(() => game.value!.plies.filter((p) => (p.level >= 3 || p.missed) && (!game.value!.mySide || p.side === game.value!.mySide)).map((p) => p.ply));
 const prevMistake = computed(() => [...mistakes.value].reverse().find((p) => p < cursor.value));
 const nextMistake = computed(() => mistakes.value.find((p) => p > cursor.value));
 
@@ -389,6 +394,8 @@ const resultText = computed(() => {
   return r ? `· ${r}` : "";
 });
 const fmtPct = (v: number | null) => (v == null ? "–" : v.toFixed(0) + "%");
+const missedCount = (side: string) => game.value!.plies.filter((p) => p.side === side && p.missed).length;
+const missedLabel = (m: string) => (m === "mate" ? "詰み逃し" : "勝ち逃し");
 const mistakeCount = (side: string) => game.value!.plies.filter((p) => p.side === side && p.level >= 3).length;
 const fmtTime = (side: string) => {
   const ms = game.value!.plies.filter((p) => p.side === side).reduce((a, p) => a + p.elapsed_ms, 0);

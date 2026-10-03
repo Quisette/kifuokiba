@@ -69,6 +69,19 @@
         @click.stop="emit('jump', m.ply)"
       ></button>
     </div>
+    <!-- Think time per move, under the graph: ☗ bars gold, ☖ bars grey, 悪手+ red. -->
+    <svg v-if="times.max > 0" class="time" :viewBox="`0 0 ${W} ${TH}`" preserveAspectRatio="none" aria-hidden="true" @click="onClick" @mousemove="onHover" @mouseleave="hover = null">
+      <rect
+        v-for="b in times.bars"
+        :key="b.ply"
+        :x="x(b.ply) - barW / 2"
+        :y="TH - b.h"
+        :width="barW"
+        :height="b.h"
+        :fill="b.color"
+      />
+      <line :x1="x(current)" y1="0" :x2="x(current)" :y2="TH" stroke="#d4a24c" stroke-width="1.5" stroke-dasharray="4 3" vector-effect="non-scaling-stroke" />
+    </svg>
     <div class="axis">
       <span>0</span>
       <span v-if="hover !== null">{{ hover }}手 {{ hoverText }}</span>
@@ -86,6 +99,7 @@ const emit = defineEmits<{ jump: [ply: number] }>();
 
 const W = 1000;
 const H = 180;
+const TH = 40;
 const PAD = 8;
 const svg = ref<SVGSVGElement | null>(null);
 const hover = ref<number | null>(null);
@@ -132,7 +146,24 @@ const areaPts = computed(() => {
     ` ${x(pts[pts.length - 1].ply)},${H / 2}`
   );
 });
-const markers = computed(() => props.plies.filter((p) => p.level >= 2));
+const barW = computed(() => Math.max(1, (W / maxPly.value) * 0.7));
+// Bar height grows with the square root of the time so short moves stay visible next to long thinks.
+const times = computed(() => {
+  const max = Math.max(0, ...props.plies.map((p) => p.elapsed_ms));
+  const bars = max
+    ? props.plies
+        .filter((p) => p.ply > 0 && p.elapsed_ms > 0)
+        .map((p) => ({
+          ply: p.ply,
+          h: Math.max(1.5, Math.sqrt(p.elapsed_ms / max) * TH),
+          color: p.level >= 3 ? "#d9773d" : p.side === "white" ? "#8a7a5c" : "#d4a24c",
+        }))
+    : [];
+  return { max, bars };
+});
+const markers = computed(() =>
+  props.plies.filter((p) => p.level >= 2 || p.missed).map((p) => ({ ...p, level: p.missed ? 4 : p.level, label: p.missed ? (p.missed === "mate" ? "詰み逃し" : "勝ち逃し") : p.label })),
+);
 
 function plyAt(ev: MouseEvent) {
   const r = svg.value!.getBoundingClientRect();
@@ -149,8 +180,13 @@ const hoverText = computed(() => {
   const p = props.plies[hover.value];
   if (!p) return "";
   const w = winRate(p.score, p.mate);
-  return `${p.text} ${evalText(p.score, p.mate)}${w !== null ? ` (▲${w.toFixed(0)}%)` : ""}`;
+  const t = p.elapsed_ms > 0 ? ` · ${fmtSec(p.elapsed_ms)}` : "";
+  return `${p.text} ${evalText(p.score, p.mate)}${w !== null ? ` (▲${w.toFixed(0)}%)` : ""}${t}`;
 });
+function fmtSec(ms: number) {
+  const sec = Math.round(ms / 1000);
+  return sec >= 60 ? `${Math.floor(sec / 60)}分${sec % 60}秒` : `${sec}秒`;
+}
 </script>
 
 <style scoped>
@@ -162,6 +198,11 @@ svg {
   height: 150px;
   display: block;
   cursor: crosshair;
+}
+svg.time {
+  height: 34px;
+  margin-top: 4px;
+  border-top: 1px solid #2c2219;
 }
 .markers {
   position: absolute;

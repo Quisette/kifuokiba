@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS plies (
   eval_source TEXT NOT NULL DEFAULT '',
   loss REAL,
   level INTEGER NOT NULL DEFAULT 0,
+  missed TEXT NOT NULL DEFAULT '',
   PRIMARY KEY (game_id, ply)
 );
 CREATE INDEX IF NOT EXISTS plies_sfen ON plies(sfen);
@@ -135,6 +136,13 @@ export class Db {
     this.db = new DatabaseSync(path);
     this.db.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;");
     this.db.exec(SCHEMA);
+    // Columns added after the first release; CREATE TABLE IF NOT EXISTS won't add them to old files.
+    this.ensureColumn("plies", "missed", "TEXT NOT NULL DEFAULT ''");
+  }
+
+  private ensureColumn(table: string, column: string, decl: string) {
+    const cols = this.db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    if (!cols.some((c) => c.name === column)) this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${decl}`);
   }
 
   private stmt(sql: string): StatementSync {

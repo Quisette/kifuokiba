@@ -66,13 +66,32 @@
         <section class="panel box">
           <div class="cap">形勢を損ねた局面 Loss by phase (my moves)</div>
           <table class="grid">
-            <thead><tr><th>Phase</th><th>Avg loss / move</th><th>悪手+</th><th>Moves</th></tr></thead>
+            <thead><tr><th>Phase</th><th>Avg loss / move</th><th>悪手+</th><th>Moves</th><th v-if="s.thinkTime.length">Avg think</th></tr></thead>
             <tbody>
               <tr v-for="p in s.phaseProfile" :key="p.phase">
                 <td>{{ phaseName(p.phase) }}</td>
                 <td>{{ p.avgLoss != null ? p.avgLoss.toFixed(2) : "–" }}</td>
                 <td>{{ p.mistakes }}</td>
                 <td>{{ p.moves }}</td>
+                <td v-if="s.thinkTime.length">{{ p.avgSeconds != null ? p.avgSeconds.toFixed(1) + "s" : "–" }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section v-if="s.thinkTime.length" class="panel box">
+          <div class="cap">考慮時間 Think time vs mistakes (my moves)</div>
+          <table class="grid">
+            <thead><tr><th>Think time</th><th>Moves</th><th>Avg loss</th><th>悪手+ rate</th></tr></thead>
+            <tbody>
+              <tr v-for="b in s.thinkTime" :key="b.label">
+                <td>{{ b.label }}</td>
+                <td>{{ b.moves }}</td>
+                <td>{{ b.avgLoss != null ? b.avgLoss.toFixed(2) : "–" }}</td>
+                <td>
+                  <span v-if="b.mistakeRate != null" class="rate"><span :style="{ width: Math.min(100, b.mistakeRate * 4) + '%' }"></span></span>
+                  {{ b.mistakeRate != null ? b.mistakeRate.toFixed(1) + "%" : "–" }}
+                </td>
               </tr>
             </tbody>
           </table>
@@ -126,7 +145,8 @@ type StatsT = {
   accuracyTrend: { id: number; date: string; accuracy: number; result: string }[];
   meanAccuracy: number | null;
   meanMistakes: number | null;
-  phaseProfile: { phase: string; avgLoss: number | null; moves: number; mistakes: number }[];
+  phaseProfile: { phase: string; avgLoss: number | null; moves: number; mistakes: number; avgSeconds: number | null }[];
+  thinkTime: { label: string; moves: number; avgLoss: number | null; mistakes: number; mistakeRate: number | null }[];
   matchupGrid: { mine: string; cells: Cell[] }[];
 };
 
@@ -183,6 +203,21 @@ const BarTable = defineComponent({
 </script>
 
 <style scoped>
+.rate {
+  display: inline-block;
+  width: 70px;
+  height: 7px;
+  border-radius: 4px;
+  background: var(--line);
+  overflow: hidden;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+.rate span {
+  display: block;
+  height: 100%;
+  background: var(--loss);
+}
 .head {
   display: flex;
   flex-wrap: wrap;

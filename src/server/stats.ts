@@ -44,8 +44,8 @@ export function computeStats(lib: Library, filter: GameFilter = {}) {
   });
 
   // Phase-of-game error profile from per-ply levels of my moves.
-  const plyRows = lib.db.all<{ game_id: number; ply: number; loss: number | null; level: number }>(
-    "SELECT game_id, ply, loss, level FROM plies WHERE ply > 0 AND loss IS NOT NULL",
+  const plyRows = lib.db.all<{ game_id: number; ply: number; loss: number | null; level: number; elapsed_ms: number }>(
+    "SELECT game_id, ply, loss, level, elapsed_ms FROM plies WHERE ply > 0 AND loss IS NOT NULL",
   );
   const sideById = new Map(mine.map((g) => [g.id, g]));
   const firstBlack = new Map(
@@ -53,6 +53,14 @@ export function computeStats(lib: Library, filter: GameFilter = {}) {
   );
   const phases = { opening: [] as number[], middlegame: [] as number[], endgame: [] as number[] };
   const phaseMistakes = { opening: 0, middlegame: 0, endgame: 0 };
+  const phaseSeconds = { opening: [] as number[], middlegame: [] as number[], endgame: [] as number[] };
+  // Think-time buckets: do fast moves go wrong more often? Only moves with a recorded time count.
+  const timeBuckets = [
+    { label: "< 5s", max: 5 },
+    { label: "5–15s", max: 15 },
+    { label: "15–60s", max: 60 },
+    { label: "60s+", max: Infinity },
+  ].map((b) => ({ ...b, losses: [] as number[], mistakes: 0 }));
   for (const r of plyRows) {
     const g = sideById.get(r.game_id);
     if (!g) continue;
@@ -61,6 +69,13 @@ export function computeStats(lib: Library, filter: GameFilter = {}) {
     const phase = r.ply <= 30 ? "opening" : r.ply <= 80 ? "middlegame" : "endgame";
     phases[phase].push(r.loss!);
     if (r.level >= 3) phaseMistakes[phase]++;
+    if (r.elapsed_ms > 0) {
+      const sec = r.elapsed_ms / 1000;
+      phaseSeconds[phase].push(sec);
+      const b = timeBuckets.find((x) => sec < x.max)!;
+      b.losses.push(r.loss!);
+      if (r.level >= 3) b.mistakes++;
+    }
   }
 
   const analysed = mine.filter((g) => g.myAccuracy !== null).sort((a, b) => (a.date < b.date ? -1 : 1));
@@ -88,7 +103,18 @@ export function computeStats(lib: Library, filter: GameFilter = {}) {
       avgLoss: mean(phases[p]),
       moves: phases[p].length,
       mistakes: phaseMistakes[p],
+      avgSeconds: mean(phaseSeconds[p]),
     })),
+    /** Mistake rate by how long I thought; empty when no game has move times. */
+    thinkTime: timeBuckets.some((b) => b.losses.length)
+      ? timeBuckets.map((b) => ({
+          label: b.label,
+          moves: b.losses.length,
+          avgLoss: mean(b.losses),
+          mistakes: b.mistakes,
+          mistakeRate: b.losses.length ? (b.mistakes / b.losses.length) * 100 : null,
+        }))
+      : [],
     /** My openings (rows) × opponent openings (columns). */
     matchupGrid: (() => {
       const rows = new Map<string, Map<string, GameListItem[]>>();

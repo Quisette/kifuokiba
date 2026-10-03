@@ -59,7 +59,7 @@ describe("library API", () => {
 
   it("analyses with a USI engine, grades moves and makes cards", async () => {
     // ▲3三角成?? drops the bishop to △同桂.
-    const kif = makeKif({ moves: "7g7f 3c3d 8h3c+ 2a3c 2g2f", black: "me", white: "x", date: "2026/09/02" });
+    const kif = makeKif({ moves: "7g7f 3c3d 8h3c+ 2a3c 2g2f", black: "me", white: "x", date: "2026/09/02", elapsed: [3000, 4000, 2000, 30000, 70000] });
     const r = await api("POST", "/api/import", { text: kif });
     const id = r.results[0].id;
     await api("POST", "/api/analysis", { ids: [id] });
@@ -102,6 +102,12 @@ describe("library API", () => {
     expect(s.totals.losses).toBe(1);
     expect(s.totals.wins).toBe(1);
     expect(s.bySide.find((x: { name: string }) => x.name === "先手").games).toBe(2);
+    // My moves in the timed game: 3s, 2s (the blunder) and 70s.
+    const fast = s.thinkTime.find((b: { label: string }) => b.label === "< 5s");
+    expect(fast.moves).toBe(2);
+    expect(fast.mistakes).toBeGreaterThanOrEqual(1);
+    expect(s.thinkTime.find((b: { label: string }) => b.label === "60s+").moves).toBe(1);
+    expect(s.phaseProfile[0].avgSeconds).toBeCloseTo(25, 0);
   });
 
   it("stores notebook pages and position search", async () => {
@@ -129,5 +135,19 @@ describe("library API", () => {
     const white = await api("GET", "/api/explorer?side=white");
     expect(white.games).toBe(0);
     expect(white.moves).toEqual([]);
+  });
+});
+
+describe("database upgrades", () => {
+  it("adds columns that older library files lack", async () => {
+    const { Db } = await import("../src/server/db.js");
+    const file = path.join(mkdtempSync(path.join(tmpdir(), "kifu-old-")), "old.db");
+    const old = new Db(file);
+    old.run("ALTER TABLE plies DROP COLUMN missed");
+    old.close();
+    const db = new Db(file);
+    const cols = db.all<{ name: string }>("PRAGMA table_info(plies)").map((c) => c.name);
+    expect(cols).toContain("missed");
+    db.close();
   });
 });

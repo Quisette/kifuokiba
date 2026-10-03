@@ -31,9 +31,11 @@ async function main() {
     // Each side gets a depth; the weaker one blunders now and then.
     const depth = { black: 6 + (g % 3), white: 6 + ((g + 1) % 3) };
     let result: SpecialMoveType = SpecialMoveType.MAX_MOVES;
+    const sloppyAt = new Set<number>();
     while (moves.length < 220) {
       const side = moves.length % 2 === 0 ? "black" : "white";
       const sloppy = (g * 7 + moves.length * 13) % 29 === 0;
+      if (sloppy) sloppyAt.add(moves.length + 1);
       const r = await engine.search(`startpos moves ${moves.join(" ")}`, { depth: sloppy ? 1 : depth[side] });
       if (r.bestmove === "resign") {
         result = SpecialMoveType.RESIGN;
@@ -53,6 +55,13 @@ async function main() {
     const day = String(1 + g * 2).padStart(2, "0");
     rec.metadata.setStandardMetadata(RecordMetadataKey.START_DATETIME, `2026/09/${day} 21:${String(10 + g).padStart(2, "0")}:00`);
     rec.metadata.setStandardMetadata(RecordMetadataKey.TOURNAMENT, g % 3 === 0 ? "将棋ウォーズ(10分切れ負け)" : "81Dojo");
+    // Made-up but plausible think times: quick openings, longer middlegames, snap moves when sloppy.
+    for (let ply = 1; ply <= moves.length; ply++) {
+      rec.goto(ply);
+      const base = ply <= 20 ? 2 : ply <= 80 ? 12 : 6;
+      const jitter = ((ply * 37 + g * 11) % 17) / 2;
+      rec.current.setElapsedMs(Math.round((sloppyAt.has(ply) ? 1 : base + jitter) * 1000));
+    }
     rec.goto(Number.MAX_SAFE_INTEGER);
     rec.append(result);
     const kif = exportKIF(rec, { returnCode: "\r\n" });

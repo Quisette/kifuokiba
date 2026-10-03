@@ -17,6 +17,8 @@ export function makeKif(opts: {
   event?: string;
   end?: SpecialMoveType;
   comments?: { [ply: number]: string };
+  /** Think time per move in ms, from move 1. */
+  elapsed?: number[];
 }): string {
   const r = Record.newByUSI("position startpos moves " + opts.moves);
   if (r instanceof Error) throw r;
@@ -24,6 +26,10 @@ export function makeKif(opts: {
   r.metadata.setStandardMetadata(RecordMetadataKey.WHITE_NAME, opts.white);
   if (opts.date) r.metadata.setStandardMetadata(RecordMetadataKey.START_DATETIME, opts.date);
   if (opts.event) r.metadata.setStandardMetadata(RecordMetadataKey.TOURNAMENT, opts.event);
+  opts.elapsed?.forEach((ms, i) => {
+    r.goto(i + 1);
+    r.current.setElapsedMs(ms);
+  });
   r.goto(Number.MAX_SAFE_INTEGER);
   r.append(opts.end ?? SpecialMoveType.RESIGN);
   if (opts.comments) {
