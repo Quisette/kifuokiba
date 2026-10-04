@@ -120,6 +120,12 @@
         </label>
       </section>
 
+      <section class="panel box">
+        <h3>保存 Backup</h3>
+        <div class="muted small">Everything (games, analysis, cards, notes, settings) lives in one SQLite file. Download a copy now and then.</div>
+        <div class="row"><a class="btn" href="/api/backup" download>Download library backup</a></div>
+      </section>
+
       <div class="save-row">
         <button type="submit" class="btn primary">Save settings</button>
         <span class="muted small">Saving re-grades analysed games, so labels and cards follow the new settings.</span>

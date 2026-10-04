@@ -193,6 +193,16 @@
             <a v-for="h in posHits" :key="h.gameId" :href="`#/game/${h.gameId}`" class="tag">#{{ h.gameId }} {{ h.game.black }} vs {{ h.game.white }} ({{ h.ply }}手)</a>
           </div>
         </div>
+
+        <div v-if="similar.length" class="panel box">
+          <div class="cap">似た対局 Similar games</div>
+          <a v-for="g in similar" :key="g.id" :href="`#/game/${g.id}`" class="similar">
+            <span class="res" :class="g.myResult || 'none'" style="width: 22px; height: 22px; font-size: 12px">{{ resultChar(g.myResult) }}</span>
+            <span>{{ g.date.slice(0, 10) }}</span>
+            <span class="muted">vs {{ g.opponent }}</span>
+            <span class="muted">{{ g.strategy }}</span>
+          </a>
+        </div>
       </section>
     </div>
 
@@ -220,7 +230,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { InitialPositionSFEN, Move, Position, formatPV } from "tsshogi";
-import { api, evalText, GameDetail, live, toast, winRate } from "../api";
+import { api, evalText, GameDetail, live, resultChar, toast, winRate } from "../api";
 import { route } from "../router";
 import ShogiBoard from "../components/ShogiBoard.vue";
 import EvalGraph from "../components/EvalGraph.vue";
@@ -260,6 +270,11 @@ async function load() {
   }
 }
 onMounted(load);
+type Similar = { id: number; date: string; opponent: string; myResult: string; strategy: string };
+const similar = ref<Similar[]>([]);
+onMounted(async () => {
+  similar.value = await api.get<Similar[]>(`/api/games/${props.id}/similar`).catch(() => []);
+});
 type BookInfo = { configured: boolean; inBook: number[]; leftBookAt: number | null; alternatives: { usi: string; text: string }[] };
 const bookInfo = ref<BookInfo | null>(null);
 const bookPlies = computed(() => new Set(bookInfo.value?.inBook ?? []));
@@ -504,6 +519,19 @@ async function findPosition() {
 </script>
 
 <style scoped>
+.similar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+  padding: 4px 2px;
+  color: var(--text);
+  text-decoration: none;
+  flex-wrap: wrap;
+}
+.similar:hover {
+  background: var(--panel-2);
+}
 .book-mark {
   font-size: 10px;
   padding: 0 4px;

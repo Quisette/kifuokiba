@@ -217,6 +217,21 @@ describe("library API", () => {
     await api("PUT", "/api/settings", { bookPath: "" });
   });
 
+  it("downloads a consistent backup of the library", async () => {
+    const res = await fetch(base + "/api/backup");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-disposition")).toMatch(/kifu-study-\d{4}-\d{2}-\d{2}\.db/);
+    const buf = Buffer.from(await res.arrayBuffer());
+    expect(buf.subarray(0, 15).toString()).toBe("SQLite format 3");
+    const file = path.join(mkdtempSync(path.join(tmpdir(), "kifu-restore-")), "copy.db");
+    writeFileSync(file, buf);
+    const { Db } = await import("../src/server/db.js");
+    const copy = new Db(file);
+    const live = await api("GET", "/api/games");
+    expect(copy.all("SELECT id FROM games")).toHaveLength(live.length);
+    copy.close();
+  });
+
   it("explores my games move by move", async () => {
     const root = await api("GET", "/api/explorer");
     expect(root.games).toBe(2);

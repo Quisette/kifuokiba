@@ -219,3 +219,31 @@ export function playerProfile(lib: Library, name: string) {
     games,
   };
 }
+
+/**
+ * Games like this one, for reviewing together: same side, same opening on both
+ * sides, then the same castles. Losses come first since they're what you study.
+ */
+export function similarGames(lib: Library, id: number, limit = 8) {
+  const all = lib.listGames();
+  const me = all.find((g) => g.id === id);
+  if (!me || !me.mySide) return [];
+  const theirOpening = (g: GameListItem) => g.opening || (g.mySide === "black" ? g.white_opening || g.white_style : g.black_opening || g.black_style);
+  const myCastle = (g: GameListItem) => g.myCastle;
+  const theirCastle = (g: GameListItem) => (g.mySide === "black" ? g.white_castle : g.black_castle);
+  return all
+    .filter((g) => g.id !== id && g.mySide)
+    .map((g) => {
+      let score = 0;
+      if (g.myOpening && g.myOpening === me.myOpening) score += 3;
+      if (theirOpening(g) && theirOpening(g) === theirOpening(me)) score += 3;
+      if (g.mySide === me.mySide) score += 1;
+      if (myCastle(g) && myCastle(g) === myCastle(me)) score += 1;
+      if (theirCastle(g) && theirCastle(g) === theirCastle(me)) score += 1;
+      return { g, score };
+    })
+    .filter((x) => x.score >= 4)
+    .sort((a, b) => b.score - a.score || Number(b.g.myResult === "loss") - Number(a.g.myResult === "loss") || (a.g.date < b.g.date ? 1 : -1))
+    .slice(0, limit)
+    .map(({ g, score }) => ({ id: g.id, date: g.date, opponent: g.opponent, myResult: g.myResult, strategy: g.strategy, mySide: g.mySide, score }));
+}

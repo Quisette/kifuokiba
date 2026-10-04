@@ -200,6 +200,11 @@ export class Db {
     );
   }
 
+  /** A consistent copy of the whole library, safe to take while the app runs. */
+  backupTo(file: string) {
+    this.db.prepare("VACUUM INTO ?").run(file);
+  }
+
   close() {
     this.db.close();
   }

@@ -114,6 +114,9 @@ describe("lishogi sync API", () => {
     expect(prof.form).toBe("WW");
     expect(prof.theirRating).toBe(1700);
     expect((await api("GET", "/api/players/" + encodeURIComponent("誰か"))).status).toBe(404);
+    // Both games open the same way with me as sente, so each is the other's similar game.
+    const sim = (await api("GET", `/api/games/${games[0].id}/similar`)).body;
+    expect(sim.map((g: { id: number }) => g.id)).toEqual([games[1].id]);
 
     const second = await api("POST", "/api/sync/lishogi");
     expect(second.body.added).toHaveLength(0);

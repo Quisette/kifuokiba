@@ -2,13 +2,14 @@
 // 127.0.0.1 and opens a window on it; `npm run serve` runs the same thing for a
 // plain browser tab.
 import http from "node:http";
-import { readFile, stat } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { Db } from "./db.js";
 import { Library, GameFilter } from "./library.js";
 import { AnalysisQueue } from "./analysis.js";
 import { Cards } from "./cards.js";
-import { computeStats, playerProfile } from "./stats.js";
+import { computeStats, playerProfile, similarGames } from "./stats.js";
 import { Pages } from "./pages.js";
 import { loadSettings, saveSettings, AppSettings } from "./settings.js";
 import { RecordFileFormat } from "../core/recordFile.js";
@@ -254,6 +255,7 @@ export function createApp(opts: AppOptions) {
     const sfen = url.searchParams.get("sfen") || InitialPositionSFEN.STANDARD;
     return { configured: true, moves: book.moves(sfen).map((m) => ({ ...m, text: Library.moveText(sfen, m.usi) })) };
   });
+  route("GET", "/api/games/:id/similar", (_r, _u, p) => similarGames(lib, id(p)));
   route("GET", "/api/games/:id/book", async (_r, _u, p) => {
     const book = await loadBook();
     if (!book) return { configured: false, inBook: [], leftBookAt: null, alternatives: [] };
@@ -347,6 +349,17 @@ export function createApp(opts: AppOptions) {
   });
 
   // ---- settings
+  route("GET", "/api/backup", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "kifu-backup-"));
+    const file = path.join(dir, "library.db");
+    try {
+      db.backupTo(file);
+      const stamp = new Date().toISOString().slice(0, 10);
+      return { __raw: await readFile(file), type: "application/vnd.sqlite3", name: `kifu-study-${stamp}.db` };
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
   route("GET", "/api/settings", () => loadSettings(db));
   route("PUT", "/api/settings", (_r, _u, _p, body) => {
     const prev = loadSettings(db);
