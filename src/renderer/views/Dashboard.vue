@@ -154,6 +154,7 @@ type Today = {
   losses: { id: number; opponent: string; date: string; strategy: string; mistakes: number; analysed: boolean }[];
   missedMates: number;
   weakOpenings: number;
+  tsumeRetry: { collection: string; count: number } | null;
 };
 const today = ref<Today | null>(null);
 const todayItems = computed(() => {
@@ -169,6 +170,12 @@ const todayItems = computed(() => {
       href: `#/game/${g.id}`,
     });
   if (t.missedMates) items.push({ key: "mates", text: `Solve the ${t.missedMates} mate${t.missedMates === 1 ? "" : "s"} you missed in games`, href: "#/puzzles" });
+  if (t.tsumeRetry)
+    items.push({
+      key: "tsume",
+      text: `Retry the ${t.tsumeRetry.count} problem${t.tsumeRetry.count === 1 ? "" : "s"} you failed in ${t.tsumeRetry.collection}`,
+      href: `#/puzzles?tab=tsume&collection=${encodeURIComponent(t.tsumeRetry.collection)}`,
+    });
   if (t.weakOpenings) items.push({ key: "open", text: `Drill ${t.weakOpenings} opening position${t.weakOpenings === 1 ? "" : "s"} where your usual move is weak`, href: "#/repertoire" });
   return items;
 });

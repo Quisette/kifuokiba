@@ -24,5 +24,10 @@ export function todayPlan(lib: Library, cards: Cards, book: OpeningBook | null, 
     (n, side) => n + lib.cached(`repertoire:${side}:counts:${book?.mtimeMs ?? ""}`, () => repertoire(lib, { side, book, withText: false })).filter((p) => p.problem).length,
     0,
   );
-  return { due: counts.due, reviewedToday: counts.reviewedToday, losses, missedMates, weakOpenings };
+  // Tsume problems failed last time, in the collection with the most of them.
+  const retry = lib.db.get<{ collection: string; n: number }>(
+    "SELECT collection, COUNT(*) n FROM tsume WHERE last_result = 'failed' GROUP BY collection ORDER BY n DESC LIMIT 1",
+  );
+  const tsumeRetry = retry ? { collection: retry.collection, count: retry.n } : null;
+  return { due: counts.due, reviewedToday: counts.reviewedToday, losses, missedMates, weakOpenings, tsumeRetry };
 }

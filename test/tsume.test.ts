@@ -62,6 +62,7 @@ it("imports a collection, records results and puts failed ones first", async () 
   const again = (await call("GET", "/api/tsume/problems?collection=" + encodeURIComponent("1手詰 drills"))).body;
   expect(again[0].id).toBe(list[1].id);
   expect(again[0].last_result).toBe("failed");
+  expect((await call("GET", "/api/today")).body.tsumeRetry).toEqual({ collection: "1手詰 drills", count: 1 });
   const cols = (await call("GET", "/api/tsume")).body;
   expect(cols[0]).toMatchObject({ collection: "1手詰 drills", problems: 2, solved: 1, tried: 2 });
 
