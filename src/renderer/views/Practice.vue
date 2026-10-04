@@ -1,8 +1,10 @@
 <template>
   <div class="page">
     <div class="head">
-      <h1>実戦練習 Play it out</h1>
-      <span class="muted">You play {{ mySideMark }} from this position; the engine answers. Good for converting won positions you let slip.</span>
+      <h1 v-if="goalMate">詰将棋 Mate in {{ goalMate }}</h1>
+      <h1 v-else>実戦練習 Play it out</h1>
+      <span v-if="goalMate" class="muted">{{ mySideMark }} to move and mate. Every move must keep the mate; the engine defends.</span>
+      <span v-else class="muted">You play {{ mySideMark }} from this position; the engine answers. Good for converting won positions you let slip.</span>
       <a v-if="backHref" class="btn small" :href="backHref">← Back</a>
     </div>
     <div v-if="!start" class="empty">No position given. Open a game or a card and choose "Play it out".</div>
@@ -22,6 +24,7 @@
       <div class="side">
         <section class="panel box">
           <div class="status" :class="state">{{ statusText }}</div>
+          <div v-if="warning" class="warning">{{ warning }}</div>
           <div class="bar" :title="evalLabel">
             <span :style="{ width: (myWinRate ?? 50) + '%' }"></span>
           </div>
@@ -38,7 +41,7 @@
           <div class="row">
             <button type="button" class="btn" :disabled="state === 'thinking' || myMoves === 0" @click="takeBack">↶ Take back</button>
             <button type="button" class="btn" :disabled="state === 'thinking' || moves.length === 0" @click="restart">Restart</button>
-            <button type="button" class="btn danger" :disabled="state !== 'yours'" @click="resign">Resign</button>
+            <button type="button" class="btn danger" :disabled="state !== 'yours'" @click="resign">{{ goalMate ? "Give up" : "Resign" }}</button>
           </div>
         </section>
         <section class="panel box moves">
@@ -70,6 +73,9 @@ const startPly = Number(start.split(" ")[3] ?? 1) - 1;
 const backHref = route.query.get("back") ? "#/" + route.query.get("back") : "";
 const mySide = start && Position.newBySFEN(start)!.color === Color.WHITE ? "white" : "black";
 const mySideMark = mySide === "black" ? "☗" : "☖";
+// Mate puzzles: the user must keep a forced mate on every move.
+const goalMate = route.query.get("goal") === "mate" ? Number(route.query.get("mate")) || 0 : 0;
+const warning = ref("");
 
 const moves = ref<string[]>([]);
 const state = ref<State>("yours");
@@ -109,7 +115,7 @@ const statusText = computed(
     ({
       yours: "Your move",
       thinking: "Engine is thinking…",
-      won: "You won. The engine resigned. 🎉",
+      won: goalMate ? `詰み. Solved in ${myMoves.value} move${myMoves.value === 1 ? "" : "s"}. 🎉` : "You won. The engine resigned. 🎉",
       lost: "You lost.",
       error: error.value,
     })[state.value],
@@ -123,6 +129,11 @@ async function play(usi: string) {
     const r = await api.post<SearchReply>("/api/analyze-position", { sfen: start, moves: moves.value, movetimeMs: movetimeMs.value });
     score.value = r.score ?? null;
     mate.value = r.mate ?? null;
+    const myMateSign = mySide === "black" ? 1 : -1;
+    warning.value =
+      goalMate && r.best && !(r.mate !== undefined && r.mate * myMateSign > 0)
+        ? "That move lets the king escape: there is no forced mate any more. Take it back and try again."
+        : "";
     if (!r.best || r.best === "win") {
       // "resign", or "win" for an entering-king declaration by the engine.
       state.value = r.best === "win" ? "lost" : "won";
@@ -142,12 +153,14 @@ async function play(usi: string) {
 }
 
 function takeBack() {
+  warning.value = "";
   // Back to before my last move (and the engine's reply to it).
   const n = moves.value.length % 2 === 0 ? 2 : 1;
   moves.value = moves.value.slice(0, -n);
   state.value = "yours";
 }
 function restart() {
+  warning.value = "";
   moves.value = [];
   score.value = mate.value = null;
   state.value = "yours";
@@ -197,6 +210,10 @@ function resign() {
 .status.lost,
 .status.error {
   color: var(--loss);
+}
+.warning {
+  color: var(--loss);
+  font-size: 13px;
 }
 .bar {
   height: 10px;

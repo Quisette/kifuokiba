@@ -220,6 +220,15 @@ try {
   check((await page.textContent(".status")).includes("Your move"), "engine answers in practice mode");
   await shot("08b-practice");
 
+  await page.goto(base + "/#/puzzles");
+  await page.waitForSelector(".grid, .empty");
+  check(!(await page.textContent(".page")).includes("Loading"), "mate puzzles page loads");
+  await shot("08c-puzzles");
+  await page.goto(base + "/#/practice?goal=mate&mate=1&sfen=" + encodeURIComponent("4k4/9/4P4/9/9/9/9/9/9 b G2r2b3g4s4n4l17p 1"));
+  await page.waitForSelector("h1");
+  check((await page.textContent("h1")).includes("Mate in 1"), "a puzzle opens in mate mode");
+  await shot("08d-puzzle");
+
   await page.goto(base + "/#/settings");
   await page.waitForSelector("form");
   await shot("08-settings");

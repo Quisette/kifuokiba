@@ -12,6 +12,7 @@ import { Cards } from "./cards.js";
 import { computeStats, playerProfile, similarGames } from "./stats.js";
 import { Pages } from "./pages.js";
 import { reviewNote } from "./review-note.js";
+import { findPuzzles } from "./puzzles.js";
 import { loadSettings, saveSettings, AppSettings } from "./settings.js";
 import { RecordFileFormat } from "../core/recordFile.js";
 import { UsiEngine } from "./engine/usi.js";
@@ -333,6 +334,9 @@ export function createApp(opts: AppOptions) {
     type: "text/tab-separated-values; charset=utf-8",
     name: "kifu-study-cards.txt",
   }));
+  route("GET", "/api/puzzles", (_r, url) =>
+    findPuzzles(lib, { mineOnly: url.searchParams.get("mine") !== "0" }).map((p) => ({ ...p, bestText: Library.moveText(p.sfen, p.bestUsi) })),
+  );
   route("GET", "/api/cards/counts", () => cards.counts());
   route("GET", "/api/cards/activity", (_r, url) => cards.activity(Math.min(Math.max(Number(url.searchParams.get("days")) || 182, 7), 730)));
   route("POST", "/api/cards", (_r, _u, _p, body) => {

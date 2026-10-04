@@ -323,3 +323,31 @@ describe("review streaks", () => {
     db.close();
   });
 });
+
+describe("mate puzzles", () => {
+  it("takes one puzzle per mating sequence and marks the ones missed", async () => {
+    const { Db } = await import("../src/server/db.js");
+    const { Library } = await import("../src/server/library.js");
+    const { findPuzzles } = await import("../src/server/puzzles.js");
+    const { saveSettings } = await import("../src/server/settings.js");
+    const db = new Db(":memory:");
+    const lib = new Library(db);
+    saveSettings(db, { ...lib.settings, myNames: ["me"] });
+    const kif = makeKif({ moves: "7g7f 3c3d 2g2f 4c4d 2f2e 2b3c", black: "me", white: "x", date: "2026/09/04" });
+    const gid = (lib.importText(kif) as { id: number }).id;
+    const set = (ply: number, mate: number | null, best = "", missed = "") =>
+      db.run("UPDATE plies SET mate = ?, best_usi = ?, missed = ? WHERE game_id = ? AND ply = ?", mate, best, missed, gid, ply);
+    // After ply 2 black (to move) mates in 5 and keeps it after ply 4; black lets it go at ply 5.
+    set(2, 5, "2g2f");
+    set(3, 4, "4c4d");
+    set(4, 3, "2f2e");
+    // Black's 5th move lets it go; now white mates in 3: the opponent's, so only with mineOnly off.
+    set(5, -3, "2b3c", "mate");
+    const mine = findPuzzles(lib, { mineOnly: true });
+    expect(mine).toHaveLength(1);
+    expect(mine[0]).toMatchObject({ ply: 2, mateIn: 5, side: "black", mine: true, missed: true });
+    const all = findPuzzles(lib);
+    expect(all.map((p) => [p.ply, p.side])).toEqual(expect.arrayContaining([[2, "black"], [5, "white"]]));
+    db.close();
+  });
+});

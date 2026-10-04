@@ -2,6 +2,7 @@
   <div class="page">
     <div class="head">
       <h1>復習カード Mistake review</h1>
+      <a class="btn small" href="#/puzzles">詰将棋 Mates from my games</a>
       <span v-if="queue.length" class="serif progress-label">{{ index + 1 }} / {{ queue.length }}</span>
       <div class="progress" v-if="queue.length"><span :style="{ width: (index / queue.length) * 100 + '%' }"></span></div>
       <label class="field">
