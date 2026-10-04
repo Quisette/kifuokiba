@@ -46,6 +46,9 @@ it("counts won positions converted, comebacks, and the games let slip", () => {
   expect(c.blown[0]).toMatchObject({ id: blown, opponent: "x", slipPly: 7, slipLoss: 45 });
   expect(c.blown[0].peak).toBeGreaterThanOrEqual(85);
   expect(c.blown[0].slipText).toContain("７八金");
+  // The position before the slip, black to move, to play out again.
+  expect(c.blown[0].sfen).toBe(lib.db.get<{ sfen: string }>("SELECT sfen FROM plies WHERE game_id = ? AND ply = 6", blown)?.sfen);
+  expect(c.blown[0].sfen.split(" ")[1]).toBe("b");
   // Worked out once and stored; a regrade computes the same.
   expect(lib.db.get<{ b: number }>("SELECT clear_black_ply b FROM games WHERE id = ?", blown)?.b).toBe(3);
   lib.regrade(blown);

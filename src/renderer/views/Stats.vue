@@ -128,6 +128,7 @@
                 <a :href="`#/game/${b.id}?ply=${b.slipPly}`">{{ b.date ? b.date.slice(0, 10) : "#" + b.id }} vs {{ b.opponent || "?" }}</a>
                 <span class="muted small">peak {{ b.peak }}% · {{ b.slipPly }}手目 {{ b.slipText }} −{{ b.slipLoss }}</span>
                 <a class="btn small" :href="`#/game/${b.id}?ply=${b.slipPly - 1}`" title="Open the position before this move">Before it</a>
+                <a v-if="b.sfen" class="btn small" :href="`#/practice?goal=convert&sfen=${encodeURIComponent(b.sfen)}&back=stats`" title="Play the won position out against the engine">Win it again</a>
               </li>
             </ul>
           </template>
@@ -208,7 +209,7 @@ type StatsT = {
     comebacks: number;
     conversionRate: number | null;
     comebackRate: number | null;
-    blown: { id: number; date: string; opponent: string; result: string; peak: number; slipPly: number; slipText: string; slipLoss: number }[];
+    blown: { id: number; date: string; opponent: string; result: string; peak: number; slipPly: number; slipText: string; slipLoss: number; sfen: string }[];
   };
   meanMistakes: number | null;
   phaseProfile: { phase: string; avgLoss: number | null; moves: number; mistakes: number; avgSeconds: number | null }[];

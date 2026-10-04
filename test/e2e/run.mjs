@@ -281,6 +281,16 @@ try {
   check((await page.textContent(".status")).includes("Your move"), "engine answers in practice mode");
   await shot("08b-practice");
 
+  // Win it again: a rook up, the drill keeps the winning chances in view.
+  await page.goto(base + "/?convert#/practice?goal=convert&back=stats&sfen=" + encodeURIComponent("lnsgkgsnl/7b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1"));
+  await page.waitForSelector(".board.operation", { state: "attached" });
+  await page.waitForTimeout(400);
+  check((await page.textContent("h1")).includes("Win it again"), "convert drill opens from a won position");
+  await clickSquare(7, 7);
+  await clickSquare(7, 6);
+  await page.waitForFunction(() => document.querySelectorAll(".moves li").length === 2, null, { timeout: 20000 });
+  check(!(await page.$(".warning")) && /chances (8|9)\d%/.test(await page.textContent(".side")), "convert drill shows the winning chances kept");
+
   await page.goto(base + "/#/puzzles");
   await page.waitForSelector(".grid, .empty");
   check(!(await page.textContent(".page")).includes("Loading"), "mate puzzles page loads");

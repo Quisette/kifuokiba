@@ -2,8 +2,10 @@
   <div class="page">
     <div class="head">
       <h1 v-if="goalMate">詰将棋<template v-if="mateLen"> Mate in {{ mateLen }}</template></h1>
+      <h1 v-else-if="goalConvert">勝ち切り Win it again</h1>
       <h1 v-else>実戦練習 Play it out</h1>
       <span v-if="goalMate" class="muted">{{ mySideMark }} to move and mate. Every move must keep the mate; the engine defends.</span>
+      <span v-else-if="goalConvert" class="muted">You were winning here and let it slip. Play it out against the engine without letting your winning chances fall below {{ KEEP }}%.</span>
       <span v-else class="muted">You play {{ mySideMark }} from this position; the engine answers. Good for converting won positions you let slip.</span>
       <a v-if="backHref" class="btn small" :href="backHref">← Back</a>
     </div>
@@ -78,6 +80,10 @@ const goalMate = route.query.get("goal") === "mate";
 const mateLen = goalMate ? Number(route.query.get("mate")) || 0 : 0;
 // A problem from a tsume collection: its first outcome is recorded.
 const tsumeId = Number(route.query.get("tsume")) || 0;
+// A won position to convert: warn as soon as the winning chances drop below KEEP.
+const goalConvert = route.query.get("goal") === "convert";
+const KEEP = 70;
+const lowest = ref<number | null>(null);
 let recorded = false;
 const state = ref<State>("yours");
 watch(state, (v) => (v === "won" ? recordResult(true) : v === "lost" ? recordResult(false) : undefined));
@@ -125,7 +131,11 @@ const statusText = computed(
     ({
       yours: "Your move",
       thinking: "Engine is thinking…",
-      won: goalMate ? `詰み. Solved in ${myMoves.value} move${myMoves.value === 1 ? "" : "s"}. 🎉` : "You won. The engine resigned. 🎉",
+      won: goalMate
+        ? `詰み. Solved in ${myMoves.value} move${myMoves.value === 1 ? "" : "s"}. 🎉`
+        : goalConvert && lowest.value !== null
+          ? `You won${lowest.value >= KEEP ? ", never dropping below " + KEEP + "%" : ""}. The engine resigned. 🎉`
+          : "You won. The engine resigned. 🎉",
       lost: "You lost.",
       error: error.value,
     })[state.value],
@@ -144,6 +154,10 @@ async function play(usi: string) {
       goalMate && r.best && !(r.mate !== undefined && r.mate * myMateSign > 0)
         ? "That move lets the king escape: there is no forced mate any more. Take it back and try again."
         : "";
+    if (goalConvert && myWinRate.value !== null) {
+      lowest.value = Math.min(lowest.value ?? 100, myWinRate.value);
+      if (myWinRate.value < KEEP) warning.value = `Your winning chances are down to ${Math.round(myWinRate.value)}%. This is where it slips: take the move back and look for a safer one.`;
+    }
     if (!r.best || r.best === "win") {
       // "resign", or "win" for an entering-king declaration by the engine.
       state.value = r.best === "win" ? "lost" : "won";
@@ -171,6 +185,7 @@ function takeBack() {
 }
 function restart() {
   warning.value = "";
+  lowest.value = null;
   moves.value = [];
   score.value = mate.value = null;
   state.value = "yours";

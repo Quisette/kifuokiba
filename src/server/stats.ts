@@ -37,7 +37,7 @@ const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.l
 const CLEAR = 85;
 const MARGIN_PLIES = 6;
 
-export type BlownGame = { id: number; date: string; opponent: string; result: string; peak: number; slipPly: number; slipText: string; slipLoss: number };
+export type BlownGame = { id: number; date: string; opponent: string; result: string; peak: number; slipPly: number; slipText: string; slipLoss: number; sfen: string };
 
 type EvalRow = { ply: number; score: number | null; mate: number | null; loss: number | null; text: string };
 const evalOf = (r: EvalRow) => (r.score === null && r.mate === null ? null : { score: r.score ?? undefined, mate: r.mate ?? undefined });
@@ -103,6 +103,8 @@ export function conversion(lib: Library, games: GameListItem[]) {
       slipPly: slip?.ply ?? from,
       slipText: slip?.text ?? "",
       slipLoss: Math.round((slip?.loss ?? 0) * 10) / 10,
+      // The position before the slip, to play it out again.
+      sfen: lib.db.get<{ sfen: string }>("SELECT sfen FROM plies WHERE game_id = ? AND ply = ?", g.id, (slip?.ply ?? from + 1) - 1)?.sfen ?? "",
     };
   });
   return {
