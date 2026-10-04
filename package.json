@@ -11,7 +11,8 @@
     "test": "vitest run",
     "e2e": "npm run build && node test/e2e/run.mjs",
     "typecheck": "vue-tsc --noEmit",
-    "rules": "python3 tools/convert-classifier-rules.py"
+    "rules": "python3 tools/convert-classifier-rules.py",
+    "dist": "npm run build && electron-builder"
   },
   "keywords": [],
   "author": "",
@@ -28,6 +29,7 @@
     "@types/node": "^26.6.4",
     "@vitejs/plugin-vue": "^6.0.9",
     "electron": "^44.5.1",
+    "electron-builder": "^26.15.3",
     "esbuild": "^0.28.2",
     "tsx": "^4.23.15",
     "typescript": "5.9",
@@ -36,5 +38,43 @@
     "vue-tsc": "^3.3.12"
   },
   "type": "module",
-  "private": true
+  "private": true,
+  "productName": "Kifu Study",
+  "build": {
+    "appId": "com.quisette.kifustudy",
+    "productName": "Kifu Study",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json",
+      "!dist/**/*.map",
+      "!node_modules/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.games",
+      "target": [
+        "dmg"
+      ],
+      "identity": null
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Game",
+      "syncDesktopName": true
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "desktopName": "kifu-study.desktop"
 }

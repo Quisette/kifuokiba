@@ -5,3 +5,4 @@ scratch/
 *.db
 *.db-journal
 .DS_Store
+release/

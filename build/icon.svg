@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect x="24" y="24" width="464" height="464" rx="96" fill="#17120d"/>
+  <path d="M256 70 L380 118 L410 442 L102 442 L132 118 Z" fill="#d4a24c" stroke="#8a6a3a" stroke-width="10" stroke-linejoin="round"/>
+  <text x="256" y="345" text-anchor="middle" font-family="Noto Serif CJK JP, Noto Serif JP, Zen Old Mincho, serif" font-weight="900" font-size="200" fill="#17120d">譜</text>
+</svg>

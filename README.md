@@ -51,6 +51,12 @@ npm run dev        # Vite with hot reload on :5173, API on :3210
 
 On first launch, open Settings, enter your player names, and set the path to a USI engine.
 
+## Installers
+
+`npm run dist` builds an installer for the current OS into `release/` (dmg on macOS, NSIS exe on Windows, AppImage on Linux). The **Installers** GitHub workflow builds all three; run it from the Actions tab or push a `v*` tag.
+
+The builds are not code-signed. On macOS, open the app the first time with right-click → Open; on Windows, choose "More info → Run anyway" in SmartScreen.
+
 ## Tests
 
 ```sh
