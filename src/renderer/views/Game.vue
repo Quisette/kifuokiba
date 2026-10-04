@@ -9,7 +9,7 @@
           <span :class="{ me: game.mySide === 'white' }">☖{{ game.white || "後手" }}</span>
         </h1>
         <div class="muted meta">
-          {{ [game.date, game.event, game.time_control].filter(Boolean).join(" · ") }} · {{ game.strategy || "—" }} · {{ game.move_count }}手
+          {{ [game.date, game.event, game.time_control, game.strategy || "—", `${game.move_count}手`].filter(Boolean).join(" · ") }}
           {{ resultText }}
         </div>
       </div>
@@ -76,8 +76,12 @@
           </span>
         </div>
         <div v-if="variation.length" class="var panel">
+          <div v-if="activeBranch" class="branch-note">
+            <b>変化 from the file</b>: {{ activeBranch.texts.join(" ") }}
+            <div v-if="activeBranch.comment" class="muted">{{ activeBranch.comment }}</div>
+          </div>
           <div>
-            <b>Trying your own line</b> from move {{ cursor }}.
+            <b>{{ activeBranch ? "Engine on this line" : "Trying your own line" }}</b> from move {{ cursor }}.
             <span v-if="varEval">Engine: {{ evalText(varEval.score ?? null, varEval.mate ?? null) }} · best {{ varEval.bestText }}</span>
             <span v-else-if="varBusy" class="muted">evaluating…</span>
           </div>
@@ -103,6 +107,16 @@
             <span v-if="p.comment.trim() && p.ply" class="cm" title="Has comment">✎</span>
             <span v-if="p.level >= 2" class="mark" :class="'l' + p.level">{{ p.label }}</span>
             <span v-if="bookPlies.has(p.ply)" class="book-mark" title="Opening book move">定</span>
+            <button
+              v-for="(b, bi) in branchPlies.get(p.ply) ?? []"
+              :key="'b' + bi"
+              type="button"
+              class="branch-mark"
+              :title="`Variation in the file: ${b.texts.slice(0, 4).join(' ')}${b.texts.length > 4 ? ' …' : ''}`"
+              @click.stop="showBranch(b)"
+            >
+              変{{ (branchPlies.get(p.ply)?.length ?? 0) > 1 ? bi + 1 : "" }}
+            </button>
             <span v-if="p.missed" class="mark l4" :title="p.missed === 'mate' ? 'Missed a forced mate' : 'Threw away a won position'">{{ missedLabel(p.missed) }}</span>
             <span class="ev">{{ p.ply ? evalText(p.score, p.mate) : "" }}</span>
           </li>
@@ -284,6 +298,25 @@ const similar = ref<Similar[]>([]);
 onMounted(async () => {
   similar.value = await api.get<Similar[]>(`/api/games/${props.id}/similar`).catch(() => []);
 });
+type Branch = { ply: number; usis: string[]; texts: string[]; comment: string };
+const branches = ref<Branch[]>([]);
+const branchPlies = computed(() => {
+  const m = new Map<number, Branch[]>();
+  for (const b of branches.value) m.set(b.ply, [...(m.get(b.ply) ?? []), b]);
+  return m;
+});
+const activeBranch = ref<Branch | null>(null);
+onMounted(async () => {
+  branches.value = await api.get<Branch[]>(`/api/games/${props.id}/branches`).catch(() => []);
+});
+// Show a stored variation: go to the position before it, then play it out as a line.
+async function showBranch(b: Branch) {
+  jump(b.ply - 1);
+  await nextTick();
+  variation.value = [...b.usis];
+  activeBranch.value = b;
+  void evalVariation();
+}
 type BookInfo = { configured: boolean; inBook: number[]; leftBookAt: number | null; alternatives: { usi: string; text: string }[] };
 const bookInfo = ref<BookInfo | null>(null);
 const bookPlies = computed(() => new Set(bookInfo.value?.inBook ?? []));
@@ -348,6 +381,10 @@ onUnmounted(() => window.removeEventListener("keydown", onKey));
 
 // ---- variation ("try your own move")
 const variation = ref<string[]>([]);
+watch(variation, (v) => {
+  // Leaving the stored line (undo past its start, back to game) clears the label.
+  if (activeBranch.value && (v.length === 0 || v.some((u, i) => activeBranch.value!.usis[i] !== u))) activeBranch.value = null;
+}, { deep: true });
 const varEval = ref<{ score?: number; mate?: number; bestText: string } | null>(null);
 const varBusy = ref(false);
 const variationPositions = computed(() => {
@@ -631,6 +668,23 @@ async function findPosition() {
   display: flex;
   gap: 8px;
   align-items: stretch;
+}
+.branch-mark {
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 0 5px;
+  border-radius: 3px;
+  border: 1px solid #6a8fb8;
+  background: transparent;
+  color: #9cc0e8;
+  cursor: pointer;
+}
+.branch-mark:hover {
+  background: #2a3a4d;
+}
+.branch-note {
+  margin-bottom: 6px;
 }
 .menu {
   position: relative;

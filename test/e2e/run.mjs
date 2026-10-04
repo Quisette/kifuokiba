@@ -147,7 +147,18 @@ try {
   check((await page.textContent("body")).includes("悪手 Mistakes"), "review note opens in the notebook with boards");
   await shot("03b-review-note");
 
+  // A KIF with a stored variation: the move list offers it and clicking shows it as a line.
+  const branchKif = ["手合割：平手", "先手：Q", "後手：study", "手数----指手---------消費時間--", "   1 ７六歩(77)", "   2 ３四歩(33)+", "   3 ２六歩(27)", "   4 投了", "", "変化：2手", "   2 ８四歩(83)", "*居飛車にする手", "   3 ６八銀(79)", ""].join("\n");
+  const branchId = (await api("POST", "/api/import", { text: branchKif })).results[0].id;
+  await page.goto(base + `/#/game/${branchId}`);
+  await page.waitForSelector(".branch-mark");
+  await page.click(".branch-mark");
+  await page.waitForSelector(".branch-note");
+  check((await page.textContent(".branch-note")).includes("居飛車にする手"), "stored variations open from the move list");
+  await shot("03c-branch");
+
   await page.goto(base + "/#/review");
+  await api("DELETE", `/api/games/${branchId}`);
   await page.waitForTimeout(800);
   await shot("04-review");
   if (cards.length) {

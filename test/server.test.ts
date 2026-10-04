@@ -144,6 +144,20 @@ describe("library API", () => {
     expect((await fetch(`${base}/api/diagram.svg?sfen=junk`)).status).toBe(400);
   });
 
+  it("lists the variations stored in a KIF", async () => {
+    const kif = [
+      "手合割：平手", "先手：me", "後手：branchy", "手数----指手---------消費時間--",
+      "   1 ７六歩(77)   ( 0:00/00:00:00)", "   2 ３四歩(33)   ( 0:00/00:00:00)+", "   3 ２六歩(27)   ( 0:00/00:00:00)", "   4 投了", "",
+      "変化：2手", "   2 ８四歩(83)   ( 0:00/00:00:00)", "*居飛車にする手", "   3 ６八銀(79)   ( 0:00/00:00:00)", "",
+    ].join("\n");
+    const id = (await api("POST", "/api/import", { text: kif })).results[0].id;
+    const b = await api("GET", `/api/games/${id}/branches`);
+    expect(b).toEqual([{ ply: 2, usis: ["8c8d", "7i6h"], texts: ["☖８四歩", "☗６八銀"], comment: "居飛車にする手" }]);
+    // The main line is unchanged.
+    expect((await api("GET", `/api/games/${id}`)).plies.map((p: { usi: string }) => p.usi).slice(1)).toEqual(["7g7f", "3c3d", "2g2f"]);
+    await api("DELETE", `/api/games/${id}`);
+  });
+
   it("computes stats", async () => {
     const s = await api("GET", "/api/stats");
     expect(s.totals.games).toBe(2);

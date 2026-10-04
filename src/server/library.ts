@@ -532,6 +532,34 @@ export class Library {
     });
   }
 
+  /**
+   * Variations stored in the original file (変化), branching off the main line:
+   * at main-line ply k, an alternative to move k with its continuation.
+   */
+  branches(id: number): { ply: number; usis: string[]; texts: string[]; comment: string }[] {
+    const row = this.db.get<{ original_text: string }>("SELECT original_text FROM games WHERE id = ?", id);
+    if (!row) return [];
+    const record = importRecordFromText(row.original_text);
+    if (record instanceof Error) return [];
+    const out: { ply: number; usis: string[]; texts: string[]; comment: string }[] = [];
+    // record.moves is the main line (first branch everywhere after import).
+    for (const node of record.moves) {
+      if (!node.hasBranch || !node.isFirstBranch) continue;
+      for (let alt = node.branch; alt; alt = alt.branch) {
+        const usis: string[] = [];
+        const texts: string[] = [];
+        let comment = "";
+        for (let n: typeof alt | null = alt; n && n.move instanceof Move; n = n.next) {
+          usis.push(n.move.usi);
+          texts.push(n.displayText);
+          if (!comment && n.comment) comment = n.comment.trim();
+        }
+        if (usis.length) out.push({ ply: alt.ply, usis, texts, comment });
+      }
+    }
+    return out;
+  }
+
   // ---------------------------------------------------------------- export
 
   /** Rebuild the record with current comments plus analysis in ShogiHome's comment format. */

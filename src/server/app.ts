@@ -270,6 +270,7 @@ export function createApp(opts: AppOptions) {
     const sfen = url.searchParams.get("sfen") || InitialPositionSFEN.STANDARD;
     return { configured: true, moves: book.moves(sfen).map((m) => ({ ...m, text: Library.moveText(sfen, m.usi) })) };
   });
+  route("GET", "/api/games/:id/branches", (_r, _u, p) => lib.branches(id(p)));
   route("GET", "/api/games/:id/similar", (_r, _u, p) => similarGames(lib, id(p)));
   route("GET", "/api/games/:id/book", async (_r, _u, p) => {
     const book = await loadBook();
