@@ -76,7 +76,7 @@
 <script setup lang="ts">
 // Replay a game and guess the moves of one side. Each guess goes to
 // /api/games/:id/guess, which grades it like a played move.
-import { computed, nextTick, ref } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 import { api, sideMark, type GameDetail } from "../api";
 import { route } from "../router";
 import ShogiBoard from "../components/ShogiBoard.vue";
@@ -186,6 +186,22 @@ function undo() {
   guesses.value = guesses.value.slice(0, -1);
   goTo(last.ply - 1);
 }
+
+// → or Enter: next; s: skip; Backspace: take the last guess back.
+function onKey(e: KeyboardEvent) {
+  const t = e.target as HTMLElement | null;
+  if (t && t.tagName === "INPUT") return;
+  // A focused button or link handles Enter itself.
+  if (t && (t.tagName === "BUTTON" || t.tagName === "A") && e.key === "Enter") return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if ((e.key === "ArrowRight" || e.key === "Enter") && state.value === "shown") next();
+  else if (e.key === "s" && (state.value === "yours" || state.value === "shown")) skip();
+  else if (e.key === "Backspace" && state.value !== "checking") undo();
+  else return;
+  e.preventDefault();
+}
+onMounted(() => window.addEventListener("keydown", onKey));
+onUnmounted(() => window.removeEventListener("keydown", onKey));
 
 (async () => {
   try {

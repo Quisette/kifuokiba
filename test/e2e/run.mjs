@@ -256,6 +256,10 @@ try {
   await page.waitForSelector(".result", { timeout: 20000 });
   check((await page.textContent(".status")).includes("Same as the game"), "guess mode recognises the game move");
   await shot("08b-guess");
+  await page.locator("body").click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press("ArrowRight");
+  await page.waitForTimeout(200);
+  check((await page.textContent(".status")).includes("1 of 1 matched"), "→ moves on, to the end of a short game");
 
   // Play the opening position out against the engine: ☗7六歩, and the engine answers.
   await page.goto(base + "/#/practice?sfen=" + encodeURIComponent("lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1"));

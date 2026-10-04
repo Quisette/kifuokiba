@@ -99,6 +99,7 @@ const shortcuts = [
     ],
   },
   { title: "Review", keys: [["1 2 3 4", "Again / Hard / Good / Easy"], ["Space Enter", "The suggested grade"]] },
+  { title: "Guess the move", keys: [["→ Enter", "Next move"], ["s", "Skip this move"], ["Backspace", "Take the last guess back"]] },
 ];
 // Global keys, ignored while typing in a field.
 function onGlobalKey(e: KeyboardEvent) {
