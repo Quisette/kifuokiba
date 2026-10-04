@@ -3,7 +3,7 @@ import { Color, Move, Position, Record, formatMove, formatPV } from "tsshogi";
 import { Db, sfenKey } from "./db.js";
 import { AppSettings, loadSettings } from "./settings.js";
 import { importRecordFromBuffer, importRecordFromText, exportRecordAsBuffer, RecordFileFormat } from "../core/recordFile.js";
-import { summarizeRecord, normalizePlayerName, GameSummary } from "../core/summarize.js";
+import { summarizeRecord, normalizePlayerName, parseStrength, GameSummary } from "../core/summarize.js";
 import { classify, strategyLabel, styleMatchup, Classification } from "../core/classifier/index.js";
 import { gradeMoves, accuracy, turningPoint, Eval, mistakeLabels } from "../core/grading.js";
 import { newSm2State } from "../core/sm2.js";
@@ -52,6 +52,10 @@ export type GameListItem = GameRow & {
   myCastle: string;
   myAccuracy: number | null;
   mistakes: number; // my 悪手+大悪手 (or both sides' when side unknown)
+  /** Rating / rank written after the names, e.g. "(1650)" from Lishogi, "三段" from Shogi Wars. */
+  myRating: number | null;
+  myRank: string;
+  opponentRating: number | null;
 };
 
 export type GameFilter = {
@@ -248,16 +252,22 @@ export class Library {
       const myCastle = mySide === "black" ? r.black_castle : mySide === "white" ? r.white_castle : "";
       const plies = mistakes.get(r.id) ?? [];
       const init = firstColor.get(r.id) ?? "";
+      const me = mySide ? parseStrength(mySide === "black" ? r.black : r.white) : null;
+      const opp = mySide ? parseStrength(mySide === "black" ? r.white : r.black) : null;
       return {
         ...r,
         tags: tags.get(r.id) ?? [],
         mySide,
         myResult,
-        opponent: mySide === "black" ? r.white : mySide === "white" ? r.black : "",
+        // Without rating or rank, so one opponent stays one opponent as their rating moves.
+        opponent: mySide === "black" ? normalizePlayerName(r.white) : mySide === "white" ? normalizePlayerName(r.black) : "",
         myOpening,
         myCastle,
         myAccuracy: mySide === "black" ? r.accuracy_black : mySide === "white" ? r.accuracy_white : null,
         mistakes: mySide ? plies.filter((p) => sideOfMove(init, p) === mySide).length : plies.length,
+        myRating: me?.rating ?? null,
+        myRank: me?.rank ?? "",
+        opponentRating: opp?.rating ?? null,
       };
     });
     items = items.filter((g) => matchesFilter(g, filter));

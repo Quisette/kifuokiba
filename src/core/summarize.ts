@@ -67,6 +67,14 @@ export function normalizePlayerName(name: string): string {
     .trim();
 }
 
+/** Rating "(1650)" and rank "三段" / "3級" written after a player name, as sites put them. */
+export function parseStrength(name: string): { rating: number | null; rank: string } {
+  const rating = /\((\d{3,4})\)\s*$/.exec(name);
+  const bare = name.replace(/\s*\(\d+\)\s*$/, "");
+  const rank = /(?:^|[\s　])((?:[一二三四五六七八九十]+|\d+)[段級]|初段|名人|竜王)$/u.exec(bare);
+  return { rating: rating ? Number(rating[1]) : null, rank: rank?.[1] ?? "" };
+}
+
 export function normalizeDate(text: string): string {
   const m = /(\d{4})[/\-年](\d{1,2})[/\-月](\d{1,2})日?(?:\s*\(.\))?\s*(\d{1,2}:\d{2})?/.exec(text);
   if (!m) {

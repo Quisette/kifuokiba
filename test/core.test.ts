@@ -85,3 +85,16 @@ describe("sm2", () => {
     expect(s.lapses).toBe(1);
   });
 });
+
+describe("player strength", () => {
+  it("reads ratings and ranks written after names", async () => {
+    const { parseStrength } = await import("../src/core/summarize.js");
+    expect(parseStrength("me (1650)")).toEqual({ rating: 1650, rank: "" });
+    expect(parseStrength("森下 遼 二段")).toEqual({ rating: null, rank: "二段" });
+    expect(parseStrength("Q 3級")).toEqual({ rating: null, rank: "3級" });
+    expect(parseStrength("tsubame_7")).toEqual({ rating: null, rank: "" });
+    // A name that merely ends in a rank-like word with no space is left alone.
+    expect(parseStrength("初段").rank).toBe("初段");
+    expect(parseStrength("七段目").rank).toBe("");
+  });
+});

@@ -98,6 +98,29 @@ export function computeStats(lib: Library, filter: GameFilter = {}) {
     accuracyTrend: analysed.map((g) => ({ id: g.id, date: g.date, accuracy: g.myAccuracy!, result: g.myResult })),
     meanAccuracy: mean(analysed.map((g) => g.myAccuracy!)),
     meanMistakes: mean(mine.filter((g) => g.analysis_status !== "none").map((g) => g.mistakes)),
+    /** My rating per game, one series per site; empty when no names carry ratings. */
+    ratingHistory: (() => {
+      const bySource = new Map<string, { id: number; date: string; rating: number; result: string }[]>();
+      for (const g of [...mine].sort((a, b) => (a.date < b.date ? -1 : 1))) {
+        if (g.myRating === null) continue;
+        const k = g.source || "other";
+        if (!bySource.has(k)) bySource.set(k, []);
+        bySource.get(k)!.push({ id: g.id, date: g.date, rating: g.myRating, result: g.myResult });
+      }
+      return [...bySource.entries()].map(([source, points]) => ({ source, points }));
+    })(),
+    /** Each time my written rank changed (Shogi Wars, 24 etc.), per site. */
+    rankChanges: (() => {
+      const last = new Map<string, string>();
+      const out: { source: string; date: string; rank: string; id: number }[] = [];
+      for (const g of [...mine].sort((a, b) => (a.date < b.date ? -1 : 1))) {
+        if (!g.myRank) continue;
+        const k = g.source || "other";
+        if (last.get(k) !== g.myRank) out.push({ source: k, date: g.date, rank: g.myRank, id: g.id });
+        last.set(k, g.myRank);
+      }
+      return out;
+    })(),
     phaseProfile: (["opening", "middlegame", "endgame"] as const).map((p) => ({
       phase: p,
       avgLoss: mean(phases[p]),

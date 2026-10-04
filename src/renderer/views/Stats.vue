@@ -35,6 +35,20 @@
           <div class="axis muted small"><span>{{ s.rolling[0]?.date.slice(0, 10) }}</span><span>50%</span><span>{{ s.rolling.at(-1)?.date.slice(0, 10) }}</span></div>
         </section>
 
+        <section v-if="s.ratingHistory.length || s.rankChanges.length" class="panel box wide">
+          <div class="cap">レーティング Rating and rank</div>
+          <div v-for="(series, si) in s.ratingHistory" :key="series.source" class="rating">
+            <div class="small"><b>{{ series.source }}</b> <span class="muted">{{ series.points[0].rating }} → {{ series.points.at(-1)!.rating }} over {{ series.points.length }} games</span></div>
+            <svg v-if="series.points.length > 1" viewBox="0 0 1000 100" preserveAspectRatio="none" class="chart short" role="img" :aria-label="`${series.source} rating`">
+              <polyline :points="ratingPts(series.points)" fill="none" :stroke="si % 2 ? 'var(--gold)' : 'var(--win)'" stroke-width="2" vector-effect="non-scaling-stroke" />
+            </svg>
+            <div class="axis muted small"><span>{{ series.points[0].date.slice(0, 10) }}</span><span>{{ ratingRange(series.points) }}</span><span>{{ series.points.at(-1)!.date.slice(0, 10) }}</span></div>
+          </div>
+          <div v-if="s.rankChanges.length" class="ranks">
+            <a v-for="r in s.rankChanges" :key="r.id" :href="`#/game/${r.id}`" class="tag">{{ r.date.slice(0, 10) }} {{ r.source }} {{ r.rank }}</a>
+          </div>
+        </section>
+
         <section class="panel box wide">
           <div class="cap">Accuracy by game (dot colour = result)</div>
           <svg v-if="s.accuracyTrend.length" viewBox="0 0 1000 160" preserveAspectRatio="none" class="chart" role="img" aria-label="Accuracy per game">
@@ -47,10 +61,11 @@
               :href="`#/game/${a.id}`"
               class="dot"
               :class="a.result || 'none'"
-              :style="{ left: (s.accuracyTrend.length === 1 ? 50 : (i / (s.accuracyTrend.length - 1)) * 100) + '%', bottom: a.accuracy + '%' }"
+              :style="{ left: (s.accuracyTrend.length === 1 ? 50 : (i / (s.accuracyTrend.length - 1)) * 100) + '%', bottom: accY(a.accuracy) + '%' }"
               :title="`${a.date} · ${a.accuracy.toFixed(0)}%`"
             ></a>
           </div>
+          <div v-if="s.accuracyTrend.length" class="axis muted small"><span>{{ accFloor }}%</span><span>100%</span></div>
           <div v-else class="muted small">Analyse games to see accuracy.</div>
         </section>
 
@@ -142,6 +157,8 @@ type StatsT = {
   bySource: Row[];
   byOpponent: Row[];
   rolling: { date: string; winRate: number }[];
+  ratingHistory: { source: string; points: RatingPoint[] }[];
+  rankChanges: { source: string; date: string; rank: string; id: number }[];
   accuracyTrend: { id: number; date: string; accuracy: number; result: string }[];
   meanAccuracy: number | null;
   meanMistakes: number | null;
@@ -162,6 +179,22 @@ watch(filter, load);
 
 const pct = (v: number | null | undefined) => (v == null ? "–" : v.toFixed(0));
 const phaseName = (p: string) => ({ opening: "序盤 1–30", middlegame: "中盤 31–80", endgame: "終盤 81+" })[p] ?? p;
+type RatingPoint = { id: number; date: string; rating: number; result: string };
+function ratingPts(pts: RatingPoint[]) {
+  const lo = Math.min(...pts.map((p) => p.rating)) - 10;
+  const hi = Math.max(...pts.map((p) => p.rating)) + 10;
+  return pts.map((p, i) => `${((i / (pts.length - 1)) * 1000).toFixed(1)},${(100 - ((p.rating - lo) / (hi - lo)) * 100).toFixed(1)}`).join(" ");
+}
+function ratingRange(pts: RatingPoint[]) {
+  const r = pts.map((p) => p.rating);
+  return `${Math.min(...r)}–${Math.max(...r)}`;
+}
+// Accuracy clusters high; start the scale just under the worst game so the spread is visible.
+const accFloor = computed(() => {
+  const a = (s.value?.accuracyTrend ?? []).map((x) => x.accuracy);
+  return a.length ? Math.max(0, Math.floor((Math.min(...a) - 5) / 10) * 10) : 0;
+});
+const accY = (acc: number) => ((acc - accFloor.value) / (100 - accFloor.value)) * 100;
 const rollingPts = computed(() => {
   const r = s.value?.rolling ?? [];
   return r.map((p, i) => `${((i / Math.max(1, r.length - 1)) * 1000).toFixed(1)},${(160 - (p.winRate / 100) * 160).toFixed(1)}`).join(" ");
@@ -203,6 +236,21 @@ const BarTable = defineComponent({
 </script>
 
 <style scoped>
+.chart.short {
+  height: 80px;
+}
+.rating + .rating {
+  margin-top: 10px;
+}
+.ranks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.ranks a {
+  text-decoration: none;
+}
 .rate {
   display: inline-block;
   width: 70px;
