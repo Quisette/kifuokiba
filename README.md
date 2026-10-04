@@ -55,6 +55,8 @@ npm run serve      # or: build and serve at http://127.0.0.1:3210 in a browser
 npm run dev        # Vite with hot reload on :5173, API on :3210
 ```
 
+Settings can download a backup and restore one. Restoring merges the backup into the current library: games, analysis, cards with their review history, tags, notes and notebook pages are added and nothing is deleted, so it also works for combining two computers' libraries.
+
 The library is also backed up once a day to a `backups` folder next to it; the newest 7 are kept (change or turn off in Settings).
 
 `serve` reads `PORT`, `KIFU_STUDY_DATA` (default `~/.kifu-study`) and `KIFU_STUDY_DB`. The Electron app keeps its database in the OS user-data folder.

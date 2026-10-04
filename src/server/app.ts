@@ -2,7 +2,7 @@
 // 127.0.0.1 and opens a window on it; `npm run serve` runs the same thing for a
 // plain browser tab.
 import http from "node:http";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { Db } from "./db.js";
@@ -17,6 +17,7 @@ import { repertoire } from "./repertoire.js";
 import { AutoBackup } from "./backup.js";
 import { makeZip } from "./zip.js";
 import { todayPlan } from "./today.js";
+import { mergeBackup } from "./restore.js";
 import { positionSvg } from "../core/diagram.js";
 import { loadSettings, saveSettings, AppSettings } from "./settings.js";
 import { RecordFileFormat } from "../core/recordFile.js";
@@ -67,6 +68,8 @@ async function readBody(req: http.IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
   for await (const c of req) chunks.push(c as Buffer);
   if (!chunks.length) return undefined;
+  // Binary uploads (a library backup) arrive as-is.
+  if (req.headers["content-type"]?.startsWith("application/octet-stream")) return Buffer.concat(chunks);
   const text = Buffer.concat(chunks).toString("utf-8");
   try {
     return JSON.parse(text);
@@ -424,6 +427,25 @@ export function createApp(opts: AppOptions) {
   });
 
   // ---- settings
+  route("POST", "/api/restore", async (_r, _u, _p, body) => {
+    if (!Buffer.isBuffer(body) || body.length < 100) throw new HttpError(400, "Send the backup file as application/octet-stream.");
+    if (body.subarray(0, 15).toString("latin1") !== "SQLite format 3") throw new HttpError(400, "This file is not a Kifu Study library.");
+    const dir = await mkdtemp(path.join(os.tmpdir(), "kifu-restore-"));
+    try {
+      const file = path.join(dir, "backup.db");
+      await writeFile(file, body);
+      let r;
+      try {
+        r = mergeBackup(lib, file);
+      } catch (e) {
+        throw new HttpError(400, e instanceof Error ? e.message : String(e));
+      }
+      broadcast("library", { added: r.added });
+      return r;
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
   route("GET", "/api/backups", () => ({ dir: backups.dir, keep: lib.settings.autoBackupKeep, files: backups.list() }));
   route("POST", "/api/backups/run", () => ({ made: backups.runIfDue(), files: backups.list() }));
   route("GET", "/api/backup", async () => {

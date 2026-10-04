@@ -267,6 +267,12 @@ try {
   await page.waitForSelector("details.opts", { timeout: 20000 });
   await page.click("details.opts summary");
   check((await page.textContent("details.opts")).includes("USI_Hash"), "engine test lists the engine's options");
+  // Restoring our own backup merges cleanly: nothing new.
+  const backupFile = path.join(data, "e2e-backup.db");
+  writeFileSync(backupFile, Buffer.from(await (await fetch(base + "/api/backup")).arrayBuffer()));
+  await page.setInputFiles('input[type="file"][accept^=".db"]', backupFile);
+  await page.waitForSelector(".toast:has-text('Restored')", { timeout: 30000 });
+  check(/\(0 new\)/.test(await page.textContent(".toast")), "restoring a backup of the same library adds nothing");
   await shot("08-settings");
 
   await page.keyboard.press("?");

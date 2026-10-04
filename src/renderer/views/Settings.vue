@@ -136,7 +136,14 @@
       <section class="panel box">
         <h3>保存 Backup</h3>
         <div class="muted small">Everything (games, analysis, cards, notes, settings) lives in one SQLite file. Download a copy now and then.</div>
-        <div class="row"><a class="btn" href="/api/backup" download>Download library backup</a></div>
+        <div class="row">
+          <a class="btn" href="/api/backup" download>Download library backup</a>
+          <label class="btn" :class="{ disabled: restoring }">
+            {{ restoring ? "Restoring…" : "Restore from a backup…" }}
+            <input type="file" accept=".db,application/vnd.sqlite3" hidden :disabled="restoring" @change="restore" />
+          </label>
+        </div>
+        <div class="muted small">Restoring merges the backup into this library: its games, analysis, cards with their history and notes are added; nothing here is deleted.</div>
         <label class="field">
           Daily backups to keep (0 = off)
           <input v-model.number="s.autoBackupKeep" type="number" min="0" max="365" style="width: 90px" />
@@ -158,7 +165,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { api, Settings, toast } from "../api";
+import { api, live, Settings, toast } from "../api";
 
 const s = ref<Settings | null>(null);
 const names = ref("");
@@ -236,6 +243,23 @@ async function sync() {
     syncResult.value = String(e);
   } finally {
     syncing.value = false;
+  }
+}
+const restoring = ref(false);
+async function restore(e: Event) {
+  const input = e.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file) return;
+  restoring.value = true;
+  try {
+    const r = await fetch("/api/restore", { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: await file.arrayBuffer() });
+    const j = await r.json();
+    if (!r.ok) return toast(j.error ?? "Could not restore that file", 6000);
+    toast(`Restored ${j.games} games (${j.added} new), ${j.cards} cards with ${j.reviews} reviews, ${j.pages} pages`, 6000);
+    live.libraryVersion++;
+  } finally {
+    restoring.value = false;
   }
 }
 async function test() {
