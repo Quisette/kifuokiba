@@ -49,7 +49,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, watch } from "vue";
 import { route } from "./router";
-import { api, live } from "./api";
+import { api, live, toast } from "./api";
 import Dashboard from "./views/Dashboard.vue";
 import Library from "./views/Library.vue";
 import Game from "./views/Game.vue";
@@ -90,7 +90,7 @@ onMounted(refreshDue);
 
 const helpDialog = ref<HTMLDialogElement | null>(null);
 const shortcuts = [
-  { title: "Anywhere", keys: [["?", "This list"], ["/", "Search the library"]] },
+  { title: "Anywhere", keys: [["?", "This list"], ["/", "Search the library"], ["Ctrl/⌘ V", "Import a copied kifu and open it"]] },
   {
     title: "Game",
     keys: [
@@ -118,8 +118,33 @@ function onGlobalKey(e: KeyboardEvent) {
     setTimeout(() => (document.querySelector('input[type="search"]') as HTMLInputElement | null)?.focus(), 50);
   }
 }
-onMounted(() => window.addEventListener("keydown", onGlobalKey));
-onUnmounted(() => window.removeEventListener("keydown", onGlobalKey));
+// Ctrl/⌘+V outside a text field: a copied kifu (KIF, KI2, CSA, SFEN/USI) is imported and opened.
+const KIFU_HINT = /手合割|先手：|^\s*1\s+\S+[（(]|^\s*[▲☗]|^V2|^PI|^[+-]\d{4}[A-Z]{2}|^position\s|^sfen\s|^[1-9lnsgkrbp+/]{17,}\s[bw]\s/im;
+async function onGlobalPaste(e: ClipboardEvent) {
+  const t = e.target as HTMLElement | null;
+  if (remote || (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable))) return;
+  const text = e.clipboardData?.getData("text") ?? "";
+  if (text.trim().length < 8 || !KIFU_HINT.test(text)) return;
+  e.preventDefault();
+  try {
+    const r = await api.post<{ results: { status: string; id: number }[] }>("/api/import", { text });
+    const first = r.results.find((x) => x.status !== "error");
+    if (!first) return toast("That doesn't look like a kifu.");
+    live.libraryVersion++;
+    toast(first.status === "added" ? "Imported the kifu from the clipboard." : "Already in the library; opening it.");
+    location.hash = `#/game/${first.id}`;
+  } catch (err) {
+    toast(String(err));
+  }
+}
+onMounted(() => {
+  window.addEventListener("keydown", onGlobalKey);
+  window.addEventListener("paste", onGlobalPaste);
+});
+onUnmounted(() => {
+  window.removeEventListener("keydown", onGlobalKey);
+  window.removeEventListener("paste", onGlobalPaste);
+});
 watch(() => [live.libraryVersion, route.name], refreshDue);
 </script>
 

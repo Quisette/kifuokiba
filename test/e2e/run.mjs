@@ -352,6 +352,18 @@ try {
   await page.waitForFunction(() => location.hash.startsWith("#/library") && document.activeElement?.getAttribute("type") === "search");
   check(true, "/ jumps to library search");
 
+  // Ctrl/⌘+V on any page imports a copied kifu and opens it.
+  await page.goto(base + "/#/stats");
+  await page.waitForSelector(".tiles");
+  const before = (await api("GET", "/api/games")).length;
+  await page.evaluate(() => {
+    const dt = new DataTransfer();
+    dt.setData("text/plain", "position startpos moves 2g2f 8c8d 2f2e 8d8e 6i7h");
+    document.body.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true }));
+  });
+  await page.waitForFunction(() => location.hash.startsWith("#/game/"));
+  check((await api("GET", "/api/games")).length === before + 1, "pasting a kifu imports and opens it");
+
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(base + `/#/game/${worst.id}`);
   await page.waitForSelector(".moves li");
