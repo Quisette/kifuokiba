@@ -177,6 +177,50 @@ export class Cards {
     return { ...next, becameLeech };
   }
 
+  /** Reviews per local day for the last `days` days, with the current and best streaks of days reviewed. */
+  activity(days = 182, now = Date.now()) {
+    const dayKey = (t: number) => {
+      const d = new Date(t);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    };
+    const today = new Date(new Date(now).toDateString());
+    const counts = new Map<string, { n: number; again: number }>();
+    for (const r of this.lib.db.all<{ at: number; rating: string }>("SELECT at, rating FROM reviews ORDER BY at")) {
+      const k = dayKey(r.at);
+      const c = counts.get(k) ?? { n: 0, again: 0 };
+      c.n++;
+      if (r.rating === "again") c.again++;
+      counts.set(k, c);
+    }
+    const out: { date: string; n: number; again: number }[] = [];
+    for (let i = days - 1; i >= 0; i--) {
+      // Step by calendar day, not 24h, so DST changes don't skip or repeat a day.
+      const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i);
+      const k = dayKey(d.getTime());
+      out.push({ date: k, ...(counts.get(k) ?? { n: 0, again: 0 }) });
+    }
+    // Best streak over all history; the current one may end yesterday if today has no reviews yet.
+    const shift = (k: string, n: number) => {
+      const [y, m, d] = k.split("-").map(Number);
+      return dayKey(new Date(y, m - 1, d + n).getTime());
+    };
+    const keys = [...counts.keys()].sort();
+    let best = 0;
+    let run = 0;
+    keys.forEach((k, i) => {
+      run = i > 0 && shift(keys[i - 1], 1) === k ? run + 1 : 1;
+      best = Math.max(best, run);
+    });
+    let streak = 0;
+    let k = dayKey(today.getTime());
+    if (!counts.has(k)) k = shift(k, -1);
+    while (counts.has(k)) {
+      streak++;
+      k = shift(k, -1);
+    }
+    return { days: out, streak, best, total: keys.reduce((a, k) => a + counts.get(k)!.n, 0) };
+  }
+
   /** A hand-made card: the position before `ply`; the answer is the engine's best move, else the game move. */
   create(gameId: number, ply: number, note = "") {
     const plies = this.lib.db.all<{ ply: number; usi: string; text: string; sfen: string; best_usi: string; pv: string; loss: number | null; level: number }>(

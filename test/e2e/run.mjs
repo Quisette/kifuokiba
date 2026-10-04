@@ -142,6 +142,10 @@ try {
     await page.waitForTimeout(300);
     const counts = await api("GET", "/api/cards/counts");
     check(counts.reviewedToday === 1, "rating a card records a review");
+    await page.goto(base + "/#/");
+    await page.waitForSelector(".cal .day.l1");
+    check((await page.textContent(".streak")).includes("1 day in a row"), "dashboard shows the review streak");
+    await shot("04b-dashboard-streak");
   }
 
   await page.goto(base + "/#/stats");

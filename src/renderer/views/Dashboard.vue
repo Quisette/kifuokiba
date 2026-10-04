@@ -69,6 +69,16 @@
           <div class="cap" style="margin-bottom: 8px">気づき What stands out</div>
           <a v-for="i in insights" :key="i.kind" :href="i.link ?? '#/stats'" class="insight">{{ i.text }}</a>
         </div>
+        <div v-if="activity && activity.total" class="panel box">
+          <div class="cap" style="margin-bottom: 8px">復習の記録 Review streak</div>
+          <div class="streak">
+            <span><b>{{ activity.streak }}</b> day{{ activity.streak === 1 ? "" : "s" }} in a row</span>
+            <span class="muted small">best {{ activity.best }} · {{ activity.total }} review{{ activity.total === 1 ? "" : "s" }}</span>
+          </div>
+          <div class="cal" aria-label="Reviews per day over the last 26 weeks">
+            <span v-for="(d, i) in calendar" :key="i" class="day" :class="d ? 'l' + level(d.n) : 'pad'" :title="d ? `${d.date}: ${d.n} reviews` : ''"></span>
+          </div>
+        </div>
         <div class="panel box">
           <div class="cap" style="margin-bottom: 10px">戦型別 By my opening</div>
           <div v-if="!stats?.byOpening.length" class="muted small">Needs games where your side is known.</div>
@@ -131,6 +141,17 @@ const games = ref<GameListItem[]>([]);
 const counts = ref<{ due: number; total: number; reviewedToday: number } | null>(null);
 const settings = ref<Settings | null>(null);
 const insights = ref<{ kind: string; text: string; link?: string }[]>([]);
+type Activity = { days: { date: string; n: number; again: number }[]; streak: number; best: number; total: number };
+const activity = ref<Activity | null>(null);
+// Weeks as columns, Sunday on top; blank cells pad the first week.
+const calendar = computed(() => {
+  const days = activity.value?.days ?? [];
+  if (!days.length) return [];
+  const [y, m, d] = days[0].date.split("-").map(Number);
+  const pad = new Date(y, m - 1, d).getDay();
+  return [...Array<null>(pad).fill(null), ...days];
+});
+const level = (n: number) => (n === 0 ? 0 : n < 5 ? 1 : n < 15 ? 2 : n < 30 ? 3 : 4);
 
 async function load() {
   [stats.value, games.value, counts.value, settings.value] = await Promise.all([
@@ -140,6 +161,7 @@ async function load() {
     api.get<Settings>("/api/settings"),
   ]);
   insights.value = await api.get<{ kind: string; text: string; link?: string }[]>("/api/insights").catch(() => []);
+  activity.value = await api.get<Activity>("/api/cards/activity").catch(() => null);
 }
 onMounted(load);
 watch(() => live.libraryVersion, load);
@@ -165,6 +187,46 @@ async function stop() {
 <style scoped>
 .insights {
   border-color: #8a6a3a;
+}
+.streak {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+.streak b {
+  font-family: var(--serif);
+  font-size: 22px;
+  color: var(--accent, #d9a441);
+}
+.cal {
+  display: grid;
+  grid-template-rows: repeat(7, 1fr);
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 2px;
+}
+.day {
+  aspect-ratio: 1;
+  border-radius: 2px;
+  background: #2a2017;
+}
+.day.pad {
+  background: transparent;
+}
+.day.l1 {
+  background: #5a4320;
+}
+.day.l2 {
+  background: #8a6a2e;
+}
+.day.l3 {
+  background: #b98d3c;
+}
+.day.l4 {
+  background: #e3b45a;
 }
 .insight {
   display: block;

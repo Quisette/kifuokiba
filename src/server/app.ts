@@ -334,6 +334,7 @@ export function createApp(opts: AppOptions) {
     name: "kifu-study-cards.txt",
   }));
   route("GET", "/api/cards/counts", () => cards.counts());
+  route("GET", "/api/cards/activity", (_r, url) => cards.activity(Math.min(Math.max(Number(url.searchParams.get("days")) || 182, 7), 730)));
   route("POST", "/api/cards", (_r, _u, _p, body) => {
     const b = body as { gameId: number; ply: number; note?: string };
     return cards.create(b.gameId, b.ply, b.note);

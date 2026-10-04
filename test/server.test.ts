@@ -166,6 +166,17 @@ describe("library API", () => {
     expect(mine.split("\t")[2]).toContain("kifu-study");
   });
 
+  it("counts reviews per day for the streak calendar", async () => {
+    const a = await api("GET", "/api/cards/activity?days=30");
+    expect(a.days).toHaveLength(30);
+    const d = new Date();
+    const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    expect(a.days.at(-1).date).toBe(today);
+    expect(a.days.at(-1).n).toBe(a.total);
+    expect(a.streak).toBe(1);
+    expect(a.best).toBe(1);
+  });
+
   it("checks positions for a forced mate", async () => {
     // 頭金: ☗5二金打 mates the king on 5一, with the pawn on 5三 guarding the gold.
     const mate = await api("POST", "/api/mate", { sfen: "4k4/9/4P4/9/9/9/9/9/4K4 b G 1", timeMs: 1000 });
@@ -280,6 +291,35 @@ describe("database upgrades", () => {
     const db = new Db(file);
     const cols = db.all<{ name: string }>("PRAGMA table_info(plies)").map((c) => c.name);
     expect(cols).toContain("missed");
+    db.close();
+  });
+});
+
+describe("review streaks", () => {
+  it("counts consecutive days and keeps a streak alive until today ends", async () => {
+    const { Db } = await import("../src/server/db.js");
+    const { Library } = await import("../src/server/library.js");
+    const { Cards } = await import("../src/server/cards.js");
+    const db = new Db(":memory:");
+    const lib = new Library(db);
+    const cards = new Cards(lib, null as never);
+    const at = (daysAgo: number) => {
+      const d = new Date();
+      return new Date(d.getFullYear(), d.getMonth(), d.getDate() - daysAgo, 12).getTime();
+    };
+    // Rows reference a card; foreign keys are on, so make one.
+    const kif = makeKif({ moves: "7g7f 3c3d", black: "me", white: "x", date: "2026/09/03" });
+    const gid = (lib.importText(kif) as { id: number }).id;
+    db.run("INSERT INTO cards (game_id, ply, sfen, side, played_usi, best_usi, due_at, created_at) VALUES (?,1,'s','black','7g7f','2g2f',0,0)", gid);
+    // Days 10-8 ago (3 in a row), then yesterday and the day before.
+    for (const n of [10, 9, 8, 2, 1, 1]) db.run("INSERT INTO reviews (card_id, at, rating) VALUES (1, ?, 'good')", at(n));
+    const a = cards.activity(14);
+    expect(a.best).toBe(3);
+    expect(a.streak).toBe(2); // today has none yet, so the streak counts from yesterday
+    expect(a.days.at(-2)!.n).toBe(2);
+    db.run("INSERT INTO reviews (card_id, at, rating) VALUES (1, ?, 'again')", at(0));
+    expect(cards.activity(14).streak).toBe(3);
+    expect(cards.activity(14).days.at(-1)).toMatchObject({ n: 1, again: 1 });
     db.close();
   });
 });
