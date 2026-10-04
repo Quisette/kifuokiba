@@ -134,7 +134,9 @@ export class LanServer {
       res.end();
       return;
     }
-    if (!sameToken(cookieToken(req), token)) return this.deny(res, 401);
+    // Home-screen icons and the manifest are fetched without cookies; they hold nothing private.
+    const publicAsset = req.method === "GET" && /^\/(manifest\.webmanifest|icon-\d+\.png|favicon\.svg)$/.test(url.pathname);
+    if (!publicAsset && !sameToken(cookieToken(req), token)) return this.deny(res, 401);
     if (!lanAllowed(req.method ?? "GET", url.pathname)) return this.deny(res, 403);
     this.handle(req, res);
   }

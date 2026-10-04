@@ -41,6 +41,7 @@ it("serves phones that bring the token, and nobody else", async () => {
   expect(token.length).toBeGreaterThanOrEqual(20);
 
   expect((await fetch(lan + "/api/games")).status).toBe(401);
+  expect((await fetch(lan + "/manifest.webmanifest")).status).not.toBe(401);
   expect((await fetch(lan + "/?token=nope", { redirect: "manual" })).status).toBe(401);
 
   // The link from the QR code sets a cookie and goes to the review page.
