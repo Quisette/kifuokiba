@@ -13,6 +13,7 @@
         >{{ p.title }}</a>
       </div>
       <button type="button" class="btn" style="margin-top: 12px; width: 100%" @click="newPage">＋ New page</button>
+      <button type="button" class="btn" style="margin-top: 8px; width: 100%" @click="weekly">週報 This week's report</button>
     </aside>
 
     <section v-if="page" class="editor-col">
@@ -128,6 +129,12 @@ async function newPage() {
   const p = await api.post<Page>("/api/pages", { title: "New page", notebook: page.value?.notebook ?? "Notes", body: "" });
   await loadList();
   mode.value = "split";
+  go(`notes/${p.id}`);
+}
+// A report of the last seven days: games, accuracy, costliest moves and practice.
+async function weekly() {
+  const p = await api.post<Page>("/api/notes/weekly");
+  await loadList();
   go(`notes/${p.id}`);
 }
 async function remove() {

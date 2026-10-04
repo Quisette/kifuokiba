@@ -12,6 +12,7 @@ import { Cards } from "./cards.js";
 import { computeStats, playerProfile, similarGames } from "./stats.js";
 import { Pages } from "./pages.js";
 import { reviewNote } from "./review-note.js";
+import { weeklyNote } from "./weekly.js";
 import { findPuzzles } from "./puzzles.js";
 import { repertoire } from "./repertoire.js";
 import { AutoBackup } from "./backup.js";
@@ -368,6 +369,11 @@ export function createApp(opts: AppOptions) {
     const n = reviewNote(lib, id(p));
     if (!n) throw new HttpError(404, "game not found");
     return pages.create({ title: n.title, notebook: "Game reviews", body: n.body });
+  });
+
+  route("POST", "/api/notes/weekly", () => {
+    const n = weeklyNote(lib);
+    return pages.create({ title: n.title, notebook: "Weekly", body: n.body });
   });
 
   // ---- stats

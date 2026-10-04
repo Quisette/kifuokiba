@@ -218,6 +218,10 @@ try {
   await page.waitForTimeout(800);
   check((await page.$$(".note-board")).length === 3, "notebook renders three board blocks");
   await shot("07-notebook");
+  await page.click("text=This week's report");
+  await page.waitForFunction(() => document.body.textContent?.includes("週報") && document.body.textContent?.includes("練習 Practice"));
+  check(true, "weekly report page is written into the notebook");
+  await shot("07b-weekly");
 
   // Record an over-the-board game by clicking squares: ☗7六歩 △3四歩, then save.
   await page.goto(base + "/#/record");

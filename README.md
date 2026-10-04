@@ -45,6 +45,8 @@ Everything stays on your machine, in one SQLite file.
   :kifu[game:12]{start=1 stop=20}
   ```
 
+  "This week's report" writes a 週報 page: the last seven days' games and results, accuracy against the week before, where the points went, the costliest moves as boards, and the practice done.
+
   "Write review note" on a game makes a page with the summary and each big mistake as a board with the engine's line, ready to annotate. The ".mdx" button downloads the same note with the moves written out, so it renders in personal-shogi-note as is.
 
 ## Run it

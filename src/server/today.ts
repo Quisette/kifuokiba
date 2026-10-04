@@ -9,9 +9,9 @@ import type { OpeningBook } from "./book.js";
 export function todayPlan(lib: Library, cards: Cards, book: OpeningBook | null, now = Date.now()) {
   const counts = cards.counts(now);
   const since = new Date(now - 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  // A game counts as reviewed once a notebook page points a board at it.
+  // A game counts as reviewed once a notebook page points a board at it (weekly reports don't count).
   const noted = new Set<number>();
-  for (const p of lib.db.all<{ body: string }>("SELECT body FROM pages")) {
+  for (const p of lib.db.all<{ body: string }>("SELECT body FROM pages WHERE notebook != 'Weekly'")) {
     for (const m of p.body.matchAll(/game[=:](\d+)/g)) noted.add(Number(m[1]));
   }
   const losses = lib
