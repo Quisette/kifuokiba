@@ -258,6 +258,15 @@ try {
   await page.waitForSelector("form");
   await shot("08-settings");
 
+  await page.keyboard.press("?");
+  await page.waitForSelector("dialog.help[open]");
+  check((await page.textContent("dialog.help")).includes("Next / previous mistake") || (await page.textContent("dialog.help")).includes("next mistake"), "? shows the keyboard shortcuts");
+  await shot("08f-help");
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("/");
+  await page.waitForFunction(() => location.hash.startsWith("#/library") && document.activeElement?.getAttribute("type") === "search");
+  check(true, "/ jumps to library search");
+
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(base + `/#/game/${worst.id}`);
   await page.waitForSelector(".moves li");

@@ -34,10 +34,18 @@
     <div v-else class="page"><div class="empty">Page not found. <a href="#/">Home</a></div></div>
   </main>
   <div v-if="live.toast" class="toast" role="status">{{ live.toast }}</div>
+  <dialog ref="helpDialog" class="help panel" aria-labelledby="help-title" @click.self="helpDialog?.close()">
+    <h2 id="help-title" class="serif">Keyboard shortcuts</h2>
+    <div v-for="g in shortcuts" :key="g.title" class="help-group">
+      <div class="cap">{{ g.title }}</div>
+      <div v-for="[k, what] in g.keys" :key="k" class="help-row"><kbd>{{ k }}</kbd><span>{{ what }}</span></div>
+    </div>
+    <button type="button" class="btn small" @click="helpDialog?.close()">Close</button>
+  </dialog>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, watch } from "vue";
+import { onMounted, onUnmounted, ref, watch } from "vue";
 import { route } from "./router";
 import { api, live } from "./api";
 import Dashboard from "./views/Dashboard.vue";
@@ -74,10 +82,74 @@ async function refreshDue() {
   }
 }
 onMounted(refreshDue);
+
+const helpDialog = ref<HTMLDialogElement | null>(null);
+const shortcuts = [
+  { title: "Anywhere", keys: [["?", "This list"], ["/", "Search the library"]] },
+  {
+    title: "Game",
+    keys: [
+      ["← →", "Previous / next move"],
+      ["Home End", "Start / end of the game"],
+      ["[ ]", "Previous / next mistake"],
+      ["f", "Flip the board"],
+    ],
+  },
+  { title: "Review", keys: [["1 2 3 4", "Again / Hard / Good / Easy"], ["Space Enter", "The suggested grade"]] },
+];
+// Global keys, ignored while typing in a field.
+function onGlobalKey(e: KeyboardEvent) {
+  const t = e.target as HTMLElement | null;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === "?") {
+    e.preventDefault();
+    if (helpDialog.value?.open) helpDialog.value.close();
+    else helpDialog.value?.showModal();
+  } else if (e.key === "/") {
+    e.preventDefault();
+    if (route.name !== "library") location.hash = "#/library";
+    setTimeout(() => (document.querySelector('input[type="search"]') as HTMLInputElement | null)?.focus(), 50);
+  }
+}
+onMounted(() => window.addEventListener("keydown", onGlobalKey));
+onUnmounted(() => window.removeEventListener("keydown", onGlobalKey));
 watch(() => [live.libraryVersion, route.name], refreshDue);
 </script>
 
 <style scoped>
+.help {
+  color: var(--text);
+  background: var(--panel, #1e1610);
+  border: 1px solid #8a6a3a;
+  border-radius: 10px;
+  padding: 20px 24px;
+  min-width: min(420px, 90vw);
+}
+.help::backdrop {
+  background: rgb(0 0 0 / 55%);
+}
+.help h2 {
+  margin: 0 0 12px;
+}
+.help-group {
+  margin-bottom: 14px;
+}
+.help-row {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 12px;
+  font-size: 14px;
+  padding: 3px 0;
+}
+kbd {
+  font-family: var(--mono, monospace);
+  font-size: 12px;
+  border: 1px solid var(--line-2, #4a3a28);
+  border-radius: 4px;
+  padding: 1px 6px;
+  justify-self: start;
+}
 .top {
   display: flex;
   flex-wrap: wrap;
