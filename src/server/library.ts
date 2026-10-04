@@ -5,7 +5,7 @@ import { AppSettings, loadSettings } from "./settings.js";
 import { importRecordFromBuffer, importRecordFromText, exportRecordAsBuffer, RecordFileFormat } from "../core/recordFile.js";
 import { summarizeRecord, normalizePlayerName, parseStrength, GameSummary } from "../core/summarize.js";
 import { classify, strategyLabel, styleMatchup, Classification } from "../core/classifier/index.js";
-import { gradeMoves, accuracy, turningPoint, Eval, mistakeLabels } from "../core/grading.js";
+import { gradeMoves, accuracy, turningPoint, clearPlies, Eval, mistakeLabels } from "../core/grading.js";
 import { newSm2State } from "../core/sm2.js";
 import { getSituationText } from "../core/score.js";
 import { SCORE_MATE_INFINITE } from "../core/usi.js";
@@ -526,11 +526,14 @@ export class Library {
         id,
         JSON.stringify(cardPlies),
       );
+      const clear = clearPlies(evals, 85, 6, s.grading);
       this.db.run(
-        "UPDATE games SET accuracy_black = ?, accuracy_white = ?, turning_ply = ?, updated_at = ? WHERE id = ?",
+        "UPDATE games SET accuracy_black = ?, accuracy_white = ?, turning_ply = ?, clear_black_ply = ?, clear_white_ply = ?, updated_at = ? WHERE id = ?",
         accuracy(grades, "black") ?? null,
         accuracy(grades, "white") ?? null,
         tp?.ply ?? null,
+        clear.black,
+        clear.white,
         Date.now(),
         id,
       );

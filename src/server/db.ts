@@ -158,6 +158,9 @@ export class Db {
     this.ensureColumn("cards", "stability", "REAL");
     this.ensureColumn("cards", "difficulty", "REAL");
     this.ensureColumn("cards", "last_review_at", "INTEGER");
+    // First ply each side was clearly winning (-1 never, NULL not computed yet).
+    this.ensureColumn("games", "clear_black_ply", "INTEGER");
+    this.ensureColumn("games", "clear_white_ply", "INTEGER");
   }
 
   private ensureColumn(table: string, column: string, decl: string) {

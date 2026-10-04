@@ -44,6 +44,22 @@ export function winRate(e: Eval | undefined | null, s = defaultGradingSettings):
   return score === undefined ? undefined : scoreToPercentage(score, s.coefficientInSigmoid);
 }
 
+/**
+ * The first ply after which each side was clearly winning (win rate at least `clear`),
+ * ignoring the last `margin` plies so a final mating attack alone doesn't count.
+ * -1 when it never happened.
+ */
+export function clearPlies(evals: (Eval | undefined | null)[], clear = 85, margin = 6, s = defaultGradingSettings) {
+  const out = { black: -1, white: -1 };
+  for (let ply = 0; ply < evals.length - margin; ply++) {
+    const w = winRate(evals[ply], s);
+    if (w === undefined) continue;
+    if (out.black < 0 && w >= clear) out.black = ply;
+    if (out.white < 0 && 100 - w >= clear) out.white = ply;
+  }
+  return out;
+}
+
 export type MoveGrade = {
   ply: number;
   color: "black" | "white";

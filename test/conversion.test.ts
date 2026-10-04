@@ -46,6 +46,10 @@ it("counts won positions converted, comebacks, and the games let slip", () => {
   expect(c.blown[0]).toMatchObject({ id: blown, opponent: "x", slipPly: 7, slipLoss: 45 });
   expect(c.blown[0].peak).toBeGreaterThanOrEqual(85);
   expect(c.blown[0].slipText).toContain("７八金");
+  // Worked out once and stored; a regrade computes the same.
+  expect(lib.db.get<{ b: number }>("SELECT clear_black_ply b FROM games WHERE id = ?", blown)?.b).toBe(3);
+  lib.regrade(blown);
+  expect(lib.db.get<{ b: number; w: number }>("SELECT clear_black_ply b, clear_white_ply w FROM games WHERE id = ?", blown)).toEqual({ b: 3, w: -1 });
 });
 
 it("suggests practising conversion when many won positions slip", () => {
