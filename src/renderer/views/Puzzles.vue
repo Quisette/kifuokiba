@@ -1,7 +1,15 @@
 <template>
   <div class="page">
     <div class="head">
-      <h1>詰将棋 Mates from my games</h1>
+      <h1>詰将棋 Mate puzzles</h1>
+      <div class="chips" role="tablist" aria-label="Puzzle source">
+        <a class="chip" role="tab" :aria-selected="tab !== 'tsume'" :class="{ on: tab !== 'tsume' }" href="#/puzzles">From my games</a>
+        <a class="chip" role="tab" :aria-selected="tab === 'tsume'" :class="{ on: tab === 'tsume' }" href="#/puzzles?tab=tsume">Collections</a>
+      </div>
+    </div>
+    <TsumeCollections v-if="tab === 'tsume'" />
+    <template v-else>
+    <div class="head">
       <span class="muted">Every position in your analysed games where the side to move had a forced mate. Missed ones come first.</span>
       <label class="muted small"><input v-model="all" type="checkbox" /> Include the opponent's mates</label>
     </div>
@@ -27,13 +35,16 @@
         </div>
       </div>
     </div>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, watch } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 import { api } from "../api";
 import ShogiBoard from "../components/ShogiBoard.vue";
+import TsumeCollections from "../components/TsumeCollections.vue";
+import { route } from "../router";
 
 type Puzzle = {
   gameId: number;
@@ -49,6 +60,7 @@ type Puzzle = {
   date: string;
 };
 
+const tab = computed(() => route.query.get("tab") ?? "");
 const all = ref(false);
 const limit = ref(60);
 const puzzles = ref<Puzzle[] | null>(null);
@@ -123,5 +135,12 @@ label.small {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+.chips {
+  display: flex;
+  gap: 6px;
+}
+.chips a {
+  text-decoration: none;
 }
 </style>

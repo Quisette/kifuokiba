@@ -22,6 +22,7 @@ const WRITES: [string, RegExp][] = [
   ["POST", /^\/api\/cards$/],
   ["POST", /^\/api\/games\/\d+\/guess$/],
   ["POST", /^\/api\/analyze-position$/],
+  ["POST", /^\/api\/tsume\/\d+\/result$/],
 ];
 /** Reads that stay local: the token itself and the whole-library backup. */
 const LOCAL_READS = [/^\/api\/lan(\/|$)/, /^\/api\/backups?(\/|$)/];

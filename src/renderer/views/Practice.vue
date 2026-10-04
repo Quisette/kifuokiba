@@ -1,7 +1,7 @@
 <template>
   <div class="page">
     <div class="head">
-      <h1 v-if="goalMate">詰将棋 Mate in {{ goalMate }}</h1>
+      <h1 v-if="goalMate">詰将棋<template v-if="mateLen"> Mate in {{ mateLen }}</template></h1>
       <h1 v-else>実戦練習 Play it out</h1>
       <span v-if="goalMate" class="muted">{{ mySideMark }} to move and mate. Every move must keep the mate; the engine defends.</span>
       <span v-else class="muted">You play {{ mySideMark }} from this position; the engine answers. Good for converting won positions you let slip.</span>
@@ -58,7 +58,7 @@
 
 <script setup lang="ts">
 // Play a position out against the configured USI engine, one /api/analyze-position call per engine move.
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { Color, Position, formatMove } from "tsshogi";
 import { api, evalText, winRate } from "../api";
 import { route } from "../router";
@@ -74,11 +74,21 @@ const backHref = route.query.get("back") ? "#/" + route.query.get("back") : "";
 const mySide = start && Position.newBySFEN(start)!.color === Color.WHITE ? "white" : "black";
 const mySideMark = mySide === "black" ? "☗" : "☖";
 // Mate puzzles: the user must keep a forced mate on every move.
-const goalMate = route.query.get("goal") === "mate" ? Number(route.query.get("mate")) || 0 : 0;
+const goalMate = route.query.get("goal") === "mate";
+const mateLen = goalMate ? Number(route.query.get("mate")) || 0 : 0;
+// A problem from a tsume collection: its first outcome is recorded.
+const tsumeId = Number(route.query.get("tsume")) || 0;
+let recorded = false;
+const state = ref<State>("yours");
+watch(state, (v) => (v === "won" ? recordResult(true) : v === "lost" ? recordResult(false) : undefined));
+function recordResult(solved: boolean) {
+  if (!tsumeId || recorded) return;
+  recorded = true;
+  void api.post(`/api/tsume/${tsumeId}/result`, { solved }).catch(() => (recorded = false));
+}
 const warning = ref("");
 
 const moves = ref<string[]>([]);
-const state = ref<State>("yours");
 const error = ref("");
 const movetimeMs = ref(500);
 // Engine evals are black's view; null until the engine has looked.

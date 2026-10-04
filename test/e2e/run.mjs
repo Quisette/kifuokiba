@@ -280,6 +280,19 @@ try {
   check((await page.textContent("h1")).includes("Mate in 1"), "a puzzle opens in mate mode");
   await shot("08d-puzzle");
 
+  // A tsume collection from a file of SFEN lines, as shogimap-crawler writes them.
+  const tsumeFile = path.join(data, "1te.txt");
+  writeFileSync(tsumeFile, ["8k/9/8P/9/9/9/9/9/9 b G 1 moves G*1b", "4k4/9/4P4/9/9/9/9/9/9 b G 1 moves G*5b", ""].join("\n"));
+  await page.goto(base + "/#/puzzles?tab=tsume");
+  await page.waitForSelector(".importer");
+  await page.setInputFiles('.importer input[type="file"]', tsumeFile);
+  await page.waitForFunction(() => document.querySelectorAll(".card").length === 2);
+  check((await page.textContent(".cols")).includes("1te"), "tsume file becomes a collection");
+  await shot("08g-tsume");
+  await page.click(".card >> text=Solve");
+  await page.waitForSelector("h1");
+  check((await page.textContent("h1")).includes("Mate in 1"), "a collection problem opens in mate mode");
+
   await page.goto(base + "/#/repertoire");
   await page.waitForSelector(".layout, .empty");
   check(!(await page.textContent(".page")).includes("Loading"), "opening drill loads");

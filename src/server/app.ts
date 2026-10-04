@@ -30,6 +30,8 @@ import { BookCache } from "./book.js";
 import { insightsFromStats } from "./insights.js";
 import { checkGuess, GuessError } from "./guess.js";
 import { LanServer } from "./lan.js";
+import { Tsume } from "./tsume.js";
+import { decodeText } from "../core/encode.js";
 import type { FetchLike } from "./fetchers/lishogi.js";
 
 export type AppOptions = {
@@ -93,6 +95,7 @@ export function createApp(opts: AppOptions) {
   const lib = new Library(db);
   const analysis = new AnalysisQueue(lib);
   const cards = new Cards(lib, analysis);
+  const tsume = new Tsume(lib);
   const pages = new Pages(db);
   const backups = new AutoBackup(db, opts.dbPath, () => lib.settings.autoBackupKeep);
   if (opts.autoBackup !== false) backups.start();
@@ -485,6 +488,17 @@ export function createApp(opts: AppOptions) {
     for (const g of db.all<{ id: number }>("SELECT id FROM games WHERE analysis_status IN ('done','imported')")) lib.regrade(g.id);
     return next;
   });
+  // ---- tsume collections
+  route("GET", "/api/tsume", () => tsume.collections());
+  route("GET", "/api/tsume/problems", (_r, url) => tsume.list(url.searchParams.get("collection") ?? ""));
+  route("POST", "/api/tsume/import", (_r, _u, _p, body) => {
+    const b = body as { text?: string; base64?: string; collection?: string; fileName?: string };
+    const text = b.base64 ? decodeText(new Uint8Array(Buffer.from(b.base64, "base64"))) : (b.text ?? "");
+    return tsume.import(text, b.collection ?? "", b.fileName ?? "");
+  });
+  route("POST", "/api/tsume/:id/result", (_r, _u, p, body) => tsume.record(id(p), !!(body as { solved: boolean }).solved) ?? Promise.reject(new HttpError(404, "no such problem")));
+  route("DELETE", "/api/tsume", (_r, url) => tsume.deleteCollection(url.searchParams.get("collection") ?? ""));
+
   route("GET", "/api/lan", () => lan.info());
   route("PUT", "/api/lan", (_r, _u, _p, body) => {
     const b = body as { enabled?: boolean; port?: number };

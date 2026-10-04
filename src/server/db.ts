@@ -123,6 +123,20 @@ CREATE TABLE IF NOT EXISTS pages (
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS tsume (
+  id INTEGER PRIMARY KEY,
+  collection TEXT NOT NULL,
+  title TEXT NOT NULL DEFAULT '',
+  sfen TEXT NOT NULL,
+  answer TEXT NOT NULL DEFAULT '',
+  mate_len INTEGER NOT NULL DEFAULT 0,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  solved INTEGER NOT NULL DEFAULT 0,
+  last_at INTEGER,
+  last_result TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL,
+  UNIQUE (collection, sfen)
+);
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
