@@ -14,6 +14,7 @@ import { Pages } from "./pages.js";
 import { reviewNote } from "./review-note.js";
 import { findPuzzles } from "./puzzles.js";
 import { repertoire } from "./repertoire.js";
+import { AutoBackup } from "./backup.js";
 import { loadSettings, saveSettings, AppSettings } from "./settings.js";
 import { RecordFileFormat } from "../core/recordFile.js";
 import { UsiEngine } from "./engine/usi.js";
@@ -33,6 +34,8 @@ export type AppOptions = {
   /** Network access for account sync; tests pass a stub. */
   fetchImpl?: FetchLike;
   lishogiBase?: string;
+  /** Daily backups next to the database (default on). */
+  autoBackup?: boolean;
 };
 
 type Handler = (req: http.IncomingMessage, url: URL, params: string[], body: unknown) => Promise<unknown> | unknown;
@@ -80,6 +83,8 @@ export function createApp(opts: AppOptions) {
   const analysis = new AnalysisQueue(lib);
   const cards = new Cards(lib, analysis);
   const pages = new Pages(db);
+  const backups = new AutoBackup(db, opts.dbPath, () => lib.settings.autoBackupKeep);
+  if (opts.autoBackup !== false) backups.start();
   const sseClients = new Set<http.ServerResponse>();
 
   const broadcast = (event: string, data: unknown) => {
@@ -377,6 +382,8 @@ export function createApp(opts: AppOptions) {
   });
 
   // ---- settings
+  route("GET", "/api/backups", () => ({ dir: backups.dir, keep: lib.settings.autoBackupKeep, files: backups.list() }));
+  route("POST", "/api/backups/run", () => ({ made: backups.runIfDue(), files: backups.list() }));
   route("GET", "/api/backup", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "kifu-backup-"));
     const file = path.join(dir, "library.db");
@@ -489,6 +496,7 @@ export function createApp(opts: AppOptions) {
     },
     async close() {
       watcher.close();
+      backups.stop();
       for (const r of sseClients) r.end();
       await analysis.shutdown();
       await new Promise<void>((r) => server.close(() => r()));

@@ -124,6 +124,15 @@
         <h3>保存 Backup</h3>
         <div class="muted small">Everything (games, analysis, cards, notes, settings) lives in one SQLite file. Download a copy now and then.</div>
         <div class="row"><a class="btn" href="/api/backup" download>Download library backup</a></div>
+        <label class="field">
+          Daily backups to keep (0 = off)
+          <input v-model.number="s.autoBackupKeep" type="number" min="0" max="365" style="width: 90px" />
+        </label>
+        <div v-if="backups?.dir" class="muted small">
+          Saved in <code>{{ backups.dir }}</code>.
+          <template v-if="backups.files.length"> Latest: {{ backups.files[0].date }} ({{ (backups.files[0].size / 1048576).toFixed(1) }} MB), {{ backups.files.length }} kept.</template>
+          <template v-else> None yet.</template>
+        </div>
       </section>
 
       <div class="save-row">
@@ -142,10 +151,12 @@ const s = ref<Settings | null>(null);
 const names = ref("");
 const options = ref("");
 const testing = ref(false);
+const backups = ref<{ dir: string; files: { name: string; date: string; size: number }[] } | null>(null);
 const testResult = ref<{ ok: boolean; name?: string; bestmove?: string; error?: string } | null>(null);
 
 onMounted(async () => {
   s.value = await api.get<Settings>("/api/settings");
+  backups.value = await api.get<{ dir: string; files: { name: string; date: string; size: number }[] }>("/api/backups").catch(() => null);
   names.value = s.value.myNames.join("\n");
   folders.value = (s.value.watchFolders ?? []).join("\n");
   options.value = Object.entries(s.value.engine.options)

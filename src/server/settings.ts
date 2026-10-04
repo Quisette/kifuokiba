@@ -29,6 +29,8 @@ export type AppSettings = {
   desiredRetention: number;
   /** YaneuraOu-format opening book (.db), to mark book moves and where games leave the book. */
   bookPath: string;
+  /** Daily backups to keep next to the library file; 0 turns them off. */
+  autoBackupKeep: number;
 };
 
 export const defaultSettings: AppSettings = {
@@ -49,6 +51,7 @@ export const defaultSettings: AppSettings = {
   scheduler: "sm2",
   desiredRetention: 0.9,
   bookPath: "",
+  autoBackupKeep: 7,
 };
 
 export function loadSettings(db: Db): AppSettings {

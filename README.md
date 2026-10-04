@@ -52,6 +52,8 @@ npm run serve      # or: build and serve at http://127.0.0.1:3210 in a browser
 npm run dev        # Vite with hot reload on :5173, API on :3210
 ```
 
+The library is also backed up once a day to a `backups` folder next to it; the newest 7 are kept (change or turn off in Settings).
+
 `serve` reads `PORT`, `KIFU_STUDY_DATA` (default `~/.kifu-study`) and `KIFU_STUDY_DB`. The Electron app keeps its database in the OS user-data folder.
 
 On first launch, open Settings, enter your player names, and set the path to a USI engine.

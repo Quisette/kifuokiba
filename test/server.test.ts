@@ -381,3 +381,28 @@ describe("opening drill", () => {
     db.close();
   });
 });
+
+describe("automatic backups", () => {
+  it("makes one backup per day and keeps the newest few", async () => {
+    const { Db } = await import("../src/server/db.js");
+    const { AutoBackup } = await import("../src/server/backup.js");
+    const { readdirSync } = await import("node:fs");
+    const dir = mkdtempSync(path.join(tmpdir(), "kifu-study-bk-"));
+    const db = new Db(path.join(dir, "lib.db"));
+    let keep = 2;
+    const b = new AutoBackup(db, path.join(dir, "lib.db"), () => keep);
+    expect(b.runIfDue(new Date(2026, 8, 1, 10))).toMatch(/kifu-study-2026-09-01\.db$/);
+    expect(b.runIfDue(new Date(2026, 8, 1, 22))).toBeNull(); // same day
+    b.runIfDue(new Date(2026, 8, 2, 10));
+    b.runIfDue(new Date(2026, 8, 3, 10));
+    expect(b.list().map((f) => f.date)).toEqual(["2026-09-03", "2026-09-02"]);
+    expect(readdirSync(path.join(dir, "backups"))).toHaveLength(2);
+    // The copy is a working library.
+    const copy = new Db(path.join(dir, "backups", "kifu-study-2026-09-03.db"));
+    expect(copy.get<{ n: number }>("SELECT COUNT(*) n FROM games")!.n).toBe(0);
+    copy.close();
+    keep = 0;
+    expect(b.runIfDue(new Date(2026, 8, 4, 10))).toBeNull();
+    db.close();
+  });
+});

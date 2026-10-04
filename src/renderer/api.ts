@@ -158,6 +158,7 @@ export type Settings = {
   scheduler: "sm2" | "fsrs";
   desiredRetention: number;
   bookPath: string;
+  autoBackupKeep: number;
 };
 
 export type PageSummary = { id: number; notebook: string; title: string; excerpt: string; updated_at: number };
