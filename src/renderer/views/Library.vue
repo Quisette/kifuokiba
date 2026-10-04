@@ -4,6 +4,7 @@
       <h1>棋譜庫 Library <span class="muted" style="font-size: 16px">{{ games.length }} games</span></h1>
       <div class="actions">
         <button type="button" class="btn" @click="showImport = !showImport">Import</button>
+        <a class="btn" href="#/record">Record a game</a>
         <button type="button" class="btn" :disabled="!games.length" @click="analyse(games.map((g) => g.id))">Analyse shown</button>
       </div>
     </div>

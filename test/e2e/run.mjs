@@ -155,6 +155,33 @@ try {
   check((await page.$$(".note-board")).length === 3, "notebook renders three board blocks");
   await shot("07-notebook");
 
+  // Record an over-the-board game by clicking squares: ☗7六歩 △3四歩, then save.
+  await page.goto(base + "/#/record");
+  await page.waitForSelector(".board.operation", { state: "attached" });
+  await page.waitForTimeout(400);
+  const clickSquare = async (file, rank) => {
+    const pt = await page.evaluate(([f, r]) => {
+      const cells = [...document.querySelectorAll(".board.operation > div")].map((d) => d.getBoundingClientRect()).filter((b) => b.width > 0);
+      const xs = [...new Set(cells.map((b) => Math.round(b.left)))].sort((a, b) => a - b);
+      const ys = [...new Set(cells.map((b) => Math.round(b.top)))].sort((a, b) => a - b);
+      const w = cells[0].width, h = cells[0].height;
+      return { x: xs[9 - f] + w / 2, y: ys[r - 1] + h / 2 };
+    }, [file, rank]);
+    await page.mouse.click(pt.x, pt.y);
+    await page.waitForTimeout(150);
+  };
+  await clickSquare(7, 7);
+  await clickSquare(7, 6);
+  await clickSquare(3, 3);
+  await clickSquare(3, 4);
+  check((await page.$$(".moves li")).length === 2, "recording a game by clicking moves");
+  await page.fill("input[placeholder=name] >> nth=0", "Q");
+  await page.fill("input[placeholder=name] >> nth=1", "club rival");
+  await shot("08a-record");
+  await page.click("text=Save to library");
+  await page.waitForFunction(() => location.hash.startsWith("#/game/"));
+  check((await api("GET", "/api/games")).length === games.length + 1, "recorded game is saved to the library");
+
   await page.goto(base + "/#/settings");
   await page.waitForSelector("form");
   await shot("08-settings");

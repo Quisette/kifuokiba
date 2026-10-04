@@ -24,6 +24,7 @@
     <Review v-else-if="route.name === 'review'" />
     <Stats v-else-if="route.name === 'stats'" />
     <Explorer v-else-if="route.name === 'explorer'" />
+    <RecordGame v-else-if="route.name === 'record'" />
     <Notebooks v-else-if="route.name === 'notes'" />
     <Settings v-else-if="route.name === 'settings'" />
     <div v-else class="page"><div class="empty">Page not found. <a href="#/">Home</a></div></div>
@@ -41,6 +42,7 @@ import Game from "./views/Game.vue";
 import Review from "./views/Review.vue";
 import Stats from "./views/Stats.vue";
 import Explorer from "./views/Explorer.vue";
+import RecordGame from "./views/RecordGame.vue";
 import Notebooks from "./views/Notebooks.vue";
 import Settings from "./views/Settings.vue";
 
@@ -53,7 +55,7 @@ const nav = [
   { name: "notes", label: "研究 Notes" },
   { name: "settings", label: "設定 Settings" },
 ];
-const active = (name: string) => route.name === name || (name === "library" && route.name === "game");
+const active = (name: string) => route.name === name || (name === "library" && (route.name === "game" || route.name === "record"));
 
 const due = ref(0);
 async function refreshDue() {
