@@ -29,6 +29,7 @@ import { FolderWatcher } from "./watch.js";
 import { BookCache } from "./book.js";
 import { insightsFromStats } from "./insights.js";
 import { checkGuess, GuessError } from "./guess.js";
+import { LanServer } from "./lan.js";
 import type { FetchLike } from "./fetchers/lishogi.js";
 
 export type AppOptions = {
@@ -41,6 +42,8 @@ export type AppOptions = {
   lishogiBase?: string;
   /** Daily backups next to the database (default on). */
   autoBackup?: boolean;
+  /** Interface for phone access (default all, 0.0.0.0); tests use 127.0.0.1. */
+  lanHost?: string;
 };
 
 type Handler = (req: http.IncomingMessage, url: URL, params: string[], body: unknown) => Promise<unknown> | unknown;
@@ -481,6 +484,14 @@ export function createApp(opts: AppOptions) {
     for (const g of db.all<{ id: number }>("SELECT id FROM games WHERE analysis_status IN ('done','imported')")) lib.regrade(g.id);
     return next;
   });
+  route("GET", "/api/lan", () => lan.info());
+  route("PUT", "/api/lan", (_r, _u, _p, body) => {
+    const b = body as { enabled?: boolean; port?: number };
+    const port = b.port === undefined ? undefined : Number(b.port);
+    if (port !== undefined && !(Number.isInteger(port) && port >= 0 && port < 65536)) throw new HttpError(400, "bad port");
+    return lan.configure({ ...(b.enabled !== undefined ? { enabled: !!b.enabled } : {}), ...(port !== undefined ? { port } : {}) });
+  });
+  route("POST", "/api/lan/token", () => lan.rotateToken());
   route("POST", "/api/engine/test", async (_r, _u, _p, body) => {
     const b = body as { path: string };
     const e = new UsiEngine(b.path);
@@ -524,7 +535,7 @@ export function createApp(opts: AppOptions) {
     res.end(data);
   };
 
-  const server = http.createServer(async (req, res) => {
+  const handle = async (req: http.IncomingMessage, res: http.ServerResponse) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     try {
       if (url.pathname === "/api/events") return handleEvents(req, res);
@@ -555,7 +566,10 @@ export function createApp(opts: AppOptions) {
       res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
       res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
     }
-  });
+  };
+  const server = http.createServer(handle);
+  const lan = new LanServer(db, handle, opts.lanHost);
+  if (lan.config().enabled) void lan.start();
 
   return {
     db,
@@ -563,6 +577,7 @@ export function createApp(opts: AppOptions) {
     analysis,
     cards,
     server,
+    lan,
     /** Import files opened from the OS (double-click, "Open with"); returns the game to show, if any. */
     async importPaths(paths: string[]): Promise<number | undefined> {
       const added: number[] = [];
@@ -592,6 +607,7 @@ export function createApp(opts: AppOptions) {
       backups.stop();
       for (const r of sseClients) r.end();
       await analysis.shutdown();
+      await lan.stop();
       await new Promise<void>((r) => server.close(() => r()));
       db.close();
     },

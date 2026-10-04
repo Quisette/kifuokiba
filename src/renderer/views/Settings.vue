@@ -155,6 +155,35 @@
         </div>
       </section>
 
+      <section v-if="lan && !remote" class="panel box">
+        <h3>携帯 Phone access</h3>
+        <div class="muted small">
+          Review cards, solve puzzles and guess moves from a phone on the same Wi-Fi. The phone needs the link below once; it can't change settings, import or
+          delete anything.
+        </div>
+        <label class="check">
+          <input type="checkbox" :checked="lan.enabled" @change="setLan({ enabled: ($event.target as HTMLInputElement).checked })" />
+          Allow phones on this network
+        </label>
+        <div v-if="lan.error" class="warn">{{ lan.error }}</div>
+        <div v-if="lan.running" class="lan">
+          <!-- Server-made SVG from the qrcode package. -->
+          <div v-if="lan.qrSvg" class="qr" role="img" aria-label="QR code for the phone link" v-html="lan.qrSvg"></div>
+          <div>
+            <div v-for="u in lan.urls" :key="u" class="small"><code>{{ u }}</code></div>
+            <div v-if="!lan.urls.length" class="muted small">This computer isn't on a network right now.</div>
+            <div class="row" style="margin-top: 8px">
+              <button type="button" class="btn small" @click="rotateLan">New link</button>
+              <span class="muted small">Makes the old link and phones that used it stop working.</span>
+            </div>
+          </div>
+        </div>
+        <label class="field">
+          Port
+          <input :value="lan.port" type="number" min="1024" max="65535" style="width: 8em" @change="setLan({ port: Number(($event.target as HTMLInputElement).value) })" />
+        </label>
+      </section>
+
       <div class="save-row">
         <button type="submit" class="btn primary">Save settings</button>
         <span class="muted small">Saving re-grades analysed games, so labels and cards follow the new settings.</span>
@@ -171,6 +200,20 @@ const s = ref<Settings | null>(null);
 const names = ref("");
 const options = ref("");
 const testing = ref(false);
+type LanInfo = { enabled: boolean; running: boolean; port: number; urls: string[]; qrSvg: string; error: string };
+const lan = ref<LanInfo | null>(null);
+// Opened from a phone: phone access is managed on the computer only.
+const remote = !["127.0.0.1", "localhost", "[::1]"].includes(location.hostname);
+async function setLan(patch: { enabled?: boolean; port?: number }) {
+  try {
+    lan.value = await api.put<LanInfo>("/api/lan", patch);
+  } catch (e) {
+    toast(String(e));
+  }
+}
+async function rotateLan() {
+  lan.value = await api.post<LanInfo>("/api/lan/token");
+}
 const backups = ref<{ dir: string; files: { name: string; date: string; size: number }[] } | null>(null);
 type EngineOption = { name: string; type: string; default?: string; min?: number; max?: number; vars?: string[] };
 const testResult = ref<{ ok: boolean; name?: string; bestmove?: string; error?: string; options?: EngineOption[] } | null>(null);
@@ -186,6 +229,7 @@ function addOption(o: EngineOption) {
 onMounted(async () => {
   s.value = await api.get<Settings>("/api/settings");
   backups.value = await api.get<{ dir: string; files: { name: string; date: string; size: number }[] }>("/api/backups").catch(() => null);
+  if (!remote) lan.value = await api.get<LanInfo>("/api/lan").catch(() => null);
   names.value = s.value.myNames.join("\n");
   folders.value = (s.value.watchFolders ?? []).join("\n");
   options.value = Object.entries(s.value.engine.options)
@@ -312,6 +356,27 @@ async function test() {
   .cols {
     grid-template-columns: 1fr;
   }
+}
+.lan {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.qr {
+  width: 168px;
+  height: 168px;
+  background: #fff;
+  padding: 6px;
+  border-radius: 6px;
+}
+.qr :deep(svg) {
+  width: 100%;
+  height: 100%;
+}
+.warn {
+  color: var(--loss);
+  font-size: 13px;
 }
 .box {
   padding: 16px;

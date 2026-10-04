@@ -304,8 +304,12 @@ try {
   await page.setInputFiles('input[type="file"][accept^=".db"]', backupFile);
   await page.waitForSelector(".toast:has-text('Restored')", { timeout: 30000 });
   check(/\(0 new\)/.test(await page.textContent(".toast")), "restoring a backup of the same library adds nothing");
+  await page.click("text=Allow phones on this network");
+  await page.waitForSelector(".qr svg");
+  check(true, "phone access shows a QR code");
   await shot("08-settings");
 
+  await page.evaluate(() => document.activeElement?.blur());
   await page.keyboard.press("?");
   await page.waitForSelector("dialog.help[open]");
   check((await page.textContent("dialog.help")).includes("Next / previous mistake") || (await page.textContent("dialog.help")).includes("next mistake"), "? shows the keyboard shortcuts");
@@ -322,6 +326,18 @@ try {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   await shot("09-game-phone");
   check(!overflow, "game page has no horizontal scroll at phone width");
+
+  // The phone link: lands on the review page, without the settings tab.
+  const lanInfo = await api("GET", "/api/lan");
+  if (lanInfo.urls[0]) {
+    await page.goto(lanInfo.urls[0]);
+    await page.waitForFunction(() => location.hash === "#/review");
+    await page.waitForTimeout(400);
+    const navText = await page.textContent("nav");
+    check(!navText.includes("Settings") && navText.includes("Review"), "phone link opens the review page");
+    await shot("09b-phone-review");
+  }
+  await api("PUT", "/api/lan", { enabled: false });
 
   for (const [id, e] of a11y) console.log(`a11y ${e.impact} ${id}: ${e.help} [${[...e.pages].join(", ")}] e.g. ${[...e.targets].slice(0, 3).join(" | ")}`);
   const blocking = [...a11y].filter(([, e]) => e.impact === "critical" || e.impact === "serious");

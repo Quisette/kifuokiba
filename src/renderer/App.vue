@@ -65,6 +65,8 @@ import Puzzles from "./views/Puzzles.vue";
 import Repertoire from "./views/Repertoire.vue";
 import Settings from "./views/Settings.vue";
 
+// On a phone (phone access), notes and settings can't be changed, so they're left out.
+const remote = !["127.0.0.1", "localhost", "[::1]"].includes(location.hostname);
 const nav = [
   { name: "home", label: "ホーム Home" },
   { name: "library", label: "棋譜庫 Library" },
@@ -73,7 +75,7 @@ const nav = [
   { name: "explorer", label: "定跡 Explorer" },
   { name: "notes", label: "研究 Notes" },
   { name: "settings", label: "設定 Settings" },
-];
+].filter((n) => !remote || (n.name !== "notes" && n.name !== "settings"));
 const active = (name: string) => route.name === name || (name === "library" && (route.name === "game" || route.name === "record" || route.name === "guess")) || (name === "stats" && route.name === "player") || (name === "review" && (route.name === "puzzles" || route.name === "practice")) || (name === "explorer" && route.name === "repertoire");
 
 const due = ref(0);
