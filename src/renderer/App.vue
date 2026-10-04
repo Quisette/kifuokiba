@@ -26,6 +26,7 @@
     <Explorer v-else-if="route.name === 'explorer'" />
     <RecordGame v-else-if="route.name === 'record'" />
     <Player v-else-if="route.name === 'player'" />
+    <Practice v-else-if="route.name === 'practice'" :key="route.query.toString()" />
     <Notebooks v-else-if="route.name === 'notes'" />
     <Settings v-else-if="route.name === 'settings'" />
     <div v-else class="page"><div class="empty">Page not found. <a href="#/">Home</a></div></div>
@@ -46,6 +47,7 @@ import Explorer from "./views/Explorer.vue";
 import RecordGame from "./views/RecordGame.vue";
 import Player from "./views/Player.vue";
 import Notebooks from "./views/Notebooks.vue";
+import Practice from "./views/Practice.vue";
 import Settings from "./views/Settings.vue";
 
 const nav = [

@@ -88,6 +88,7 @@
           <div class="row">
             <button type="button" class="btn small" @click="replay">{{ replaying ? "Stop" : "Replay line" }}</button>
             <button type="button" class="btn small" @click="notebookOpen = true">Add to notebook</button>
+            <a class="btn small" :href="`#/practice?sfen=${encodeURIComponent(card.sfen)}&back=review`" title="Play this position out against the engine">Play it out</a>
             <button type="button" class="btn small" @click="suspend">Suspend card</button>
           </div>
         </div>

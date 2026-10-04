@@ -27,6 +27,7 @@
         <button type="button" class="btn" @click="notebookOpen = true">Add to notebook</button>
         <button type="button" class="btn" :disabled="cursor === 0 || variation.length > 0" @click="makeCard">Make card</button>
         <button type="button" class="btn" @click="flip = !flip">Flip 反転</button>
+        <a class="btn" :href="`#/practice?sfen=${encodeURIComponent(cur.sfen)}&back=game/${id}`" title="Play this position out against the engine">Play it out</a>
         <button type="button" class="btn" @click="analyse">{{ game.analysis_status === "done" ? "Re-analyse" : "Analyse" }}</button>
         <a class="btn" :href="`/api/games/${id}/export?format=kif`" download>Export KIF</a>
         <a class="btn" :href="`/api/games/${id}/export?format=csa`" download>CSA</a>

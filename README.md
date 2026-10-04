@@ -20,6 +20,7 @@ Everything stays on your machine, in one SQLite file.
   - In review you play your answer on the board. The best move, or any move the engine says is within the tolerance, counts as correct. You can replay the engine line.
   - Scheduling is SM-2, or FSRS v4.5 if you pick it in Settings. A card missed four times becomes a leech, and the review screen then asks you to write down the idea or study the game.
   - "Export to Anki" writes a tab-separated file Anki imports directly.
+- **Play it out.** From any game position or card, play on against the engine at a strength you pick. It's useful for practising the conversion of won positions you let slip.
 - **Stats.** Win rate by side, opening, opponent's opening, castle, matchup, time control and opponent, plus a monthly trend, where in the game you lose points, and whether fast moves go wrong more often.
 - **Opening book.** Point Settings at a YaneuraOu-format book (.db) and games show which moves were book moves and where you left the book, with the book's choices there.
 - **Explorer.** Walk the opening tree of your own games: each next move with how often you played it, your score after it, your average loss, and the engine's best move.

@@ -206,6 +206,16 @@ try {
   await page.waitForFunction(() => location.hash.startsWith("#/game/"));
   check((await api("GET", "/api/games")).length === games.length + 1, "recorded game is saved to the library");
 
+  // Play the opening position out against the engine: ☗7六歩, and the engine answers.
+  await page.goto(base + "/#/practice?sfen=" + encodeURIComponent("lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1"));
+  await page.waitForSelector(".board.operation", { state: "attached" });
+  await page.waitForTimeout(400);
+  await clickSquare(7, 7);
+  await clickSquare(7, 6);
+  await page.waitForFunction(() => document.querySelectorAll(".moves li").length === 2, null, { timeout: 20000 });
+  check((await page.textContent(".status")).includes("Your move"), "engine answers in practice mode");
+  await shot("08b-practice");
+
   await page.goto(base + "/#/settings");
   await page.waitForSelector("form");
   await shot("08-settings");
