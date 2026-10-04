@@ -1,5 +1,5 @@
 <template>
-  <div ref="host" class="shogi-board">
+  <div ref="host" class="shogi-board" role="group" :aria-label="label">
     <BoardView
       v-if="position && width > 0"
       :layout-type="layout"
@@ -72,6 +72,12 @@ const maxSize = computed(() => {
   return new RectSize(w, w * ratio);
 });
 const position = computed(() => Position.newBySFEN(props.sfen));
+// The board is drawn with images; screen readers get the position as SFEN.
+const label = computed(() => {
+  const p = position.value;
+  if (!p) return "将棋盤 Shogi board";
+  return `将棋盤 Shogi board, ${p.color === "black" ? "☗ sente" : "☖ gote"} to move. SFEN ${p.sfen}`;
+});
 const lastMoveObj = computed(() => {
   if (!props.lastMove?.usi) return null;
   const prev = Position.newBySFEN(props.lastMove.prevSfen);

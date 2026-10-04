@@ -8,7 +8,7 @@
           :class="{ 'drop-shadows': dropShadows }"
           :style="whiteHand.backgroundStyle"
         >
-          <img v-if="whiteHand.textureImagePath" class="full" :src="whiteHand.textureImagePath" />
+          <img v-if="whiteHand.textureImagePath" class="full" :src="whiteHand.textureImagePath" alt="" />
         </div>
         <div
           v-for="pointer in whiteHand.pointers"
@@ -16,7 +16,7 @@
           :style="pointer.backgroundStyle"
         ></div>
         <div v-for="piece in whiteHand.pieces" :key="piece.id" :style="piece.style">
-          <img class="piece-image" :src="piece.imagePath" />
+          <img class="piece-image" :src="piece.imagePath" alt="" />
         </div>
         <div v-for="number in whiteHand.numbers" :key="number.id" :style="number.style">
           {{ number.character }}
@@ -26,7 +26,7 @@
       <!-- 盤面 -->
       <div class="board" :style="main.boardStyle">
         <div v-if="board.background.textureImagePath" :style="board.background.style">
-          <img class="full" :src="board.background.textureImagePath" />
+          <img class="full" :src="board.background.textureImagePath" alt="" />
         </div>
         <div
           class="board-background"
@@ -37,7 +37,7 @@
         </div>
         <div v-for="square in board.squares" :key="square.id" :style="square.backgroundStyle"></div>
         <div v-for="piece in board.pieces" :key="piece.id" :style="piece.style">
-          <img class="piece-image" :src="piece.imagePath" />
+          <img class="piece-image" :src="piece.imagePath" alt="" />
         </div>
         <div v-for="label in board.labels" :key="label.id" :style="label.style">
           {{ label.character }}
@@ -57,7 +57,7 @@
           :class="{ 'drop-shadows': dropShadows }"
           :style="blackHand.backgroundStyle"
         >
-          <img v-if="blackHand.textureImagePath" class="full" :src="blackHand.textureImagePath" />
+          <img v-if="blackHand.textureImagePath" class="full" :src="blackHand.textureImagePath" alt="" />
         </div>
         <div
           v-for="pointer in blackHand.pointers"
@@ -65,7 +65,7 @@
           :style="pointer.backgroundStyle"
         ></div>
         <div v-for="piece in blackHand.pieces" :key="piece.id" :style="piece.style">
-          <img class="piece-image" :src="piece.imagePath" />
+          <img class="piece-image" :src="piece.imagePath" alt="" />
         </div>
         <div v-for="number in blackHand.numbers" :key="number.id" :style="number.style">
           {{ number.character }}
@@ -108,7 +108,7 @@
           :style="board.promote.style"
           @click.stop.prevent="clickPromote()"
         >
-          <img class="piece-image" :src="board.promote.imagePath" draggable="false" />
+          <img class="piece-image" :src="board.promote.imagePath" draggable="false" alt="成 promote" />
         </div>
         <div
           v-if="board.doNotPromote"
@@ -116,7 +116,7 @@
           :style="board.doNotPromote.style"
           @click.stop.prevent="clickNotPromote()"
         >
-          <img class="piece-image" :src="board.doNotPromote.imagePath" draggable="false" />
+          <img class="piece-image" :src="board.doNotPromote.imagePath" draggable="false" alt="不成 don't promote" />
         </div>
       </div>
       <div ref="blackHandOpEl" class="hand operation" :style="main.blackHandStyle">
@@ -212,7 +212,7 @@
         'z-index': '1000000',
       }"
     >
-      <img :src="drag.pieceImagePath" style="width: 100%; height: 100%" draggable="false" />
+      <img :src="drag.pieceImagePath" style="width: 100%; height: 100%" draggable="false" alt="" />
     </div>
   </Teleport>
 </template>

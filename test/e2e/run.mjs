@@ -93,7 +93,20 @@ try {
   page.on("pageerror", (e) => errors.push(String(e)));
   // Web fonts come from Google Fonts; a sandbox without them is not an app error.
   page.on("console", (m) => m.type() === "error" && (m.location().url ?? "").startsWith(base) && errors.push(m.text()));
-  const shot = (name) => page.screenshot({ path: path.join(shots, name + ".png"), fullPage: true });
+  // Every screenshot also runs an axe accessibility scan of the page.
+  const axeSource = readFileSync(path.join(root, "node_modules/axe-core/axe.min.js"), "utf8");
+  const a11y = new Map();
+  const shot = async (name) => {
+    await page.screenshot({ path: path.join(shots, name + ".png"), fullPage: true });
+    await page.evaluate(axeSource);
+    const r = await page.evaluate(() => window.axe.run(document, { runOnly: ["wcag2a", "wcag2aa"] }));
+    for (const v of r.violations) {
+      const e = a11y.get(v.id) ?? { impact: v.impact, help: v.help, pages: new Set(), targets: new Set() };
+      e.pages.add(name);
+      for (const n of v.nodes.slice(0, 3)) e.targets.add(String(n.target));
+      a11y.set(v.id, e);
+    }
+  };
 
   await page.goto(base + "/#/");
   await page.waitForSelector(".tiles");
@@ -253,6 +266,9 @@ try {
   await shot("09-game-phone");
   check(!overflow, "game page has no horizontal scroll at phone width");
 
+  for (const [id, e] of a11y) console.log(`a11y ${e.impact} ${id}: ${e.help} [${[...e.pages].join(", ")}] e.g. ${[...e.targets].slice(0, 3).join(" | ")}`);
+  const blocking = [...a11y].filter(([, e]) => e.impact === "critical" || e.impact === "serious");
+  check(blocking.length === 0, "no serious accessibility problems" + (blocking.length ? ": " + blocking.map(([id]) => id).join(", ") : ""));
   check(errors.length === 0, "no page errors" + (errors.length ? ": " + errors.join(" | ") : ""));
   console.log("screenshots in", shots);
 } finally {

@@ -39,7 +39,7 @@
     <div class="layout">
       <section class="board-col">
         <div class="board-wrap">
-          <div class="evalbar" :aria-label="`Evaluation bar: sente ${barPct.toFixed(0)}%`" :title="`☗ ${barPct.toFixed(0)}%`">
+          <div class="evalbar" role="img" :aria-label="`Evaluation bar: sente ${barPct.toFixed(0)}%`" :title="`☗ ${barPct.toFixed(0)}%`">
             <span class="w" :style="{ flex: flip ? barPct : 100 - barPct }"></span>
             <span class="b" :style="{ flex: flip ? 100 - barPct : barPct }"></span>
           </div>

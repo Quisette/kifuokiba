@@ -8,6 +8,7 @@ through the `@` alias in `vite.config.ts`.
 Changes from upstream:
 - `common/settings/app.ts`, `common/settings/layout.ts`: trimmed to the enums the board needs.
 - `common/i18n.ts`: replaced by a one-key stand-in.
+- `renderer/view/primitive/BoardView.vue`: `alt` text on images (empty for decorative ones, words on the promote choice).
 
 The piece, board and piece-stand images in `public/piece`, `public/board` and `public/stand`
 come from the same ShogiHome commit and the same license.

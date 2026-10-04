@@ -28,6 +28,7 @@
     "@types/encoding-japanese": "^2.2.1",
     "@types/node": "^26.6.4",
     "@vitejs/plugin-vue": "^6.0.9",
+    "axe-core": "^4.13.0",
     "electron": "^44.5.1",
     "electron-builder": "^26.15.3",
     "esbuild": "^0.28.2",
