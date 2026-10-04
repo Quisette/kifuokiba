@@ -133,7 +133,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="g in games" :key="g.id" class="row" @click="open(g.id)">
+          <tr v-for="g in games.slice(0, visible)" :key="g.id" class="row" @click="open(g.id)">
             <td @click.stop><input type="checkbox" :aria-label="`Select game ${g.id}`" :checked="selected.has(g.id)" @change="toggle(g.id)" /></td>
             <td>{{ g.date || "—" }}</td>
             <td>
@@ -161,6 +161,10 @@
           </tr>
         </tbody>
       </table>
+      <div v-if="games.length > visible" class="more">
+        <button type="button" class="btn" @click="visible += PAGE">Show {{ Math.min(PAGE, games.length - visible) }} more</button>
+        <span class="muted small">{{ visible }} of {{ games.length }} shown</span>
+      </div>
       <div v-if="!games.length" class="empty" style="margin-top: 12px">No games match. <button type="button" class="btn small" @click="clear">Clear filters</button></div>
     </div>
   </div>
@@ -223,8 +227,13 @@ const cleanFilter = computed(() => {
 });
 const hasFilter = computed(() => Object.keys(cleanFilter.value).length > 0);
 
+// Large libraries: render rows in pages; filters, sorting and bulk actions still cover every match.
+const PAGE = 200;
+const visible = ref(PAGE);
+
 async function load() {
   games.value = await api.get<GameListItem[]>("/api/games" + qs(f));
+  visible.value = PAGE;
   for (const id of [...selected]) if (!games.value.some((g) => g.id === id)) selected.delete(id);
 }
 async function loadMeta() {
@@ -336,6 +345,12 @@ async function deleteSelected() {
 }
 .filters .grow {
   flex: 1 1 220px;
+}
+.more {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 12px;
 }
 .bulk {
   display: flex;

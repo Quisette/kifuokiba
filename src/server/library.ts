@@ -94,6 +94,24 @@ function sideOfMove(initialSfen: string, ply: number): "black" | "white" {
 export class Library {
   constructor(readonly db: Db) {}
 
+  private memo = new Map<string, { version: string; value: unknown }>();
+
+  /**
+   * Results derived from games and settings only (drills, puzzles), kept until a
+   * game is added, changed or re-analysed, or the settings change.
+   */
+  cached<T>(key: string, compute: () => T): T {
+    const v = this.db.get<{ n: number; u: number | null; s: string | null }>(
+      "SELECT COUNT(*) n, MAX(updated_at) u, (SELECT value FROM settings WHERE key = 'app') s FROM games",
+    )!;
+    const version = `${v.n}:${v.u}:${v.s}`;
+    const hit = this.memo.get(key);
+    if (hit && hit.version === version) return hit.value as T;
+    const value = compute();
+    this.memo.set(key, { version, value });
+    return value;
+  }
+
   get settings(): AppSettings {
     return loadSettings(this.db);
   }
@@ -221,7 +239,7 @@ export class Library {
 
   // ---------------------------------------------------------------- list
 
-  private myNames(): string[] {
+  myNames(): string[] {
     return this.settings.myNames.map((n) => normalizePlayerName(n).toLowerCase()).filter(Boolean);
   }
 

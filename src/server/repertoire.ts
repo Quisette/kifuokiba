@@ -21,12 +21,20 @@ export type RepertoirePosition = {
 
 export function repertoire(
   lib: Library,
-  opts: { side: "black" | "white"; maxPly?: number; minCount?: number; goodLoss?: number; book?: OpeningBook | null },
+  opts: { side: "black" | "white"; maxPly?: number; minCount?: number; goodLoss?: number; book?: OpeningBook | null; withText?: boolean },
 ): RepertoirePosition[] {
   const maxPly = opts.maxPly ?? 24;
   const minCount = opts.minCount ?? 2;
   const goodLoss = opts.goodLoss ?? 2;
-  const mine = new Set(lib.listGames().filter((g) => g.mySide === opts.side).map((g) => g.id));
+  const names = lib.myNames();
+  const mine = new Set(
+    lib.db
+      .all<{ id: number; black: string; white: string }>("SELECT id, black, white FROM games")
+      .filter((g) => lib.mySide(g, names) === opts.side)
+      .map((g) => g.id),
+  );
+  // Move names cost a position parse each; counts-only callers skip them.
+  const text = opts.withText === false ? () => "" : (sfen: string, usi: string) => Library.moveText(sfen, usi);
   if (!mine.size) return [];
 
   // My moves in the opening: the position before (prev) and the move played (cur).
@@ -70,7 +78,7 @@ export function repertoire(
         const avgLoss = m.lossN ? m.lossSum / m.lossN : null;
         const book = bookMoves.has(usi);
         const engine = usi === engineBest;
-        return { usi, text: Library.moveText(a.sfen, usi), count: m.count, avgLoss, book, engine, good: book || engine || (avgLoss !== null && avgLoss < goodLoss) };
+        return { usi, text: text(a.sfen, usi), count: m.count, avgLoss, book, engine, good: book || engine || (avgLoss !== null && avgLoss < goodLoss) };
       })
       .sort((x, y) => y.count - x.count);
     const accepted = new Map<string, string>();
@@ -84,7 +92,7 @@ export function repertoire(
       count: a.games.size,
       ply: a.ply,
       played,
-      accepted: [...accepted.entries()].map(([usi, why]) => ({ usi, text: Library.moveText(a.sfen, usi), why })),
+      accepted: [...accepted.entries()].map(([usi, why]) => ({ usi, text: text(a.sfen, usi), why })),
       problem: !played[0].good,
     });
   }

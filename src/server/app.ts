@@ -289,12 +289,15 @@ export function createApp(opts: AppOptions) {
     return { configured: true, inBook, leftBookAt, alternatives };
   });
   // Every game matching the library filter, one file each, in a zip.
-  route("GET", "/api/export/games", (_r, url) => {
+  route("GET", "/api/export/games", async (_r, url) => {
     const fmt = url.searchParams.get("format") === "csa" ? RecordFileFormat.CSA : RecordFileFormat.KIF;
     const utf8 = url.searchParams.get("utf8") === "1";
     const safe = (t: string) => t.replace(/[\\/:*?"<>|\s]+/g, "_").slice(0, 40);
     const files = [];
-    for (const g of lib.listGames(filterFromQuery(url))) {
+    const list = lib.listGames(filterFromQuery(url));
+    for (const [i, g] of list.entries()) {
+      // Let other requests (and the analysis queue) through on big exports.
+      if (i % 100 === 99) await new Promise((r) => setImmediate(r));
       const r = lib.exportGame(g.id, fmt, utf8);
       if (!r) continue;
       const name = `${g.date.slice(0, 10) || "nodate"}_${safe(g.black || "先手")}_vs_${safe(g.white || "後手")}_${g.id}${fmt}`;
@@ -362,12 +365,21 @@ export function createApp(opts: AppOptions) {
     const side = url.searchParams.get("side") === "white" ? "white" : "black";
     // A broken book path shouldn't block the drill; it just judges without the book.
     const book = await loadBook().catch(() => null);
-    return repertoire(lib, { side, maxPly: Number(url.searchParams.get("maxPly")) || 24, book });
+    const maxPly = Number(url.searchParams.get("maxPly")) || 24;
+    return lib.cached(`repertoire:${side}:${maxPly}:${book?.mtimeMs ?? ""}`, () => repertoire(lib, { side, maxPly, book }));
   });
   route("GET", "/api/today", async () => todayPlan(lib, cards, await loadBook().catch(() => null)));
-  route("GET", "/api/puzzles", (_r, url) =>
-    findPuzzles(lib, { mineOnly: url.searchParams.get("mine") !== "0" }).map((p) => ({ ...p, bestText: Library.moveText(p.sfen, p.bestUsi) })),
-  );
+  route("GET", "/api/puzzles", (_r, url) => {
+    const mineOnly = url.searchParams.get("mine") !== "0";
+    const all = lib.cached(mineOnly ? "puzzles:mine" : "puzzles:all", () => findPuzzles(lib, { mineOnly }));
+    // Each puzzle renders a board; send a page, not thousands.
+    const limit = Math.min(Number(url.searchParams.get("limit")) || 60, 500);
+    return {
+      total: all.length,
+      missed: all.filter((p) => p.missed).length,
+      puzzles: all.slice(0, limit).map((p) => ({ ...p, bestText: Library.moveText(p.sfen, p.bestUsi) })),
+    };
+  });
   route("GET", "/api/cards/counts", () => cards.counts());
   route("GET", "/api/cards/activity", (_r, url) => cards.activity(Math.min(Math.max(Number(url.searchParams.get("days")) || 182, 7), 730)));
   route("POST", "/api/cards", (_r, _u, _p, body) => {

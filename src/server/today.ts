@@ -19,7 +19,10 @@ export function todayPlan(lib: Library, cards: Cards, book: OpeningBook | null, 
     .filter((g) => g.date.slice(0, 10) >= since && !noted.has(g.id))
     .slice(0, 3)
     .map((g) => ({ id: g.id, opponent: g.opponent, date: g.date, strategy: g.strategy, mistakes: g.mistakes, analysed: g.analysis_status === "done" }));
-  const missedMates = findPuzzles(lib, { mineOnly: true }).filter((p) => p.missed).length;
-  const weakOpenings = (["black", "white"] as const).reduce((n, side) => n + repertoire(lib, { side, book }).filter((p) => p.problem).length, 0);
+  const missedMates = lib.cached("puzzles:mine", () => findPuzzles(lib, { mineOnly: true })).filter((p) => p.missed).length;
+  const weakOpenings = (["black", "white"] as const).reduce(
+    (n, side) => n + lib.cached(`repertoire:${side}:counts:${book?.mtimeMs ?? ""}`, () => repertoire(lib, { side, book, withText: false })).filter((p) => p.problem).length,
+    0,
+  );
   return { due: counts.due, reviewedToday: counts.reviewedToday, losses, missedMates, weakOpenings };
 }

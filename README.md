@@ -77,7 +77,7 @@ npm run e2e        # builds, starts the server, drives every screen in Chromium,
 
 The mock engine only counts material and looks one capture ahead. It proves the plumbing works, not the quality of the analysis.
 
-`tools/selfplay.ts` makes demo games by engine self-play.
+`tools/selfplay.ts` makes demo games by engine self-play. `npx tsx tools/perf.ts 5000` loads 5000 synthetic games and times the heavy endpoints.
 
 ## Layout
 

@@ -454,3 +454,24 @@ describe("today's study plan", () => {
     db.close();
   });
 });
+
+describe("derived-result cache", () => {
+  it("recomputes after a game or the settings change", async () => {
+    const { Db } = await import("../src/server/db.js");
+    const { Library } = await import("../src/server/library.js");
+    const { saveSettings } = await import("../src/server/settings.js");
+    const db = new Db(":memory:");
+    const lib = new Library(db);
+    let runs = 0;
+    const count = () => lib.cached("n", () => (runs++, db.get<{ n: number }>("SELECT COUNT(*) n FROM games")!.n));
+    expect(count()).toBe(0);
+    expect(count()).toBe(0);
+    expect(runs).toBe(1);
+    lib.importText(makeKif({ moves: "7g7f 3c3d", black: "a", white: "b" }));
+    expect(count()).toBe(1);
+    saveSettings(db, { ...lib.settings, myNames: ["a"] });
+    count();
+    expect(runs).toBe(3);
+    db.close();
+  });
+});

@@ -5,6 +5,10 @@
       <span class="muted">Every position in your analysed games where the side to move had a forced mate. Missed ones come first.</span>
       <label class="muted small"><input v-model="all" type="checkbox" /> Include the opponent's mates</label>
     </div>
+    <div v-if="puzzles && total > puzzles.length" class="muted small more">
+      Showing {{ puzzles.length }} of {{ total }} ({{ missed }} missed).
+      <button type="button" class="btn small" @click="limit += 60">Show more</button>
+    </div>
     <div v-if="puzzles === null" class="empty">Loading…</div>
     <div v-else-if="!puzzles.length" class="empty">No mates found yet. They show up once games are analysed and one side had a forced mate.</div>
     <div v-else class="grid">
@@ -46,14 +50,20 @@ type Puzzle = {
 };
 
 const all = ref(false);
+const limit = ref(60);
 const puzzles = ref<Puzzle[] | null>(null);
+const total = ref(0);
+const missed = ref(0);
 const shown = reactive(new Set<string>());
 const key = (p: Puzzle) => `${p.gameId}-${p.ply}`;
 
 watch(
-  all,
+  [all, limit],
   async () => {
-    puzzles.value = await api.get<Puzzle[]>(`/api/puzzles?mine=${all.value ? 0 : 1}`);
+    const r = await api.get<{ total: number; missed: number; puzzles: Puzzle[] }>(`/api/puzzles?mine=${all.value ? 0 : 1}&limit=${limit.value}`);
+    puzzles.value = r.puzzles;
+    total.value = r.total;
+    missed.value = r.missed;
   },
   { immediate: true },
 );
@@ -71,6 +81,12 @@ function reveal(p: Puzzle) {
   gap: 14px;
   flex-wrap: wrap;
   margin-bottom: 16px;
+}
+.more {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 12px;
 }
 .grid {
   display: grid;

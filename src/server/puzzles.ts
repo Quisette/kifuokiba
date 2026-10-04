@@ -21,36 +21,37 @@ export type Puzzle = {
 
 export function findPuzzles(lib: Library, opts: { mineOnly?: boolean; maxMate?: number } = {}): Puzzle[] {
   const maxMate = opts.maxMate ?? 15;
-  const rows = lib.db.all<{ game_id: number; ply: number; sfen: string; mate: number | null; best_usi: string; missed: string }>(
-    `SELECT p.game_id, p.ply, p.sfen, p.mate, p.best_usi, p.missed FROM plies p
-     WHERE p.game_id IN (SELECT game_id FROM plies WHERE mate IS NOT NULL AND mate != 0)
+  // Only positions with a mate score, plus whether the move played from there let it go.
+  const rows = lib.db.all<{ game_id: number; ply: number; sfen: string; mate: number; best_usi: string; next_missed: string | null }>(
+    `SELECT p.game_id, p.ply, p.sfen, p.mate, p.best_usi,
+            (SELECT n.missed FROM plies n WHERE n.game_id = p.game_id AND n.ply = p.ply + 1) AS next_missed
+     FROM plies p WHERE p.mate IS NOT NULL AND p.mate != 0
      ORDER BY p.game_id, p.ply`,
   );
+  const names = lib.myNames();
   const games = new Map(
-    lib.db.all<{ id: number; black: string; white: string; date: string }>("SELECT id, black, white, date FROM games").map((g) => [g.id, g]),
+    lib.db.all<{ id: number; black: string; white: string; date: string }>("SELECT id, black, white, date FROM games").map((g) => [g.id, { ...g, mySide: lib.mySide(g, names) }]),
   );
   // mate is from black's view: > 0 means black mates.
   const toMove = (sfen: string) => (sfen.split(" ")[1] === "w" ? "white" : "black");
-  const mates = (r: { sfen: string; mate: number | null }) =>
-    r.mate !== null && r.mate !== 0 && Math.abs(r.mate) <= maxMate && (r.mate > 0) === (toMove(r.sfen) === "black");
+  const mates = (r: { sfen: string; mate: number } | undefined) =>
+    !!r && Math.abs(r.mate) <= maxMate && (r.mate > 0) === (toMove(r.sfen) === "black");
+  const at = new Map(rows.map((r) => [`${r.game_id}:${r.ply}`, r]));
 
   const out: Puzzle[] = [];
-  for (let i = 0; i < rows.length; i++) {
-    const r = rows[i];
+  for (const r of rows) {
     if (!mates(r) || !r.best_usi) continue;
-    // Same side to move two plies earlier, in the same game, already had the mate: not a new puzzle.
-    const before = rows[i - 2];
-    if (before && before.game_id === r.game_id && before.ply === r.ply - 2 && mates(before)) continue;
+    // Same side to move two plies earlier already had the mate: not a new puzzle.
+    if (mates(at.get(`${r.game_id}:${r.ply - 2}`))) continue;
     const g = games.get(r.game_id);
     if (!g) continue;
     const side = toMove(r.sfen);
-    const mine = lib.mySide(g) === side;
+    const mine = g.mySide === side;
     if (opts.mineOnly && !mine) continue;
     // Missed if any of the mover's moves along the sequence let the mate go.
     let missed = false;
-    for (let k = i; k < rows.length && rows[k].game_id === r.game_id && mates(rows[k]); k += 2) {
-      const nx = rows[k + 1];
-      if (nx && nx.game_id === r.game_id && nx.missed === "mate") {
+    for (let k = r.ply, cur = at.get(`${r.game_id}:${k}`); mates(cur); k += 2, cur = at.get(`${r.game_id}:${k}`)) {
+      if (cur!.next_missed === "mate") {
         missed = true;
         break;
       }
@@ -59,7 +60,7 @@ export function findPuzzles(lib: Library, opts: { mineOnly?: boolean; maxMate?: 
       gameId: r.game_id,
       ply: r.ply,
       sfen: r.sfen,
-      mateIn: Math.abs(r.mate!),
+      mateIn: Math.abs(r.mate),
       side,
       mine,
       missed,
