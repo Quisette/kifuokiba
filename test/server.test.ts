@@ -5,7 +5,8 @@ import path from "node:path";
 import { createApp } from "../src/server/app.js";
 import { makeKif, sjis, SHIKEN_VS_FUNA } from "./fixtures.js";
 
-const MOCK = path.resolve("tools/mock-usi-engine.mjs");
+// Windows cannot run a .mjs directly; the .cmd wrapper starts it with node.
+const MOCK = path.resolve(process.platform === "win32" ? "tools/mock-usi-engine.cmd" : "tools/mock-usi-engine.mjs");
 
 let app: ReturnType<typeof createApp>;
 let base = "";

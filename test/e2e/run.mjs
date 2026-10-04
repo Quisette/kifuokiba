@@ -12,7 +12,7 @@ import { chromium } from "playwright";
 import { Record, RecordMetadataKey, SpecialMoveType, exportKIF } from "tsshogi";
 
 const root = path.resolve(import.meta.dirname, "../..");
-const engine = process.env.E2E_ENGINE ?? path.join(root, "tools/mock-usi-engine.mjs");
+const engine = process.env.E2E_ENGINE ?? path.join(root, process.platform === "win32" ? "tools/mock-usi-engine.cmd" : "tools/mock-usi-engine.mjs");
 const kifuDir = process.env.E2E_KIFU;
 const shots = process.env.E2E_SHOTS ?? path.join(root, "test-results/e2e");
 mkdirSync(shots, { recursive: true });
