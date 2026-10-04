@@ -75,7 +75,7 @@ On first launch, open Settings, enter your player names, and set the path to a U
 
 ## Installers
 
-`npm run dist` builds an installer for the current OS into `release/` (dmg on macOS, NSIS exe on Windows, AppImage on Linux). The **Installers** GitHub workflow builds all three; run it from the Actions tab or push a `v*` tag.
+`npm run dist` builds an installer for the current OS into `release/` (dmg on macOS, NSIS exe on Windows, AppImage on Linux). The **Installers** GitHub workflow builds all three on every run. Each push to `main` replaces the files on the [nightly pre-release](https://github.com/Quisette/kifuokiba/releases/tag/nightly), and pushing a `v*` tag publishes a release with them attached.
 
 The builds are not code-signed. On macOS, open the app the first time with right-click → Open; on Windows, choose "More info → Run anyway" in SmartScreen.
 

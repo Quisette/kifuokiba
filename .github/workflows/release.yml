@@ -1,9 +1,11 @@
 name: Installers
-# Builds unsigned installers for macOS, Windows and Linux. Run it from the
-# Actions tab, or push a tag like v0.1.0; the files appear as run artifacts.
+# Builds unsigned installers for macOS, Windows and Linux. Every run keeps them
+# as run artifacts. A push to main also refreshes the "nightly" pre-release, and
+# a tag like v0.1.0 publishes a release, so there is always a plain download link.
 on:
   workflow_dispatch:
   push:
+    branches: [main]
     tags: ["v*"]
   # Also when packaging config changes in a PR, so a broken build shows up before a release.
   pull_request:
@@ -35,3 +37,27 @@ jobs:
             release/*.exe
             release/*.AppImage
           if-no-files-found: error
+
+  publish:
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish the release for a tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: gh release create "$GITHUB_REF_NAME" dist/* --title "Kifu Study $GITHUB_REF_NAME" --generate-notes
+      - name: Refresh the nightly pre-release from main
+        if: github.ref == 'refs/heads/main'
+        run: |
+          gh release delete nightly --cleanup-tag --yes || true
+          gh release create nightly dist/* --prerelease --target "$GITHUB_SHA" --title "Nightly build" \
+            --notes "Unsigned installers built from main at $GITHUB_SHA. On macOS right-click the app and choose Open the first time; on Windows choose More info, then Run anyway."
