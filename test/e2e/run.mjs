@@ -44,7 +44,7 @@ let browser;
 try {
   // A two-move opening book so book marks show up.
   const bookFile = path.join(data, "book.db");
-  writeFileSync(bookFile, ["#YANEURAOU-DB2016 1.00", "sfen lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1", "7g7f 3c3d 0 20 10", "2g2f none 0 20 5", "5g5f none 0 20 1", ""].join("\n"));
+  writeFileSync(bookFile, ["#YANEURAOU-DB2016 1.00", "sfen lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1", "7g7f 3c3d 0 20 10", "2g2f none 0 20 5", "5g5f none 0 20 1", "1g1f none 0 20 1", ""].join("\n"));
   await api("PUT", "/api/settings", {
     bookPath: bookFile,
     myNames: ["Q"],
