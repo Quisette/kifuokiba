@@ -65,6 +65,13 @@
       </section>
 
       <aside class="side-col">
+        <div v-if="today && todayItems.length" class="panel box today">
+          <div class="cap" style="margin-bottom: 8px">今日の稽古 Today</div>
+          <a v-for="t in todayItems" :key="t.key" :href="t.href" class="todo">
+            <span class="dot" :class="{ done: t.done }"></span>
+            <span>{{ t.text }}</span>
+          </a>
+        </div>
         <div v-if="insights.length" class="panel box insights">
           <div class="cap" style="margin-bottom: 8px">気づき What stands out</div>
           <a v-for="i in insights" :key="i.kind" :href="i.link ?? '#/stats'" class="insight">{{ i.text }}</a>
@@ -141,6 +148,30 @@ const games = ref<GameListItem[]>([]);
 const counts = ref<{ due: number; total: number; reviewedToday: number } | null>(null);
 const settings = ref<Settings | null>(null);
 const insights = ref<{ kind: string; text: string; link?: string }[]>([]);
+type Today = {
+  due: number;
+  reviewedToday: number;
+  losses: { id: number; opponent: string; date: string; strategy: string; mistakes: number; analysed: boolean }[];
+  missedMates: number;
+  weakOpenings: number;
+};
+const today = ref<Today | null>(null);
+const todayItems = computed(() => {
+  const t = today.value;
+  if (!t) return [];
+  const items: { key: string; text: string; href: string; done?: boolean }[] = [];
+  if (t.due) items.push({ key: "due", text: `Review ${t.due} due card${t.due === 1 ? "" : "s"}`, href: "#/review" });
+  else if (t.reviewedToday) items.push({ key: "due", text: `Cards done for today (${t.reviewedToday} reviewed)`, href: "#/review", done: true });
+  for (const g of t.losses)
+    items.push({
+      key: `loss-${g.id}`,
+      text: `Look back at the loss vs ${g.opponent || "?"} (${g.date.slice(5, 10)}${g.mistakes ? `, ${g.mistakes} 悪手` : ""}) and write a review note`,
+      href: `#/game/${g.id}`,
+    });
+  if (t.missedMates) items.push({ key: "mates", text: `Solve the ${t.missedMates} mate${t.missedMates === 1 ? "" : "s"} you missed in games`, href: "#/puzzles" });
+  if (t.weakOpenings) items.push({ key: "open", text: `Drill ${t.weakOpenings} opening position${t.weakOpenings === 1 ? "" : "s"} where your usual move is weak`, href: "#/repertoire" });
+  return items;
+});
 type Activity = { days: { date: string; n: number; again: number }[]; streak: number; best: number; total: number };
 const activity = ref<Activity | null>(null);
 // Weeks as columns, Sunday on top; blank cells pad the first week.
@@ -162,6 +193,7 @@ async function load() {
   ]);
   insights.value = await api.get<{ kind: string; text: string; link?: string }[]>("/api/insights").catch(() => []);
   activity.value = await api.get<Activity>("/api/cards/activity").catch(() => null);
+  today.value = await api.get<Today>("/api/today").catch(() => null);
 }
 onMounted(load);
 watch(() => live.libraryVersion, load);
@@ -187,6 +219,36 @@ async function stop() {
 <style scoped>
 .insights {
   border-color: #8a6a3a;
+}
+.today {
+  border-color: #8a6a3a;
+}
+.todo {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 6px 0;
+  border-top: 1px solid #2a2017;
+}
+.todo:first-of-type {
+  border-top: 0;
+}
+.todo:hover {
+  color: var(--accent, #d9a441);
+}
+.todo .dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 2px solid var(--accent, #d9a441);
+}
+.todo .dot.done {
+  background: var(--accent, #d9a441);
 }
 .streak {
   display: flex;

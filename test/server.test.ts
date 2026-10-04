@@ -426,3 +426,31 @@ describe("automatic backups", () => {
     db.close();
   });
 });
+
+describe("today's study plan", () => {
+  it("lists due cards and recent losses without a review note", async () => {
+    const { Db } = await import("../src/server/db.js");
+    const { Library } = await import("../src/server/library.js");
+    const { Cards } = await import("../src/server/cards.js");
+    const { Pages } = await import("../src/server/pages.js");
+    const { todayPlan } = await import("../src/server/today.js");
+    const { saveSettings } = await import("../src/server/settings.js");
+    const db = new Db(":memory:");
+    const lib = new Library(db);
+    saveSettings(db, { ...lib.settings, myNames: ["me"] });
+    const cards = new Cards(lib, null as never);
+    // Two moves, then black resigns: losses for "me" as black.
+    const imp = (white: string, date: string) => (lib.importText(makeKif({ moves: "7g7f 3c3d", black: "me", white, date })) as { id: number }).id;
+    const old = imp("a", "2026/08/01");
+    const recent = imp("b", "2026/09/08");
+    const noted = imp("c", "2026/09/09");
+    new Pages(db).create({ title: "review", body: `:::shogi-view{game=${noted} ply=1}\n:::` });
+    const plan = todayPlan(lib, cards, null, new Date(2026, 8, 10).getTime());
+    expect(plan.losses.map((g) => g.id)).toEqual([recent]);
+    expect(plan.losses[0].opponent).toBe("b");
+    // Same short move list, different opponents: three games, not duplicates.
+    expect(new Set([old, recent, noted]).size).toBe(3);
+    expect(plan).toMatchObject({ due: 0, missedMates: 0, weakOpenings: 0 });
+    db.close();
+  });
+});

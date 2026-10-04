@@ -79,6 +79,9 @@ const LIST_COLUMNS = `id, black, white, date, event, time_control, source, resul
   strategy, opening, black_opening, white_opening, black_style, white_style, black_castle, white_castle,
   matchup, analysis_status, accuracy_black, accuracy_white, turning_ply, imported_at, file_name`;
 
+/** Games shorter than this are deduplicated by players and date as well as moves. */
+const SHORT_GAME = 30;
+
 export function hashCanonical(canonical: string): string {
   return createHash("sha1").update(canonical).digest("hex");
 }
@@ -115,7 +118,13 @@ export class Library {
     if (summary.moveCount === 0) {
       return { status: "error", name: fileName, error: "no moves in record" };
     }
-    const hash = hashCanonical(summary.canonical);
+    // Moves alone identify a real game across sources, but short games (early
+    // resignations, disconnects) collide; tell those apart by players and day.
+    const key =
+      summary.moveCount < SHORT_GAME
+        ? `${summary.canonical}|${normalizePlayerName(summary.blackName)}|${normalizePlayerName(summary.whiteName)}|${summary.date.slice(0, 10)}`
+        : summary.canonical;
+    const hash = hashCanonical(key);
     const existing = this.db.get<{ id: number }>("SELECT id FROM games WHERE hash = ?", hash);
     if (existing) {
       this.mergeImportedEvals(existing.id, summary);

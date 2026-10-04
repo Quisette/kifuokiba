@@ -16,6 +16,7 @@ import { findPuzzles } from "./puzzles.js";
 import { repertoire } from "./repertoire.js";
 import { AutoBackup } from "./backup.js";
 import { makeZip } from "./zip.js";
+import { todayPlan } from "./today.js";
 import { loadSettings, saveSettings, AppSettings } from "./settings.js";
 import { RecordFileFormat } from "../core/recordFile.js";
 import { UsiEngine } from "./engine/usi.js";
@@ -363,6 +364,7 @@ export function createApp(opts: AppOptions) {
     const book = await loadBook().catch(() => null);
     return repertoire(lib, { side, maxPly: Number(url.searchParams.get("maxPly")) || 24, book });
   });
+  route("GET", "/api/today", async () => todayPlan(lib, cards, await loadBook().catch(() => null)));
   route("GET", "/api/puzzles", (_r, url) =>
     findPuzzles(lib, { mineOnly: url.searchParams.get("mine") !== "0" }).map((p) => ({ ...p, bestText: Library.moveText(p.sfen, p.bestUsi) })),
   );
