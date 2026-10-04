@@ -290,7 +290,8 @@ try {
   check((await page.textContent(".cols")).includes("1te"), "tsume file becomes a collection");
   await shot("08g-tsume");
   await page.click(".card >> text=Solve");
-  await page.waitForSelector("h1");
+  // The puzzle page has an h1 too: wait for the practice page itself.
+  await page.waitForFunction(() => location.hash.startsWith("#/practice") && document.querySelector("h1")?.textContent?.includes("Mate in"), null, { timeout: 10000 }).catch(() => {});
   check((await page.textContent("h1")).includes("Mate in 1"), "a collection problem opens in mate mode");
 
   await page.goto(base + "/#/repertoire");
