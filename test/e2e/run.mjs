@@ -229,6 +229,18 @@ try {
   check((await page.textContent("h1")).includes("Mate in 1"), "a puzzle opens in mate mode");
   await shot("08d-puzzle");
 
+  await page.goto(base + "/#/repertoire");
+  await page.waitForSelector(".layout, .empty");
+  check(!(await page.textContent(".page")).includes("Loading"), "opening drill loads");
+  if (await page.$(".layout")) {
+    await page.waitForTimeout(400);
+    await clickSquare(7, 7);
+    await clickSquare(7, 6);
+    await page.waitForSelector(".verdict");
+    check(/Good|Not one/.test(await page.textContent(".verdict")), "opening drill judges a move");
+  }
+  await shot("08e-drill");
+
   await page.goto(base + "/#/settings");
   await page.waitForSelector("form");
   await shot("08-settings");

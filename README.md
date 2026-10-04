@@ -25,6 +25,7 @@ Everything stays on your machine, in one SQLite file.
 - **Stats.** Win rate by side, opening, opponent's opening, castle, matchup, time control and opponent, plus a monthly trend, where in the game you lose points, and whether fast moves go wrong more often.
 - **Opening book.** Point Settings at a YaneuraOu-format book (.db) and games show which moves were book moves and where you left the book, with the book's choices there.
 - **Explorer.** Walk the opening tree of your own games: each next move with how often you played it, your score after it, your average loss, and the engine's best move.
+- **Opening drill.** The opening positions you reach most often with you to move, as a quiz. A move counts as correct if it's a book move, the engine's choice, or one you play there without losing points. It can filter to the positions where your usual move is weak.
 - **Notebooks.** Markdown pages with live boards, using the personal-shogi-note directives:
 
   ```

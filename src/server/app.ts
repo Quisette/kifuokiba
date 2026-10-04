@@ -13,6 +13,7 @@ import { computeStats, playerProfile, similarGames } from "./stats.js";
 import { Pages } from "./pages.js";
 import { reviewNote } from "./review-note.js";
 import { findPuzzles } from "./puzzles.js";
+import { repertoire } from "./repertoire.js";
 import { loadSettings, saveSettings, AppSettings } from "./settings.js";
 import { RecordFileFormat } from "../core/recordFile.js";
 import { UsiEngine } from "./engine/usi.js";
@@ -334,6 +335,12 @@ export function createApp(opts: AppOptions) {
     type: "text/tab-separated-values; charset=utf-8",
     name: "kifu-study-cards.txt",
   }));
+  route("GET", "/api/repertoire", async (_r, url) => {
+    const side = url.searchParams.get("side") === "white" ? "white" : "black";
+    // A broken book path shouldn't block the drill; it just judges without the book.
+    const book = await loadBook().catch(() => null);
+    return repertoire(lib, { side, maxPly: Number(url.searchParams.get("maxPly")) || 24, book });
+  });
   route("GET", "/api/puzzles", (_r, url) =>
     findPuzzles(lib, { mineOnly: url.searchParams.get("mine") !== "0" }).map((p) => ({ ...p, bestText: Library.moveText(p.sfen, p.bestUsi) })),
   );

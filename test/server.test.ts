@@ -351,3 +351,33 @@ describe("mate puzzles", () => {
     db.close();
   });
 });
+
+describe("opening drill", () => {
+  it("collects my opening positions and judges moves by engine, book and my own good moves", async () => {
+    const { Db } = await import("../src/server/db.js");
+    const { Library } = await import("../src/server/library.js");
+    const { repertoire } = await import("../src/server/repertoire.js");
+    const { saveSettings } = await import("../src/server/settings.js");
+    const db = new Db(":memory:");
+    const lib = new Library(db);
+    saveSettings(db, { ...lib.settings, myNames: ["me"] });
+    const ids = ["7g7f 3c3d 2g2f", "7g7f 3c3d 6g6f", "7g7f 3c3d 6g6f 8c8d"].map(
+      (moves, i) => (lib.importText(makeKif({ moves, black: "me", white: "x" + i, date: `2026/09/0${i + 1}` })) as { id: number }).id,
+    );
+    // Engine prefers 2g2f after 7g7f 3c3d; 6g6f lost 5 points each time, 2g2f lost nothing.
+    for (const id of ids) {
+      db.run("UPDATE plies SET best_usi = '2g2f' WHERE game_id = ? AND ply = 2", id);
+      db.run("UPDATE plies SET loss = CASE usi WHEN '6g6f' THEN 5 ELSE 0 END WHERE game_id = ? AND ply = 3", id);
+    }
+    const r = repertoire(lib, { side: "black" });
+    const p = r.find((x) => x.ply === 2)!;
+    expect(p.count).toBe(3);
+    expect(p.played.map((m) => [m.usi, m.count, m.good])).toEqual([["6g6f", 2, false], ["2g2f", 1, true]]);
+    expect(p.accepted.map((a) => [a.usi, a.why])).toEqual([["2g2f", "engine"]]);
+    expect(p.problem).toBe(true);
+    // The first move has no analysis at all, so it is left out rather than accepting anything.
+    expect(r.find((x) => x.ply === 0)).toBeUndefined();
+    expect(repertoire(lib, { side: "white" })).toEqual([]);
+    db.close();
+  });
+});

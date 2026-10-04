@@ -2,6 +2,7 @@
   <div class="page">
     <div class="head">
       <h1>定跡 Explorer <span class="muted" style="font-size: 15px">moves from my own games</span></h1>
+      <a class="btn small" href="#/repertoire">定跡ドリル Drill my openings</a>
       <div class="chips" role="group" aria-label="My side">
         <button v-for="o in sides" :key="o.value" type="button" class="chip" :class="{ on: side === o.value }" @click="setSide(o.value)">{{ o.label }}</button>
       </div>

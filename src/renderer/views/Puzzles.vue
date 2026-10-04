@@ -103,4 +103,9 @@ function reveal(p: Puzzle) {
 .small {
   font-size: 12px;
 }
+label.small {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
 </style>
