@@ -29,7 +29,7 @@ Everything stays on your machine, in one SQLite file.
 - **Mates from my games.** Every analysed position where the side to move had a forced mate becomes a puzzle, with the ones you missed listed first. You solve it on the board while the engine defends, and it tells you the moment a move lets the king escape.
 - **Stats.** Win rate by side, opening, opponent's opening, castle, matchup, time control and opponent, plus a monthly trend, where in the game you lose points, and whether fast moves go wrong more often.
 - **Opening book.** Point Settings at a YaneuraOu-format book (.db) and games show which moves were book moves and where you left the book, with the book's choices there.
-- **Explorer.** Walk the opening tree of your own games: each next move with how often you played it, your score after it, your average loss, and the engine's best move.
+- **Explorer.** Walk the opening tree of your own games: each next move with how often you played it, your score after it, your average loss, and the engine's best move. From a player's profile, "Openings against them" narrows the tree to your games with that opponent, to prepare for the next one.
 - **Opening drill.** The opening positions you reach most often with you to move, as a quiz. A move counts as correct if it's a book move, the engine's choice, or one you play there without losing points. It can filter to the positions where your usual move is weak.
 - **Notebooks.** Markdown pages with live boards, using the personal-shogi-note directives:
 

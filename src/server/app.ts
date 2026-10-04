@@ -190,6 +190,7 @@ export function createApp(opts: AppOptions) {
     return explore(lib, url.searchParams.get("sfen") || InitialPositionSFEN.STANDARD, {
       side: side === "black" || side === "white" ? side : "",
       source: url.searchParams.get("source") ?? "",
+      opponent: url.searchParams.get("opponent") ?? "",
     });
   });
 

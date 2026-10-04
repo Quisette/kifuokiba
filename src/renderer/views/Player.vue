@@ -9,6 +9,7 @@
           {{ p.totals.games }} games · {{ p.firstPlayed.slice(0, 10) }} – {{ p.lastPlayed.slice(0, 10) }}<template v-if="p.theirRating"> · rating {{ p.theirRating }}</template>
         </span>
         <a class="btn small" :href="`#/library?opponent=${encodeURIComponent(p.name)}`">Open in library</a>
+        <a class="btn small" :href="`#/explorer?opponent=${encodeURIComponent(p.name)}`">Openings against them</a>
       </div>
 
       <div class="tiles panel">

@@ -189,6 +189,11 @@ try {
     await page.waitForSelector(".game");
     check((await page.$$(".game")).length === games.filter((g) => g.opponent === opp).length, "player profile lists games vs that opponent");
     await shot("06c-player");
+    await page.click("text=Openings against them");
+    await page.waitForSelector(".chip.opp");
+    await page.waitForTimeout(300);
+    const vsGames = (await api("GET", `/api/explorer?opponent=${encodeURIComponent(opp)}`)).games;
+    check((await page.textContent(".summary .stat")).trim() === String(vsGames) && vsGames <= games.filter((g) => g.opponent === opp).length, "explorer filters to one opponent");
   }
 
   await page.goto(base + "/#/explorer");

@@ -6,6 +6,10 @@
       <div class="chips" role="group" aria-label="My side">
         <button v-for="o in sides" :key="o.value" type="button" class="chip" :class="{ on: side === o.value }" @click="setSide(o.value)">{{ o.label }}</button>
       </div>
+      <span v-if="opponent" class="chip on opp">
+        vs {{ opponent }}
+        <a :href="'#/' + link(moves, side, '')" aria-label="Show games against everyone">×</a>
+      </span>
     </div>
 
     <div class="layout">
@@ -127,6 +131,8 @@ const sides = [
 const startSfen = computed(() => route.query.get("sfen") || InitialPositionSFEN.STANDARD);
 const moves = computed(() => (route.query.get("moves") ?? "").split(",").filter(Boolean));
 const side = computed(() => route.query.get("side") ?? "");
+// Only games against this opponent (player profile → "Their openings against me").
+const opponent = computed(() => route.query.get("opponent") ?? "");
 
 // Replay the move list; stop at the first illegal move so a bad link still shows something.
 const line = computed(() => {
@@ -154,17 +160,17 @@ const crumbs = computed(() => line.value.steps.map((s) => s.text));
 
 let seq = 0;
 watch(
-  [sfen, side],
+  [sfen, side, opponent],
   async () => {
     const my = ++seq;
-    const q = `sfen=${encodeURIComponent(sfen.value)}&side=${side.value}`;
+    const q = `sfen=${encodeURIComponent(sfen.value)}&side=${side.value}&opponent=${encodeURIComponent(opponent.value)}`;
     const [r, hits] = await Promise.all([
       api.get<Result>(`/api/explorer?${q}`),
       api.get<{ gameId: number; ply: number; game: GameListItem }[]>(`/api/position-search?sfen=${encodeURIComponent(sfen.value)}`),
     ]);
     if (my !== seq) return;
     data.value = r;
-    gamesHere.value = hits.filter((h) => !side.value || h.game.mySide === side.value);
+    gamesHere.value = hits.filter((h) => (!side.value || h.game.mySide === side.value) && (!opponent.value || h.game.opponent === opponent.value));
   },
   { immediate: true },
 );
@@ -187,11 +193,12 @@ const bookOnly = computed(() => bookMoves.value.filter((b) => !data.value?.moves
 
 const arrows = computed(() => (data.value?.moves ?? []).slice(0, 3).map((m) => ({ usi: m.usi })));
 
-function link(ms: string[], s = side.value) {
+function link(ms: string[], s = side.value, opp = opponent.value) {
   const p = new URLSearchParams();
   if (route.query.get("sfen")) p.set("sfen", startSfen.value);
   if (ms.length) p.set("moves", ms.join(","));
   if (s) p.set("side", s);
+  if (opp) p.set("opponent", opp);
   const q = p.toString();
   return "explorer" + (q ? "?" + q : "");
 }
@@ -330,5 +337,10 @@ td.meh {
 }
 .game-link:hover {
   background: var(--panel);
+}
+.opp a {
+  margin-left: 6px;
+  color: inherit;
+  text-decoration: none;
 }
 </style>

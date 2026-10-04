@@ -321,6 +321,11 @@ describe("library API", () => {
     const white = await api("GET", "/api/explorer?side=white");
     expect(white.games).toBe(0);
     expect(white.moves).toEqual([]);
+
+    // Against one opponent only (the player profile's "Openings against them").
+    const vs = await api("GET", "/api/explorer?opponent=rival");
+    expect(vs.games).toBe(1);
+    expect((await api("GET", "/api/explorer?opponent=nobody")).games).toBe(0);
   });
 });
 

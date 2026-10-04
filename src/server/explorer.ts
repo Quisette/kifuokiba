@@ -4,7 +4,7 @@ import { Library } from "./library.js";
 import { sfenKey } from "./db.js";
 import type { GameListItem } from "./library.js";
 
-export type ExplorerFilter = { side?: "black" | "white" | ""; source?: string };
+export type ExplorerFilter = { side?: "black" | "white" | ""; source?: string; opponent?: string };
 
 export type ExplorerMove = {
   usi: string;
@@ -38,6 +38,7 @@ export function explore(lib: Library, sfen: string, filter: ExplorerFilter = {})
   for (const g of lib.listGames()) {
     if (filter.side && g.mySide !== filter.side) continue;
     if (filter.source && g.source !== filter.source) continue;
+    if (filter.opponent && g.opponent !== filter.opponent) continue;
     games.set(g.id, g);
   }
   const hits = lib.db.all<{ game_id: number; ply: number; sfen: string; score: number | null; mate: number | null; best_usi: string }>(
