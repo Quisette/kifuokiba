@@ -130,7 +130,13 @@ export class AnalysisQueue extends EventEmitter {
     try {
       while (this.queue.length && !this.stopRequested) {
         const id = this.queue.shift()!;
-        await this.analyseGame(id);
+        try {
+          await this.analyseGame(id);
+        } catch (e) {
+          // Keep the evals found so far; the game can be queued again.
+          this.lib.db.run("UPDATE games SET analysis_status = 'none' WHERE id = ? AND analysis_status = 'queued'", id);
+          throw e;
+        }
         if (!this.stopRequested) this.done++;
       }
     } catch (e) {

@@ -75,7 +75,7 @@ export class UsiEngine {
       };
       const onClose = () => {
         cleanup();
-        reject(new Error("engine process exited"));
+        reject(new Error(`The engine stopped unexpectedly${this.exitInfo ? ` (${this.exitInfo})` : ""}. Analysis paused; start it again to continue.`));
       };
       const cleanup = () => {
         if (timer) clearTimeout(timer);
@@ -87,6 +87,7 @@ export class UsiEngine {
     });
   }
   private closeHandlers: (() => void)[] = [];
+  private exitInfo = "";
 
   async start(): Promise<void> {
     this.proc = new ChildProcess(this.path);
@@ -99,8 +100,9 @@ export class UsiEngine {
       this.proc!.on("error", (e: Error) => reject(e));
     });
     failed.catch(() => undefined);
-    this.proc.on("close", () => {
+    this.proc.on("close", (code, signal) => {
       this.closed = true;
+      this.exitInfo = signal ? `signal ${signal}` : code !== null ? `exit code ${code}` : "";
       for (const h of [...this.closeHandlers]) h();
     });
     this.send("usi");
