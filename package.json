@@ -47,6 +47,19 @@
     "directories": {
       "output": "release"
     },
+    "fileAssociations": [
+      {
+        "ext": [
+          "kif",
+          "kifu",
+          "ki2",
+          "csa",
+          "jkf"
+        ],
+        "name": "Shogi kifu",
+        "role": "Viewer"
+      }
+    ],
     "files": [
       "dist/**/*",
       "package.json",

@@ -529,6 +529,22 @@ export function createApp(opts: AppOptions) {
     analysis,
     cards,
     server,
+    /** Import files opened from the OS (double-click, "Open with"); returns the game to show, if any. */
+    async importPaths(paths: string[]): Promise<number | undefined> {
+      const added: number[] = [];
+      let show: number | undefined;
+      for (const file of paths) {
+        try {
+          const r = lib.importBuffer(new Uint8Array(await readFile(file)), path.basename(file));
+          if (r.status === "added") added.push(r.id);
+          if (r.status !== "error") show ??= r.id;
+        } catch {
+          /* unreadable file: skip */
+        }
+      }
+      afterImport(added);
+      return show;
+    },
     listen(): Promise<number> {
       return new Promise((resolve) => {
         server.listen(opts.port ?? 0, opts.host ?? "127.0.0.1", () => {

@@ -58,6 +58,8 @@ The library is also backed up once a day to a `backups` folder next to it; the n
 
 `serve` reads `PORT`, `KIFU_STUDY_DATA` (default `~/.kifu-study`) and `KIFU_STUDY_DB`. The Electron app keeps its database in the OS user-data folder.
 
+The installed app opens .kif, .kifu, .ki2, .csa and .jkf files: double-click one (or use "Open with") and it is imported and shown.
+
 On first launch, open Settings, enter your player names, and set the path to a USI engine.
 
 ## Installers

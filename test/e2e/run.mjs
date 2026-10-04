@@ -138,6 +138,9 @@ try {
   await shot("03-game");
   check((await page.textContent(".here")).includes("手目"), "keyboard jumps to a mistake");
 
+  await page.click("summary:has-text('Export')");
+  check((await page.$$(".menu-list a")).length === 4, "export menu lists four formats");
+  await page.click("summary:has-text('Export')");
   await page.click("text=Write review note");
   await page.waitForURL(/#\/notes\/\d+/);
   await page.waitForSelector(".board img.piece-image", { timeout: 10000 });

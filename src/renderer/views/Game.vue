@@ -29,11 +29,16 @@
         <button type="button" class="btn" @click="flip = !flip">Flip 反転</button>
         <a class="btn" :href="`#/practice?sfen=${encodeURIComponent(cur.sfen)}&back=game/${id}`" title="Play this position out against the engine">Play it out</a>
         <button type="button" class="btn" @click="analyse">{{ game.analysis_status === "done" ? "Re-analyse" : "Analyse" }}</button>
-        <a class="btn" :href="`/api/games/${id}/export?format=kif`" download>Export KIF</a>
-        <a class="btn" :href="`/api/games/${id}/export?format=csa`" download>CSA</a>
         <button type="button" class="btn" @click="writeReview">Write review note</button>
-        <a class="btn" :href="`/api/games/${id}/note?portable=1&download=1`" download title="Markdown with :::shogi-view boards for personal-shogi-note">.mdx</a>
-        <a class="btn" :href="diagramHref" download title="This position as an SVG image">Diagram</a>
+        <details class="menu">
+          <summary class="btn">Export ▾</summary>
+          <div class="menu-list panel" @click="closeMenu">
+            <a :href="`/api/games/${id}/export?format=kif`" download>KIF (with evals)</a>
+            <a :href="`/api/games/${id}/export?format=csa`" download>CSA</a>
+            <a :href="`/api/games/${id}/note?portable=1&download=1`" download title="Markdown with :::shogi-view boards for personal-shogi-note">Review note (.mdx)</a>
+            <a :href="diagramHref" download>Diagram of this position (.svg)</a>
+          </div>
+        </details>
       </div>
     </div>
 
@@ -508,6 +513,9 @@ async function makeCard() {
     toast(String(e));
   }
 }
+function closeMenu(e: Event) {
+  (e.currentTarget as HTMLElement).closest("details")?.removeAttribute("open");
+}
 // A notebook page with the game summary and each big mistake as a board, ready to annotate.
 async function writeReview() {
   try {
@@ -623,6 +631,35 @@ async function findPosition() {
   display: flex;
   gap: 8px;
   align-items: stretch;
+}
+.menu {
+  position: relative;
+}
+.menu summary {
+  list-style: none;
+}
+.menu summary::-webkit-details-marker {
+  display: none;
+}
+.menu-list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 230px;
+  padding: 6px;
+}
+.menu-list a {
+  padding: 7px 10px;
+  border-radius: 6px;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 13px;
+}
+.menu-list a:hover {
+  background: var(--panel-2);
 }
 .evalbar {
   width: 14px;
