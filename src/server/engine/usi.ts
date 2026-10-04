@@ -23,6 +23,8 @@ export type SearchLine = {
   nodes?: number;
 };
 
+export type MateResult = { status: "mate"; moves: string[] } | { status: "nomate" | "timeout" | "notimplemented" };
+
 export type SearchResult = {
   bestmove: string; // "resign" / "win" possible
   lines: SearchLine[]; // index 0 = multipv 1
@@ -179,6 +181,46 @@ export class UsiEngine {
         sorted[0].pv = [bestmove];
       }
       return { bestmove, lines: sorted };
+    };
+    const p = this.queue.then(run, run);
+    this.queue = p.catch(() => undefined);
+    return p;
+  }
+
+  /**
+   * Mate search ("go mate"). Engines with a mate solver answer "checkmate <moves>",
+   * "checkmate nomate", "checkmate timeout" or "checkmate notimplemented"; an engine
+   * that runs a normal search instead is judged by the mate score it reports.
+   */
+  mate(position: string, timeMs: number): Promise<MateResult> {
+    const run = async (): Promise<MateResult> => {
+      if (!this.running) throw new Error("engine is not running");
+      this.send(`position ${position}`);
+      this.send(`go mate ${timeMs}`);
+      // Some builds treat "go mate" as an unbounded normal search; stop them at the limit.
+      // A mate score in that search's output still answers the question.
+      let mateLine: string[] | null = null;
+      const timer = setTimeout(() => this.send("stop"), timeMs + 200);
+      try {
+        const line = await this.waitFor(
+          (l) => l.startsWith("checkmate") || l.startsWith("bestmove"),
+          timeMs + 30_000,
+          (l) => {
+            if (!l.startsWith("info ")) return;
+            const info = parseInfoCommand(l.slice(5));
+            if (info.scoreMate !== undefined && info.scoreMate > 0 && info.pv?.length) mateLine = info.pv;
+            else if (info.scoreCP !== undefined) mateLine = null;
+          },
+        );
+        if (line.startsWith("bestmove")) return mateLine ? { status: "mate", moves: mateLine } : { status: "nomate" };
+        const rest = line.slice("checkmate".length).trim();
+        if (rest === "nomate") return { status: "nomate" };
+        if (rest === "timeout" || rest === "") return { status: "timeout" };
+        if (rest === "notimplemented") return { status: "notimplemented" };
+        return { status: "mate", moves: rest.split(/\s+/) };
+      } finally {
+        clearTimeout(timer);
+      }
     };
     const p = this.queue.then(run, run);
     this.queue = p.catch(() => undefined);

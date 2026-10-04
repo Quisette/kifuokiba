@@ -117,6 +117,12 @@ export class AnalysisQueue extends EventEmitter {
     return { ...toBlackView(sfenAfter, r), lines: r.lines, engine: e.name };
   }
 
+  /** Definitive mate search on one position ("go mate"). */
+  async mateSearch(position: string, timeMs: number) {
+    const e = await this.getEngine();
+    return { ...(await e.mate(position, timeMs)), engine: e.name };
+  }
+
   private async loop() {
     this.running = true;
     this.stopRequested = false;

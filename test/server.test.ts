@@ -144,6 +144,16 @@ describe("library API", () => {
     expect(mine.split("\t")[2]).toContain("kifu-study");
   });
 
+  it("checks positions for a forced mate", async () => {
+    // 頭金: ☗5二金打 mates the king on 5一, with the pawn on 5三 guarding the gold.
+    const mate = await api("POST", "/api/mate", { sfen: "4k4/9/4P4/9/9/9/9/9/4K4 b G 1", timeMs: 1000 });
+    expect(mate.status).toBe("mate");
+    expect(mate.moves).toEqual(["G*5b"]);
+    expect(mate.text).toContain("５二金");
+    const none = await api("POST", "/api/mate", { sfen: "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1", timeMs: 1000 });
+    expect(none.status).toBe("nomate");
+  });
+
   it("explores my games move by move", async () => {
     const root = await api("GET", "/api/explorer");
     expect(root.games).toBe(2);

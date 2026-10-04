@@ -113,6 +113,9 @@ try {
   check((await page.$$(".board img.piece-image")).length >= 38, "board renders pieces");
   await page.keyboard.press("]");
   await page.waitForTimeout(300);
+  await page.click("text=詰みチェック");
+  await page.waitForSelector(".mate-result", { timeout: 20000 });
+  check(/手詰|No forced mate|no mate search|without an answer/.test(await page.textContent(".mate-result")), "mate check answers");
   await shot("03-game");
   check((await page.textContent(".here")).includes("手目"), "keyboard jumps to a mistake");
 

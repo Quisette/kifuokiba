@@ -126,9 +126,22 @@
               <span class="muted">{{ evalText(l.score ?? null, l.mate ?? null) }}</span>
             </div>
           </div>
-          <button type="button" class="btn small" style="margin-top: 10px" :disabled="multiBusy" @click="candidates">
-            {{ multiBusy ? "Thinking…" : "Candidate moves" }}
-          </button>
+          <div class="row" style="margin-top: 10px">
+            <button type="button" class="btn small" :disabled="multiBusy" @click="candidates">
+              {{ multiBusy ? "Thinking…" : "Candidate moves" }}
+            </button>
+            <button type="button" class="btn small" :disabled="mateBusy" title="Ask the engine for a forced mate from this position" @click="mateCheck">
+              {{ mateBusy ? "Searching…" : "詰みチェック Mate?" }}
+            </button>
+          </div>
+          <div v-if="mateResult" class="mate-result" :class="mateResult.status">
+            <template v-if="mateResult.status === 'mate'">
+              <b>{{ mateResult.moves.length }}手詰</b> <span class="serif">{{ mateResult.text }}</span>
+            </template>
+            <template v-else-if="mateResult.status === 'nomate'">No forced mate found in {{ MATE_SECONDS }}s.</template>
+            <template v-else-if="mateResult.status === 'timeout'">Ran out of time ({{ MATE_SECONDS }}s) without an answer.</template>
+            <template v-else>This engine has no mate search.</template>
+          </div>
         </div>
 
         <div class="panel box">
@@ -376,6 +389,22 @@ const arrows = computed(() => {
 type Line = { multipv: number; pv: string[]; text: string; score?: number; mate?: number; scoreSide?: number };
 const multi = ref<Line[]>([]);
 const multiBusy = ref(false);
+const MATE_SECONDS = 5;
+type MateResult = { status: "mate"; moves: string[]; text: string } | { status: "nomate" | "timeout" | "notimplemented" };
+const mateBusy = ref(false);
+const mateResult = ref<MateResult | null>(null);
+watch(() => game.value?.plies[cursor.value]?.sfen, () => (mateResult.value = null));
+async function mateCheck() {
+  mateBusy.value = true;
+  try {
+    mateResult.value = await api.post<MateResult>("/api/mate", { sfen: cur.value.sfen, timeMs: MATE_SECONDS * 1000 });
+  } catch (e) {
+    toast(String(e));
+  } finally {
+    mateBusy.value = false;
+  }
+}
+
 async function candidates() {
   multiBusy.value = true;
   try {
@@ -459,6 +488,16 @@ async function findPosition() {
 </script>
 
 <style scoped>
+.mate-result {
+  margin-top: 8px;
+  font-size: 13px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--panel-2);
+}
+.mate-result.mate {
+  border: 1px solid var(--loss);
+}
 .title-row {
   display: flex;
   flex-wrap: wrap;

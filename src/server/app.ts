@@ -208,6 +208,14 @@ export function createApp(opts: AppOptions) {
     analysis.stop();
     return analysis.status();
   });
+  route("POST", "/api/mate", async (_r, _u, _p, body) => {
+    const b = body as { sfen: string; timeMs?: number };
+    const pos = Position.newBySFEN(b.sfen);
+    if (!pos) throw new HttpError(400, "bad sfen");
+    const timeMs = Math.min(Math.max(b.timeMs ?? 5000, 100), 60_000);
+    const r = await analysis.mateSearch(`sfen ${pos.sfen}`, timeMs);
+    return r.status === "mate" ? { ...r, text: Library.pvText(pos.sfen, r.moves.join(" ")) } : r;
+  });
   route("POST", "/api/analyze-position", async (_r, _u, _p, body) => {
     const b = body as { sfen: string; moves?: string[]; multipv?: number; movetimeMs?: number };
     const pos = Position.newBySFEN(b.sfen);

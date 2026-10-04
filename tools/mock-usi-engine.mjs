@@ -102,6 +102,19 @@ function go() {
   send(`bestmove ${scored[0].m.usi}`);
 }
 
+// "go mate": finds mate in one only (a checking move that leaves no legal reply).
+function goMate() {
+  for (const m of legalMoves(position)) {
+    const p = position.clone();
+    p.doMove(m);
+    if (p.checked && legalMoves(p).length === 0) {
+      send(`checkmate ${m.usi}`);
+      return;
+    }
+  }
+  send("checkmate nomate");
+}
+
 const rl = createInterface({ input: process.stdin });
 rl.on("line", (raw) => {
   const line = raw.trim();
@@ -127,6 +140,10 @@ rl.on("line", (raw) => {
       setPosition(args);
       break;
     case "go":
+      if (args.startsWith("mate")) {
+        goMate();
+        break;
+      }
       if (delayMs) setTimeout(go, delayMs);
       else go();
       break;
