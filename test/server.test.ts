@@ -108,6 +108,9 @@ describe("library API", () => {
     expect(fast.mistakes).toBeGreaterThanOrEqual(1);
     expect(s.thinkTime.find((b: { label: string }) => b.label === "60s+").moves).toBe(1);
     expect(s.phaseProfile[0].avgSeconds).toBeCloseTo(25, 0);
+    // ▲3三角成 lands on 3三: row 3, column for file 3.
+    expect(s.mistakeMap.cells[(3 - 1) * 9 + (9 - 3)]).toBeGreaterThanOrEqual(1);
+    expect(s.mistakeMap.byPiece.find((p: { piece: string }) => p.piece === "角")?.n).toBeGreaterThanOrEqual(1);
   });
 
   it("stores notebook pages and position search", async () => {

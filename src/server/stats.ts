@@ -1,3 +1,4 @@
+import { Position, pieceTypeToStringForMove } from "tsshogi";
 import { Library, GameFilter, GameListItem } from "./library.js";
 
 type Score = { games: number; wins: number; losses: number; draws: number; winRate: number | null };
@@ -78,6 +79,33 @@ export function computeStats(lib: Library, filter: GameFilter = {}) {
     }
   }
 
+  // Where my 疑問手 and worse land, seen from my side of the board, and which pieces made them.
+  const heat = new Array<number>(81).fill(0);
+  const byPiece = new Map<string, number>();
+  const badRows = lib.db.all<{ game_id: number; ply: number; usi: string; prev_sfen: string }>(
+    `SELECT p.game_id, p.ply, p.usi, q.sfen prev_sfen FROM plies p
+     JOIN plies q ON q.game_id = p.game_id AND q.ply = p.ply - 1
+     WHERE p.ply > 0 AND p.level >= 2`,
+  );
+  for (const r of badRows) {
+    const g = sideById.get(r.game_id);
+    if (!g) continue;
+    const moverBlack = (r.ply % 2 === 1) === (firstBlack.get(r.game_id) ?? true);
+    if ((g.mySide === "black") !== moverBlack) continue;
+    const pos = Position.newBySFEN(r.prev_sfen);
+    const m = pos?.createMoveByUSI(r.usi);
+    if (!pos || !m) continue;
+    let file = m.to.file;
+    let rank = m.to.rank;
+    if (!moverBlack) {
+      file = 10 - file;
+      rank = 10 - rank;
+    }
+    heat[(rank - 1) * 9 + (9 - file)]++;
+    const piece = pieceTypeToStringForMove(m.pieceType) + (r.usi.includes("*") ? "打" : "");
+    byPiece.set(piece, (byPiece.get(piece) ?? 0) + 1);
+  }
+
   const analysed = mine.filter((g) => g.myAccuracy !== null).sort((a, b) => (a.date < b.date ? -1 : 1));
   return {
     totals: score(mine),
@@ -98,6 +126,12 @@ export function computeStats(lib: Library, filter: GameFilter = {}) {
     accuracyTrend: analysed.map((g) => ({ id: g.id, date: g.date, accuracy: g.myAccuracy!, result: g.myResult })),
     meanAccuracy: mean(analysed.map((g) => g.myAccuracy!)),
     meanMistakes: mean(mine.filter((g) => g.analysis_status !== "none").map((g) => g.mistakes)),
+    /** Counts per square, row-major from my side's 9一 corner (index = (rank-1)*9 + (9-file)). */
+    mistakeMap: {
+      cells: heat,
+      total: heat.reduce((a, b) => a + b, 0),
+      byPiece: [...byPiece.entries()].map(([piece, n]) => ({ piece, n })).sort((a, b) => b.n - a.n),
+    },
     /** My rating per game, one series per site; empty when no names carry ratings. */
     ratingHistory: (() => {
       const bySource = new Map<string, { id: number; date: string; rating: number; result: string }[]>();

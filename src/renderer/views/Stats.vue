@@ -94,6 +94,21 @@
           </table>
         </section>
 
+        <section v-if="s.mistakeMap.total" class="panel box">
+          <div class="cap">悪手の地図 Where my 疑問手+ land (my side at the bottom)</div>
+          <div class="heat" role="img" :aria-label="`${s.mistakeMap.total} mistakes by destination square`">
+            <span
+              v-for="(n, i) in s.mistakeMap.cells"
+              :key="i"
+              :style="{ background: n ? `rgba(217,119,61,${0.15 + 0.85 * (n / heatMax)})` : 'transparent' }"
+              :title="`${squareName(i)}: ${n}`"
+            >{{ n || "" }}</span>
+          </div>
+          <div class="pieces">
+            <span v-for="p in s.mistakeMap.byPiece" :key="p.piece" class="tag">{{ p.piece }} {{ p.n }}</span>
+          </div>
+        </section>
+
         <section v-if="s.thinkTime.length" class="panel box">
           <div class="cap">考慮時間 Think time vs mistakes (my moves)</div>
           <table class="grid">
@@ -158,6 +173,7 @@ type StatsT = {
   byOpponent: Row[];
   rolling: { date: string; winRate: number }[];
   ratingHistory: { source: string; points: RatingPoint[] }[];
+  mistakeMap: { cells: number[]; total: number; byPiece: { piece: string; n: number }[] };
   rankChanges: { source: string; date: string; rank: string; id: number }[];
   accuracyTrend: { id: number; date: string; accuracy: number; result: string }[];
   meanAccuracy: number | null;
@@ -179,6 +195,9 @@ watch(filter, load);
 
 const pct = (v: number | null | undefined) => (v == null ? "–" : v.toFixed(0));
 const phaseName = (p: string) => ({ opening: "序盤 1–30", middlegame: "中盤 31–80", endgame: "終盤 81+" })[p] ?? p;
+const heatMax = computed(() => Math.max(1, ...(s.value?.mistakeMap.cells ?? [])));
+const KANJI = ["一", "二", "三", "四", "五", "六", "七", "八", "九"];
+const squareName = (i: number) => `${9 - (i % 9)}${KANJI[Math.floor(i / 9)]}`;
 type RatingPoint = { id: number; date: string; rating: number; result: string };
 function ratingPts(pts: RatingPoint[]) {
   const lo = Math.min(...pts.map((p) => p.rating)) - 10;
@@ -236,6 +255,28 @@ const BarTable = defineComponent({
 </script>
 
 <style scoped>
+.heat {
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  width: min(100%, 280px);
+  aspect-ratio: 1;
+  border: 1px solid var(--line-2);
+  background: #2b2118;
+}
+.heat span {
+  border: 1px solid #3d2f21;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--text);
+}
+.pieces {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
 .chart.short {
   height: 80px;
 }
