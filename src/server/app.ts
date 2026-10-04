@@ -16,6 +16,7 @@ import { UsiEngine } from "./engine/usi.js";
 import { InitialPositionSFEN, Position } from "tsshogi";
 import { explore } from "./explorer.js";
 import { syncLishogi } from "./fetchers/sync.js";
+import { FolderWatcher } from "./watch.js";
 import type { FetchLike } from "./fetchers/lishogi.js";
 
 export type AppOptions = {
@@ -82,6 +83,13 @@ export function createApp(opts: AppOptions) {
   analysis.on("status", (s) => broadcast("analysis", s));
   analysis.on("gameDone", (id) => broadcast("gameDone", { id }));
 
+  const afterImport = (added: number[]) => {
+    if (added.length && lib.settings.autoAnalyze && lib.settings.engine.path) analysis.enqueue(added);
+    broadcast("library", { added: added.length });
+  };
+  const watcher = new FolderWatcher(lib, (r) => afterImport(r.added));
+  watcher.configure(lib.settings.watchFolders);
+
   const routes: [string, RegExp, Handler][] = [];
   const route = (method: string, pattern: string, h: Handler) => {
     const re = new RegExp("^" + pattern.replace(/:(\w+)/g, "([^/]+)") + "$");
@@ -121,8 +129,12 @@ export function createApp(opts: AppOptions) {
     } catch (e) {
       throw new HttpError(502, e instanceof Error ? e.message : String(e));
     }
-    if (r.added.length && lib.settings.autoAnalyze && lib.settings.engine.path) analysis.enqueue(r.added);
-    broadcast("library", { added: r.added.length });
+    afterImport(r.added);
+    return r;
+  });
+  route("POST", "/api/watch/scan", async () => {
+    const r = await watcher.scan();
+    afterImport(r.added);
     return r;
   });
 
@@ -288,8 +300,10 @@ export function createApp(opts: AppOptions) {
   // ---- settings
   route("GET", "/api/settings", () => loadSettings(db));
   route("PUT", "/api/settings", (_r, _u, _p, body) => {
-    const next = { ...loadSettings(db), ...(body as Partial<AppSettings>) };
+    const prev = loadSettings(db);
+    const next = { ...prev, ...(body as Partial<AppSettings>) };
     saveSettings(db, next);
+    if (JSON.stringify(next.watchFolders) !== JSON.stringify(prev.watchFolders)) watcher.configure(next.watchFolders);
     // Names decide "my side"; regrade so cards follow.
     for (const g of db.all<{ id: number }>("SELECT id FROM games WHERE analysis_status IN ('done','imported')")) lib.regrade(g.id);
     return next;
@@ -384,6 +398,7 @@ export function createApp(opts: AppOptions) {
       });
     },
     async close() {
+      watcher.close();
       for (const r of sseClients) r.end();
       await analysis.shutdown();
       await new Promise<void>((r) => server.close(() => r()));

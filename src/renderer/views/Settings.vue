@@ -29,6 +29,19 @@
       </section>
 
       <section class="panel box">
+        <h3>監視フォルダ Watched folders</h3>
+        <label class="field">
+          Import kifu saved into these folders (one full path per line; subfolders included)
+          <textarea v-model="folders" rows="3" placeholder="/Users/q/Documents/ShogiGUI/kifu&#10;C:\Users\q\Documents\将棋ウォーズ"></textarea>
+        </label>
+        <div class="row">
+          <button type="button" class="btn" :disabled="!folders.trim() || scanning" @click="scan">{{ scanning ? "Scanning…" : "Save and scan now" }}</button>
+          <span v-if="scanResult" class="small">{{ scanResult }}</span>
+        </div>
+        <div class="muted small">New and changed .kif, .kifu, .ki2, .csa and .jkf files are picked up while the app is open.</div>
+      </section>
+
+      <section class="panel box">
         <h3>エンジン Engine</h3>
         <label class="field">
           USI engine executable (full path)
@@ -113,6 +126,7 @@ const testResult = ref<{ ok: boolean; name?: string; bestmove?: string; error?: 
 onMounted(async () => {
   s.value = await api.get<Settings>("/api/settings");
   names.value = s.value.myNames.join("\n");
+  folders.value = (s.value.watchFolders ?? []).join("\n");
   options.value = Object.entries(s.value.engine.options)
     .map(([k, v]) => `${k}=${v}`)
     .join("\n");
@@ -131,9 +145,30 @@ async function save() {
   if (!s.value) return;
   s.value.myNames = names.value.split("\n").map((x) => x.trim()).filter(Boolean);
   s.value.engine.options = parseOptions();
+  s.value.watchFolders = folders.value.split("\n").map((x) => x.trim()).filter(Boolean);
   s.value = await api.put<Settings>("/api/settings", s.value);
   toast("Settings saved");
 }
+const folders = ref("");
+const scanning = ref(false);
+const scanResult = ref("");
+async function scan() {
+  scanning.value = true;
+  scanResult.value = "";
+  try {
+    await save();
+    const r = await api.post<{ scanned: number; added: number[]; duplicates: number; errors: unknown[]; missing: string[] }>("/api/watch/scan", {});
+    scanResult.value =
+      `${r.added.length} new, ${r.duplicates} already here` +
+      (r.errors.length ? `, ${r.errors.length} unreadable` : "") +
+      (r.missing.length ? `. Not found: ${r.missing.join(", ")}` : "");
+  } catch (e) {
+    scanResult.value = String(e);
+  } finally {
+    scanning.value = false;
+  }
+}
+
 const syncing = ref(false);
 const syncResult = ref("");
 async function sync() {

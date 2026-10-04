@@ -21,6 +21,8 @@ export type AppSettings = {
   autoAnalyze: boolean;
   /** Online accounts to pull games from. */
   accounts: { lishogi: string };
+  /** Folders whose kifu files are imported automatically. */
+  watchFolders: string[];
 };
 
 export const defaultSettings: AppSettings = {
@@ -37,6 +39,7 @@ export const defaultSettings: AppSettings = {
   cardOkLoss: 3,
   autoAnalyze: true,
   accounts: { lishogi: "" },
+  watchFolders: [],
 };
 
 export function loadSettings(db: Db): AppSettings {

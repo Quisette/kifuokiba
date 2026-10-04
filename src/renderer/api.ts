@@ -151,6 +151,7 @@ export type Settings = {
   cardOkLoss: number;
   autoAnalyze: boolean;
   accounts: { lishogi: string };
+  watchFolders: string[];
 };
 
 export type PageSummary = { id: number; notebook: string; title: string; excerpt: string; updated_at: number };
