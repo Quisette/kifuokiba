@@ -7,6 +7,8 @@ export type EngineSettings = {
   movetimeMs: number;
   nodes: number; // 0 = use movetime
   multipv: number;
+  /** Re-search around flagged moves with this many times the time/nodes (0 or 1 = off). */
+  verifyFactor: number;
 };
 
 export type AppSettings = {
@@ -41,6 +43,7 @@ export const defaultSettings: AppSettings = {
     movetimeMs: 1000,
     nodes: 0,
     multipv: 1,
+    verifyFactor: 4,
   },
   grading: defaultGradingSettings,
   cardMinLevel: 3,

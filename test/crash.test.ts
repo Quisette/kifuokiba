@@ -63,3 +63,22 @@ createInterface({ input: process.stdin }).on("line", (l) => {
   expect(s2.error).toBeFalsy();
   for (const id of ids) expect((await api("GET", `/api/games/${id}`)).analysis_status).toBe("done");
 }, 30000);
+
+it("re-checks flagged moves with a deeper search and drops cards that no longer qualify", async () => {
+  await api("PUT", "/api/settings", { myNames: ["me"], cardMinLevel: 3, engine: { path: MOCK, options: {}, movetimeMs: 30, nodes: 0, multipv: 1, verifyFactor: 4 } });
+  // ▲3三角成?? drops the bishop.
+  const r = await api("POST", "/api/import", { text: makeKif({ moves: "7g7f 3c3d 8h3c+ 2a3c 2g2f", black: "me", white: "y", date: "2026/09/20" }) });
+  const id = r.results[0].id;
+  await api("POST", "/api/analysis", { ids: [id] });
+  await waitIdle();
+  // The positions around the blunder were searched again at 4x the time.
+  const deep = app.db.all<{ n: number }>("SELECT COUNT(*) n FROM evals WHERE limit_key = 'movetime:120'")[0].n;
+  expect(deep).toBeGreaterThanOrEqual(2);
+  const cards = (await api("GET", "/api/cards")).filter((c: { game_id: number }) => c.game_id === id);
+  expect(cards.length).toBe(1);
+  // Only 大悪手 make cards now: the untouched 悪手 card goes away on re-grade.
+  const level = (await api("GET", `/api/games/${id}`)).plies[3].level;
+  await api("PUT", "/api/settings", { cardMinLevel: level + 1 });
+  const after = (await api("GET", "/api/cards")).filter((c: { game_id: number }) => c.game_id === id);
+  expect(after).toHaveLength(0);
+}, 30000);

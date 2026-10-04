@@ -480,6 +480,7 @@ export class Library {
     const mySide = this.mySide(game);
     const cardSides = new Set<string>(mySide ? [mySide] : this.myNames().length ? [] : ["black", "white"]);
     this.db.tx(() => {
+      const cardPlies: number[] = [];
       for (const g of grades) {
         const missed = g.missedMate ? "mate" : g.missedWin ? "win" : "";
         this.db.run("UPDATE plies SET loss = ?, level = ?, missed = ? WHERE game_id = ? AND ply = ?", g.loss, g.level, missed, id, g.ply);
@@ -487,6 +488,7 @@ export class Library {
         const cur = plies[g.ply];
         const isCard = (g.level >= s.cardMinLevel || g.missedMate) && cardSides.has(g.color) && prev.best_usi && prev.best_usi !== cur.usi;
         if (isCard) {
+          cardPlies.push(g.ply);
           const phase = g.ply <= 30 ? "opening" : g.ply <= 80 ? "middlegame" : "endgame";
           this.db.run(
             `INSERT INTO cards (game_id, ply, sfen, side, played_usi, played_text, best_usi, pv, loss, level, kind, phase, due_at, created_at)
@@ -510,6 +512,15 @@ export class Library {
           );
         }
       }
+      // Automatic cards whose move no longer counts as a mistake (a deeper look, new
+      // thresholds) go away, unless they have been reviewed or annotated.
+      this.db.run(
+        `DELETE FROM cards WHERE game_id = ? AND kind IN ('mistake', 'missed_mate') AND repetitions = 0 AND lapses = 0 AND note = ''
+           AND NOT EXISTS (SELECT 1 FROM reviews r WHERE r.card_id = cards.id)
+           AND ply NOT IN (SELECT value FROM json_each(?))`,
+        id,
+        JSON.stringify(cardPlies),
+      );
       this.db.run(
         "UPDATE games SET accuracy_black = ?, accuracy_white = ?, turning_ply = ?, updated_at = ? WHERE id = ?",
         accuracy(grades, "black") ?? null,

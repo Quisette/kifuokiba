@@ -140,7 +140,7 @@ export type Card = {
 export type AnalysisStatus = {
   running: boolean;
   engineName: string;
-  current: { gameId: number; ply: number; total: number } | null;
+  current: { gameId: number; ply: number; total: number; verifying?: { done: number; total: number } } | null;
   queued: number[];
   done: number;
   error: string;
@@ -148,7 +148,7 @@ export type AnalysisStatus = {
 
 export type Settings = {
   myNames: string[];
-  engine: { path: string; options: Record<string, string | number>; movetimeMs: number; nodes: number; multipv: number };
+  engine: { path: string; options: Record<string, string | number>; movetimeMs: number; nodes: number; multipv: number; verifyFactor: number };
   grading: { coefficientInSigmoid: number; thresholds: [number, number, number, number] };
   cardMinLevel: number;
   cardOkLoss: number;

@@ -9,7 +9,7 @@ import { EngineSettings } from "./settings.js";
 export type AnalysisStatus = {
   running: boolean;
   engineName: string;
-  current: { gameId: number; ply: number; total: number } | null;
+  current: { gameId: number; ply: number; total: number; verifying?: { done: number; total: number } } | null;
   queued: number[];
   done: number;
   error: string;
@@ -161,33 +161,51 @@ export class AnalysisQueue extends EventEmitter {
     const engine = await this.getEngine();
     const lk = limitKey(settings);
     const limit: SearchLimit = settings.nodes ? { nodes: settings.nodes } : { movetimeMs: settings.movetimeMs };
-    const moves: string[] = [];
+    const positionAt = (ply: number) =>
+      `sfen ${game.initial_sfen}` + (ply > 0 ? ` moves ${plies.slice(1, ply + 1).map((x) => x.usi).join(" ")}` : "");
+    // Cached eval for this limit, else a search; the full move list lets the engine see repetitions.
+    const evalPly = async (p: (typeof plies)[number], lim: SearchLimit, key: string) => {
+      const cached = this.lib.cachedEval(p.sfen, engine.name, key);
+      if (cached) {
+        this.lib.setPlyEval(id, p.ply, { score: cached.score ?? undefined, mate: cached.mate ?? undefined, best: cached.best_usi, pv: cached.pv }, engine.name, key);
+        return;
+      }
+      const r = await engine.search(positionAt(p.ply), lim);
+      if (!this.stopRequested) this.lib.setPlyEval(id, p.ply, toBlackView(p.sfen, r), engine.name, key);
+    };
     for (const p of plies) {
       if (this.stopRequested) break;
-      if (p.ply > 0) moves.push(p.usi);
       this.current = { gameId: id, ply: p.ply, total: plies.length - 1 };
       this.emitStatus();
-      const cached = this.lib.cachedEval(p.sfen, engine.name, lk);
-      if (cached) {
-        this.lib.setPlyEval(
-          id,
-          p.ply,
-          { score: cached.score ?? undefined, mate: cached.mate ?? undefined, best: cached.best_usi, pv: cached.pv },
-          engine.name,
-          lk,
-        );
-        continue;
-      }
-      // Send the full move list so the engine sees repetitions.
-      const position = `sfen ${game.initial_sfen}` + (moves.length ? ` moves ${moves.join(" ")}` : "");
-      const r = await engine.search(position, limit);
-      if (this.stopRequested) break;
-      this.lib.setPlyEval(id, p.ply, toBlackView(p.sfen, r), engine.name, lk);
+      await evalPly(p, limit, lk);
     }
     if (this.stopRequested) {
       this.lib.db.run("UPDATE games SET analysis_status = 'none' WHERE id = ? AND analysis_status = 'queued'", id);
       this.lib.regrade(id);
       return;
+    }
+    // Second look: re-search the positions around each flagged move with more time,
+    // so a short search's horizon doesn't turn a fine move into a "mistake".
+    this.lib.regrade(id);
+    const factor = settings.verifyFactor ?? 0;
+    if (factor > 1) {
+      const deep: SearchLimit = settings.nodes ? { nodes: settings.nodes * factor } : { movetimeMs: settings.movetimeMs * factor };
+      const deepKey = settings.nodes ? `nodes:${settings.nodes * factor}` : `movetime:${settings.movetimeMs * factor}`;
+      const flagged = this.lib.db
+        .all<{ ply: number }>("SELECT ply FROM plies WHERE game_id = ? AND (level >= 2 OR missed != '') ORDER BY ply", id)
+        .flatMap((r) => [r.ply - 1, r.ply]);
+      const todo = [...new Set(flagged)].filter((k) => k >= 0 && k < plies.length);
+      for (const [i, k] of todo.entries()) {
+        if (this.stopRequested) break;
+        this.current = { gameId: id, ply: k, total: plies.length - 1, verifying: { done: i, total: todo.length } };
+        this.emitStatus();
+        await evalPly(plies[k], deep, deepKey);
+      }
+      if (this.stopRequested) {
+        this.lib.db.run("UPDATE games SET analysis_status = 'none' WHERE id = ? AND analysis_status = 'queued'", id);
+        this.lib.regrade(id);
+        return;
+      }
     }
     this.lib.db.run("UPDATE games SET analysis_status = 'done', analysis_engine = ? WHERE id = ?", engine.name, id);
     this.lib.regrade(id);

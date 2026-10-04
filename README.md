@@ -14,6 +14,7 @@ Everything stays on your machine, in one SQLite file.
   - Filter by side, result, opening, castle, opponent, tag, source or date, and save a filter as a collection. "Export shown" downloads the filtered games as KIF files in a zip.
 - **Analysis.** A background queue runs your USI engine (YaneuraOu, 水匠 etc.) over every position. Evaluations are cached per position.
   - Moves are graded 緩手 / 疑問手 / 悪手 / 大悪手 with ShogiHome's win-rate thresholds, plus missed mates and missed wins.
+  - Each flagged move is then checked again with a longer search (4× by default), so a short search's horizon doesn't produce false mistakes. Unreviewed cards for moves that no longer count are removed.
   - Each game gets accuracy, a turning point, and an eval graph with a think-time strip underneath. Missed mates and thrown-away wins are marked separately.
 - **Game view.** ShogiHome's board, keyboard navigation (← → Home End, `[` `]` to jump between mistakes, `f` to flip), and engine candidate moves.
   - "Diagram" downloads the current position as an SVG image.

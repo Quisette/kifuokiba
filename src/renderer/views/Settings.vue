@@ -64,6 +64,10 @@
           </label>
         </div>
         <label class="field">
+          Double-check mistakes with a longer search (× time; 1 = off)
+          <input v-model.number="s.engine.verifyFactor" type="number" min="1" max="20" step="1" style="width: 90px" />
+        </label>
+        <label class="field">
           Engine options (one per line, Name=Value)
           <textarea v-model="options" rows="4" placeholder="USI_Hash=1024&#10;Threads=4&#10;EvalDir=eval"></textarea>
         </label>

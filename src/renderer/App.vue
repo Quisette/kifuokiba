@@ -10,7 +10,8 @@
     <div class="right">
       <a v-if="live.analysis?.running" href="#/library?analysed=no" class="analysis-pill" :title="live.analysis.engineName">
         <span class="dot"></span>
-        分析中 {{ live.analysis.current ? `${live.analysis.current.ply}/${live.analysis.current.total}` : "" }}
+        <template v-if="live.analysis.current?.verifying">確認中 {{ live.analysis.current.verifying.done + 1 }}/{{ live.analysis.current.verifying.total }}</template>
+        <template v-else>分析中 {{ live.analysis.current ? `${live.analysis.current.ply}/${live.analysis.current.total}` : "" }}</template>
         <span class="muted">· {{ live.analysis.queued.length }} queued</span>
       </a>
       <span v-else-if="live.analysis?.error" class="analysis-pill err" :title="live.analysis.error">Engine error</span>
