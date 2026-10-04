@@ -125,6 +125,12 @@ try {
   await shot("03-game");
   check((await page.textContent(".here")).includes("手目"), "keyboard jumps to a mistake");
 
+  await page.click("text=Write review note");
+  await page.waitForURL(/#\/notes\/\d+/);
+  await page.waitForSelector(".board img.piece-image", { timeout: 10000 });
+  check((await page.textContent("body")).includes("悪手 Mistakes"), "review note opens in the notebook with boards");
+  await shot("03b-review-note");
+
   await page.goto(base + "/#/review");
   await page.waitForTimeout(800);
   await shot("04-review");

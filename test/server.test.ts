@@ -97,6 +97,24 @@ describe("library API", () => {
     expect(text).toContain("【");
   });
 
+  it("writes a review note with each big mistake as a board", async () => {
+    const list = await api("GET", "/api/games?q=x");
+    const id = list.find((g: { white: string; analysis_status: string }) => g.white === "x" && g.analysis_status === "done").id;
+    const n = await api("GET", `/api/games/${id}/note`);
+    expect(n.title).toBe("2026-09-02 me vs x");
+    expect(n.body).toContain(`:::shogi-view{game=${id} ply=2}`);
+    expect(n.body).toMatch(/### 3手目 ☗３三角成（悪手/);
+    // The portable .mdx carries the moves so it renders without the library.
+    const res = await fetch(`${base}/api/games/${id}/note?portable=1&download=1`);
+    const mdx = await res.text();
+    expect(mdx.startsWith("---\ntitle:")).toBe(true);
+    expect(mdx).toContain(":::shogi-view{move=2}\nposition startpos moves 7g7f 3c3d 8h3c+ 2a3c 2g2f\n:::");
+    expect(mdx).not.toContain("game=");
+    const page = await api("POST", `/api/games/${id}/note`);
+    expect(page.notebook).toBe("Game reviews");
+    expect(page.body).toBe(n.body);
+  });
+
   it("computes stats", async () => {
     const s = await api("GET", "/api/stats");
     expect(s.totals.games).toBe(2);

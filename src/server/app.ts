@@ -11,6 +11,7 @@ import { AnalysisQueue } from "./analysis.js";
 import { Cards } from "./cards.js";
 import { computeStats, playerProfile, similarGames } from "./stats.js";
 import { Pages } from "./pages.js";
+import { reviewNote } from "./review-note.js";
 import { loadSettings, saveSettings, AppSettings } from "./settings.js";
 import { RecordFileFormat } from "../core/recordFile.js";
 import { UsiEngine } from "./engine/usi.js";
@@ -293,6 +294,19 @@ export function createApp(opts: AppOptions) {
     const r = lib.exportGame(id(p), f, url.searchParams.get("utf8") === "1");
     if (!r) throw new HttpError(404, "game not found");
     return { __raw: r.data, type: "application/octet-stream", name: `game-${p[0]}${f}` };
+  });
+
+  route("GET", "/api/games/:id/note", (_r, url, p) => {
+    const portable = url.searchParams.get("portable") === "1";
+    const n = reviewNote(lib, id(p), { portable });
+    if (!n) throw new HttpError(404, "game not found");
+    if (url.searchParams.get("download") === "1") return { __raw: Buffer.from(n.body, "utf8"), type: "text/markdown; charset=utf-8", name: `game-${p[0]}.mdx` };
+    return n;
+  });
+  route("POST", "/api/games/:id/note", (_r, _u, p) => {
+    const n = reviewNote(lib, id(p));
+    if (!n) throw new HttpError(404, "game not found");
+    return pages.create({ title: n.title, notebook: "Game reviews", body: n.body });
   });
 
   // ---- stats

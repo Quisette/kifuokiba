@@ -30,6 +30,8 @@
         <button type="button" class="btn" @click="analyse">{{ game.analysis_status === "done" ? "Re-analyse" : "Analyse" }}</button>
         <a class="btn" :href="`/api/games/${id}/export?format=kif`" download>Export KIF</a>
         <a class="btn" :href="`/api/games/${id}/export?format=csa`" download>CSA</a>
+        <button type="button" class="btn" @click="writeReview">Write review note</button>
+        <a class="btn" :href="`/api/games/${id}/note?portable=1&download=1`" download title="Markdown with :::shogi-view boards for personal-shogi-note">.mdx</a>
       </div>
     </div>
 
@@ -231,7 +233,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { InitialPositionSFEN, Move, Position, formatPV } from "tsshogi";
 import { api, evalText, GameDetail, live, resultChar, toast, winRate } from "../api";
-import { route } from "../router";
+import { go, route } from "../router";
 import ShogiBoard from "../components/ShogiBoard.vue";
 import EvalGraph from "../components/EvalGraph.vue";
 import AddToNotebook from "../components/AddToNotebook.vue";
@@ -500,6 +502,15 @@ async function makeCard() {
     await api.post("/api/cards", { gameId: props.id, ply: cursor.value });
     toast(`Card made from the position before move ${cursor.value}`);
     void load();
+  } catch (e) {
+    toast(String(e));
+  }
+}
+// A notebook page with the game summary and each big mistake as a board, ready to annotate.
+async function writeReview() {
+  try {
+    const page = await api.post<{ id: number }>(`/api/games/${props.id}/note`, {});
+    go(`notes/${page.id}`);
   } catch (e) {
     toast(String(e));
   }
