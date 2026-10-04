@@ -136,7 +136,8 @@
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { Position } from "tsshogi";
 import { api, Card, qs, Settings, toast } from "../api";
-import { reviewSm2, Rating } from "../../core/sm2";
+import { Rating } from "../../core/sm2";
+import { scheduleCard, SchedulerName } from "../../core/scheduler";
 import ShogiBoard from "../components/ShogiBoard.vue";
 import AddToNotebook from "../components/AddToNotebook.vue";
 
@@ -162,6 +163,7 @@ const hint = ref(false);
 const notebookOpen = ref(false);
 const counts = ref<{ due: number; total: number; reviewedToday: number; leeches: number; nextDueAt: number | null } | null>(null);
 const okLoss = ref(3);
+const sched = ref<{ scheduler: SchedulerName; desiredRetention: number }>({ scheduler: "sm2", desiredRetention: 0.9 });
 const userMove = ref<string | null>(null);
 const replayLine = ref<string[]>([]);
 const replaying = ref(false);
@@ -177,7 +179,9 @@ async function load() {
   index.value = 0;
   resetCard();
   counts.value = await api.get("/api/cards/counts");
-  okLoss.value = (await api.get<Settings>("/api/settings")).cardOkLoss;
+  const st = await api.get<Settings>("/api/settings");
+  okLoss.value = st.cardOkLoss;
+  sched.value = { scheduler: st.scheduler, desiredRetention: st.desiredRetention };
   loading.value = false;
 }
 onMounted(load);
@@ -248,8 +252,23 @@ function reveal() {
 function preview(r: Rating) {
   if (!card.value) return "";
   const c = card.value;
-  const n = reviewSm2({ repetitions: c.repetitions, intervalDays: c.interval_days, ease: c.ease, dueAt: c.due_at, lapses: c.lapses }, r, 0);
-  const mins = n.dueAt / 60000;
+  const now = Date.now();
+  const n = scheduleCard(
+    {
+      repetitions: c.repetitions,
+      intervalDays: c.interval_days,
+      ease: c.ease,
+      dueAt: c.due_at,
+      lapses: c.lapses,
+      stability: c.stability,
+      difficulty: c.difficulty,
+      lastReviewAt: c.last_review_at,
+    },
+    r,
+    now,
+    sched.value,
+  );
+  const mins = (n.dueAt - now) / 60000;
   return mins < 60 ? `${Math.round(mins)}分` : `${n.intervalDays}日`;
 }
 

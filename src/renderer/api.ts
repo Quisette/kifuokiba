@@ -121,6 +121,9 @@ export type Card = {
   ease: number;
   due_at: number;
   lapses: number;
+  stability: number | null;
+  difficulty: number | null;
+  last_review_at: number | null;
   suspended: number;
   note: string;
   black: string;
@@ -152,6 +155,8 @@ export type Settings = {
   autoAnalyze: boolean;
   accounts: { lishogi: string };
   watchFolders: string[];
+  scheduler: "sm2" | "fsrs";
+  desiredRetention: number;
 };
 
 export type PageSummary = { id: number; notebook: string; title: string; excerpt: string; updated_at: number };

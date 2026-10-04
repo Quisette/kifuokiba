@@ -23,6 +23,10 @@ export type AppSettings = {
   accounts: { lishogi: string };
   /** Folders whose kifu files are imported automatically. */
   watchFolders: string[];
+  /** Card scheduling: SM-2 (default) or FSRS v4.5. */
+  scheduler: "sm2" | "fsrs";
+  /** FSRS target recall probability; higher means more reviews. */
+  desiredRetention: number;
 };
 
 export const defaultSettings: AppSettings = {
@@ -40,6 +44,8 @@ export const defaultSettings: AppSettings = {
   autoAnalyze: true,
   accounts: { lishogi: "" },
   watchFolders: [],
+  scheduler: "sm2",
+  desiredRetention: 0.9,
 };
 
 export function loadSettings(db: Db): AppSettings {

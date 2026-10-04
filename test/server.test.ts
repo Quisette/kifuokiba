@@ -168,6 +168,19 @@ describe("library API", () => {
     expect(byNote.map((g: { id: number }) => g.id)).toEqual([games[1].id]);
   });
 
+  it("schedules with FSRS when chosen", async () => {
+    await api("PUT", "/api/settings", { scheduler: "fsrs", desiredRetention: 0.9 });
+    const games = await api("GET", "/api/games");
+    const card = await api("POST", "/api/cards", { gameId: games[1].id, ply: 3 });
+    const r = await api("POST", `/api/cards/${card.id}/rate`, { rating: "good" });
+    expect(r.stability).toBeCloseTo(3.7145, 3);
+    expect(r.intervalDays).toBe(4);
+    const stored = await api("GET", `/api/cards/${card.id}`);
+    expect(stored.stability).toBeCloseTo(3.7145, 3);
+    expect(stored.last_review_at).toBeGreaterThan(0);
+    await api("PUT", "/api/settings", { scheduler: "sm2" });
+  });
+
   it("explores my games move by move", async () => {
     const root = await api("GET", "/api/explorer");
     expect(root.games).toBe(2);

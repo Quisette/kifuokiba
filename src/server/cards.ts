@@ -1,7 +1,8 @@
 import { Position, Record, exportBOD } from "tsshogi";
 import { Library } from "./library.js";
 import { AnalysisQueue } from "./analysis.js";
-import { reviewSm2, Rating, ratingFromLoss } from "../core/sm2.js";
+import { Rating, ratingFromLoss } from "../core/sm2.js";
+import { scheduleCard } from "../core/scheduler.js";
 import { winRate } from "../core/grading.js";
 
 export type CardRow = {
@@ -23,6 +24,9 @@ export type CardRow = {
   ease: number;
   due_at: number;
   lapses: number;
+  stability: number | null;
+  difficulty: number | null;
+  last_review_at: number | null;
   suspended: number;
   note: string;
   created_at: number;
@@ -136,19 +140,34 @@ export class Cards {
   rate(id: number, rating: Rating, answerUsi = "", loss: number | null = null, now = Date.now()) {
     const c = this.lib.db.get<CardRow>("SELECT * FROM cards WHERE id = ?", id);
     if (!c) throw new Error("card not found");
-    const next = reviewSm2(
-      { repetitions: c.repetitions, intervalDays: c.interval_days, ease: c.ease, dueAt: c.due_at, lapses: c.lapses },
+    const s = this.lib.settings;
+    const next = scheduleCard(
+      {
+        repetitions: c.repetitions,
+        intervalDays: c.interval_days,
+        ease: c.ease,
+        dueAt: c.due_at,
+        lapses: c.lapses,
+        stability: c.stability,
+        difficulty: c.difficulty,
+        lastReviewAt: c.last_review_at,
+      },
       rating,
       now,
+      { scheduler: s.scheduler, desiredRetention: s.desiredRetention },
     );
     this.lib.db.tx(() => {
       this.lib.db.run(
-        "UPDATE cards SET repetitions = ?, interval_days = ?, ease = ?, due_at = ?, lapses = ? WHERE id = ?",
+        `UPDATE cards SET repetitions = ?, interval_days = ?, ease = ?, due_at = ?, lapses = ?,
+           stability = ?, difficulty = ?, last_review_at = ? WHERE id = ?`,
         next.repetitions,
         next.intervalDays,
         next.ease,
         next.dueAt,
         next.lapses,
+        next.stability,
+        next.difficulty,
+        next.lastReviewAt,
         id,
       );
       this.lib.db.run("INSERT INTO reviews (card_id, at, rating, answer_usi, loss) VALUES (?,?,?,?,?)", id, now, rating, answerUsi, loss);

@@ -103,6 +103,17 @@
           A different move counts as correct within (win-rate points of the best)
           <input v-model.number="s.cardOkLoss" type="number" min="0" max="30" step="0.5" style="width: 100px" />
         </label>
+        <label class="field">
+          Scheduler
+          <select v-model="s.scheduler">
+            <option value="sm2">SM-2 (classic Anki)</option>
+            <option value="fsrs">FSRS v4.5 (fewer reviews for the same recall)</option>
+          </select>
+        </label>
+        <label v-if="s.scheduler === 'fsrs'" class="field">
+          Target recall ({{ Math.round(s.desiredRetention * 100) }}%)
+          <input v-model.number="s.desiredRetention" type="range" min="0.75" max="0.97" step="0.01" />
+        </label>
       </section>
 
       <div class="save-row">

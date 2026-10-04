@@ -97,6 +97,9 @@ CREATE TABLE IF NOT EXISTS cards (
   repetitions INTEGER NOT NULL DEFAULT 0,
   interval_days REAL NOT NULL DEFAULT 0,
   ease REAL NOT NULL DEFAULT 2.5,
+  stability REAL,
+  difficulty REAL,
+  last_review_at INTEGER,
   due_at INTEGER NOT NULL,
   lapses INTEGER NOT NULL DEFAULT 0,
   suspended INTEGER NOT NULL DEFAULT 0,
@@ -138,6 +141,9 @@ export class Db {
     this.db.exec(SCHEMA);
     // Columns added after the first release; CREATE TABLE IF NOT EXISTS won't add them to old files.
     this.ensureColumn("plies", "missed", "TEXT NOT NULL DEFAULT ''");
+    this.ensureColumn("cards", "stability", "REAL");
+    this.ensureColumn("cards", "difficulty", "REAL");
+    this.ensureColumn("cards", "last_review_at", "INTEGER");
   }
 
   private ensureColumn(table: string, column: string, decl: string) {

@@ -18,7 +18,7 @@ Everything stays on your machine, in one SQLite file.
   - You can try your own move and get an engine verdict, edit comments, search for the same position across games, and export KIF/CSA with the evals written as ShogiHome-style comments.
 - **Mistake cards.** Your 悪手 and worse become cards automatically. You can also make one from any position.
   - In review you play your answer on the board. The best move, or any move the engine says is within the tolerance, counts as correct. You can replay the engine line.
-  - Scheduling is SM-2. A card missed four times becomes a leech, and the review screen then asks you to write down the idea or study the game.
+  - Scheduling is SM-2, or FSRS v4.5 if you pick it in Settings. A card missed four times becomes a leech, and the review screen then asks you to write down the idea or study the game.
   - "Export to Anki" writes a tab-separated file Anki imports directly.
 - **Stats.** Win rate by side, opening, opponent's opening, castle, matchup, time control and opponent, plus a monthly trend, where in the game you lose points, and whether fast moves go wrong more often.
 - **Explorer.** Walk the opening tree of your own games: each next move with how often you played it, your score after it, your average loss, and the engine's best move.

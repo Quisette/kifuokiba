@@ -98,3 +98,52 @@ describe("player strength", () => {
     expect(parseStrength("七段目").rank).toBe("");
   });
 });
+
+describe("FSRS scheduling", () => {
+  const DAY = 86400000;
+  const fresh = { stability: null, difficulty: null, lastReviewAt: null, repetitions: 0, lapses: 0 };
+
+  it("starts new cards from the default parameters", async () => {
+    const { reviewFsrs } = await import("../src/core/fsrs.js");
+    const good = reviewFsrs(fresh, "good", 0);
+    expect(good.stability).toBeCloseTo(3.7145, 4);
+    expect(good.difficulty).toBeCloseTo(5.1618, 4);
+    expect(good.intervalDays).toBe(4);
+    const again = reviewFsrs(fresh, "again", 0);
+    expect(again.dueAt).toBe(10 * 60 * 1000);
+    expect(again.lapses).toBe(0); // failing a new card is not a lapse
+    expect(reviewFsrs(fresh, "easy", 0).intervalDays).toBeGreaterThan(good.intervalDays);
+  });
+
+  it("grows stability on a recall at 90% and shrinks it on a lapse", async () => {
+    const { reviewFsrs, retrievability } = await import("../src/core/fsrs.js");
+    const first = reviewFsrs(fresh, "good", 0);
+    const t = first.stability! * DAY;
+    expect(retrievability(first.stability!, first.stability!)).toBeCloseTo(0.9, 6);
+    const second = reviewFsrs(first, "good", t);
+    expect(second.stability!).toBeGreaterThan(13);
+    expect(second.stability!).toBeLessThan(15);
+    const lapse = reviewFsrs(second, "again", t + second.intervalDays * DAY);
+    expect(lapse.stability!).toBeLessThan(second.stability!);
+    expect(lapse.lapses).toBe(1);
+    expect(lapse.difficulty!).toBeGreaterThan(second.difficulty!);
+  });
+
+  it("asks for reviews sooner with a higher target recall", async () => {
+    const { reviewFsrs } = await import("../src/core/fsrs.js");
+    const s = { ...fresh, stability: 30, difficulty: 5, lastReviewAt: 0, repetitions: 3 };
+    const at = 30 * DAY;
+    expect(reviewFsrs(s, "good", at, 0.95).intervalDays).toBeLessThan(reviewFsrs(s, "good", at, 0.85).intervalDays);
+  });
+
+  it("picks up SM-2 cards when switching schedulers", async () => {
+    const { scheduleCard } = await import("../src/core/scheduler.js");
+    const sm2Card = { repetitions: 3, intervalDays: 20, ease: 2.5, dueAt: 20 * DAY, lapses: 0, stability: null, difficulty: null, lastReviewAt: 0 };
+    const next = scheduleCard(sm2Card, "good", 20 * DAY, { scheduler: "fsrs", desiredRetention: 0.9 });
+    expect(next.stability!).toBeGreaterThan(20);
+    expect(next.intervalDays).toBeGreaterThan(20);
+    const viaSm2 = scheduleCard(sm2Card, "good", 20 * DAY, { scheduler: "sm2", desiredRetention: 0.9 });
+    expect(viaSm2.intervalDays).toBe(50);
+    expect(viaSm2.stability).toBeNull();
+  });
+});
