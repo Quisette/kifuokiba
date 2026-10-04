@@ -28,6 +28,7 @@ import { syncLishogi } from "./fetchers/sync.js";
 import { FolderWatcher } from "./watch.js";
 import { BookCache } from "./book.js";
 import { insightsFromStats } from "./insights.js";
+import { checkGuess, GuessError } from "./guess.js";
 import type { FetchLike } from "./fetchers/lishogi.js";
 
 export type AppOptions = {
@@ -269,6 +270,15 @@ export function createApp(opts: AppOptions) {
     if (!book) return { configured: false, moves: [] };
     const sfen = url.searchParams.get("sfen") || InitialPositionSFEN.STANDARD;
     return { configured: true, moves: book.moves(sfen).map((m) => ({ ...m, text: Library.moveText(sfen, m.usi) })) };
+  });
+  route("POST", "/api/games/:id/guess", async (_r, _u, p, body) => {
+    const b = body as { ply: number; usi: string };
+    try {
+      return await checkGuess(lib, analysis, id(p), Number(b.ply), String(b.usi));
+    } catch (e) {
+      if (e instanceof GuessError || /illegal move/.test(String(e))) throw new HttpError(400, (e as Error).message);
+      throw e;
+    }
   });
   route("GET", "/api/games/:id/branches", (_r, _u, p) => lib.branches(id(p)));
   route("GET", "/api/games/:id/similar", (_r, _u, p) => similarGames(lib, id(p)));

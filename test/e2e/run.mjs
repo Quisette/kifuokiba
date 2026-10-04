@@ -241,6 +241,17 @@ try {
   await page.waitForFunction(() => location.hash.startsWith("#/game/"));
   check((await api("GET", "/api/games")).length === games.length + 1, "recorded game is saved to the library");
 
+  // Guess the moves of the game just recorded: ☗7六歩 is what was played.
+  const recordedId = (await page.evaluate(() => location.hash)).split("/")[2];
+  await page.goto(base + `/#/guess?game=${recordedId}&side=black`);
+  await page.waitForSelector(".board.operation", { state: "attached" });
+  await page.waitForTimeout(400);
+  await clickSquare(7, 7);
+  await clickSquare(7, 6);
+  await page.waitForSelector(".result", { timeout: 20000 });
+  check((await page.textContent(".status")).includes("Same as the game"), "guess mode recognises the game move");
+  await shot("08b-guess");
+
   // Play the opening position out against the engine: ☗7六歩, and the engine answers.
   await page.goto(base + "/#/practice?sfen=" + encodeURIComponent("lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1"));
   await page.waitForSelector(".board.operation", { state: "attached" });

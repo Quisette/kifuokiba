@@ -2,6 +2,7 @@
 // analysis loop (src/renderer/store/analysis.ts), but stores results in the
 // library DB and reuses cached evals for positions seen in earlier games.
 import { EventEmitter } from "node:events";
+import { Position } from "tsshogi";
 import { Library } from "./library.js";
 import { UsiEngine, SearchLimit, SearchResult } from "./engine/usi.js";
 import { EngineSettings } from "./settings.js";
@@ -115,6 +116,29 @@ export class AnalysisQueue extends EventEmitter {
     const e = await this.getEngine();
     const r = await e.search(position, limit ?? (s.nodes ? { nodes: s.nodes } : { movetimeMs: s.movetimeMs }), { multipv });
     return { ...toBlackView(sfenAfter, r), lines: r.lines, engine: e.name };
+  }
+
+  /**
+   * Evaluation (black's view) of the position after `moves` from `initialSfen`, at the
+   * analysis settings: from the cache when this position was searched before, else
+   * searched now and cached.
+   */
+  async evalLine(initialSfen: string, moves: string[]) {
+    const pos = Position.newBySFEN(initialSfen);
+    if (!pos) throw new Error("bad sfen");
+    for (const u of moves) {
+      const m = pos.createMoveByUSI(u);
+      if (!m || !pos.doMove(m)) throw new Error(`illegal move ${u}`);
+    }
+    const settings = this.lib.settings.engine;
+    const e = await this.getEngine();
+    const key = limitKey(settings);
+    const cached = this.lib.cachedEval(pos.sfen, e.name, key);
+    if (cached) return { score: cached.score ?? undefined, mate: cached.mate ?? undefined, best: cached.best_usi, pv: cached.pv };
+    const position = `sfen ${initialSfen}` + (moves.length ? ` moves ${moves.join(" ")}` : "");
+    const r = toBlackView(pos.sfen, await e.search(position, settings.nodes ? { nodes: settings.nodes } : { movetimeMs: settings.movetimeMs }));
+    this.lib.storeEval(pos.sfen, r, e.name, key);
+    return r;
   }
 
   /** Definitive mate search on one position ("go mate"). */

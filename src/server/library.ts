@@ -432,12 +432,17 @@ export class Library {
       id,
       ply,
     );
+    this.storeEval(row.sfen, e, engine, limitKey);
+  }
+
+  /** Put an engine result (black's view) in the position cache. */
+  storeEval(sfen: string, e: { score?: number; mate?: number; best: string; pv: string; depth?: number; nodes?: number }, engine: string, limitKey: string) {
     this.db.run(
       `INSERT INTO evals (sfen, engine, limit_key, score, mate, best_usi, pv, depth, nodes, created_at)
        VALUES (?,?,?,?,?,?,?,?,?,?)
        ON CONFLICT(sfen, engine, limit_key) DO UPDATE SET score = excluded.score, mate = excluded.mate,
          best_usi = excluded.best_usi, pv = excluded.pv, depth = excluded.depth, nodes = excluded.nodes`,
-      sfenKey(row.sfen),
+      sfenKey(sfen),
       engine,
       limitKey,
       e.score ?? null,

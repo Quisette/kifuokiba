@@ -30,6 +30,7 @@
     <Repertoire v-else-if="route.name === 'repertoire'" />
     <Puzzles v-else-if="route.name === 'puzzles'" />
     <Practice v-else-if="route.name === 'practice'" :key="route.query.toString()" />
+    <Guess v-else-if="route.name === 'guess'" :key="route.query.toString()" />
     <Notebooks v-else-if="route.name === 'notes'" />
     <Settings v-else-if="route.name === 'settings'" />
     <div v-else class="page"><div class="empty">Page not found. <a href="#/">Home</a></div></div>
@@ -59,6 +60,7 @@ import RecordGame from "./views/RecordGame.vue";
 import Player from "./views/Player.vue";
 import Notebooks from "./views/Notebooks.vue";
 import Practice from "./views/Practice.vue";
+import Guess from "./views/Guess.vue";
 import Puzzles from "./views/Puzzles.vue";
 import Repertoire from "./views/Repertoire.vue";
 import Settings from "./views/Settings.vue";
@@ -72,7 +74,7 @@ const nav = [
   { name: "notes", label: "研究 Notes" },
   { name: "settings", label: "設定 Settings" },
 ];
-const active = (name: string) => route.name === name || (name === "library" && (route.name === "game" || route.name === "record")) || (name === "stats" && route.name === "player") || (name === "review" && (route.name === "puzzles" || route.name === "practice")) || (name === "explorer" && route.name === "repertoire");
+const active = (name: string) => route.name === name || (name === "library" && (route.name === "game" || route.name === "record" || route.name === "guess")) || (name === "stats" && route.name === "player") || (name === "review" && (route.name === "puzzles" || route.name === "practice")) || (name === "explorer" && route.name === "repertoire");
 
 const due = ref(0);
 async function refreshDue() {
