@@ -193,3 +193,20 @@ describe("dashboard insights", () => {
     expect(insightsFromStats(even as any, { leeches: 0 })).toEqual([]);
   });
 });
+
+describe("board diagram", () => {
+  it("draws every piece, hands and the last move as SVG", async () => {
+    const { positionSvg } = await import("../src/core/diagram.js");
+    const svg = positionSvg("lnsgkgsnl/1r5b1/ppppppppp/9/9/2P6/PP1PPPPPP/1B5R1/LNSGKGSNL w - 2", { lastMove: "7g7f", caption: "1手目 <☗７六歩>" });
+    expect(svg.startsWith("<svg")).toBe(true);
+    expect((svg.match(/>歩</g) ?? []).length).toBe(18);
+    // Hands are written vertically, one character each.
+    expect(svg).toContain(">☗<");
+    expect(svg).toContain(">な<");
+    // Gote's pieces are drawn upside down; the caption is escaped.
+    expect((svg.match(/rotate\(180/g) ?? []).length).toBe(20);
+    expect(svg).toContain("&lt;☗７六歩&gt;");
+    expect(svg).toContain('fill="#e8a33d"');
+    expect(() => positionSvg("not a position")).toThrow();
+  });
+});

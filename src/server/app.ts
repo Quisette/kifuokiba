@@ -17,6 +17,7 @@ import { repertoire } from "./repertoire.js";
 import { AutoBackup } from "./backup.js";
 import { makeZip } from "./zip.js";
 import { todayPlan } from "./today.js";
+import { positionSvg } from "../core/diagram.js";
 import { loadSettings, saveSettings, AppSettings } from "./settings.js";
 import { RecordFileFormat } from "../core/recordFile.js";
 import { UsiEngine } from "./engine/usi.js";
@@ -307,6 +308,16 @@ export function createApp(opts: AppOptions) {
     const zip = makeZip(files.map((f) => ({ ...f, date: valid(f.date) })));
     return { __raw: zip, type: "application/zip", name: `kifu-study-${files.length}-games.zip` };
   });
+  route("GET", "/api/diagram.svg", (_r, url) => {
+    const sfen = url.searchParams.get("sfen") ?? "";
+    if (!Position.newBySFEN(sfen)) throw new HttpError(400, "bad sfen");
+    const svg = positionSvg(sfen, {
+      lastMove: url.searchParams.get("last") ?? undefined,
+      flip: url.searchParams.get("flip") === "1",
+      caption: url.searchParams.get("caption") ?? undefined,
+    });
+    return { __raw: Buffer.from(svg, "utf8"), type: "image/svg+xml", name: url.searchParams.get("download") === "1" ? "position.svg" : undefined };
+  });
   route("GET", "/api/games/:id/export", (_r, url, p) => {
     const fmt = (url.searchParams.get("format") ?? "kif") as string;
     const formats: Record<string, RecordFileFormat> = {
@@ -490,9 +501,10 @@ export function createApp(opts: AppOptions) {
           const body = req.method === "GET" ? undefined : await readBody(req);
           const out = (await h(req, url, m.slice(1), body)) as { __raw?: Uint8Array; type?: string; name?: string };
           if (out && out.__raw) {
+            // No name: shown inline (e.g. a diagram used as an <img>).
             res.writeHead(200, {
               "Content-Type": out.type!,
-              "Content-Disposition": `attachment; filename="${out.name}"`,
+              ...(out.name ? { "Content-Disposition": `attachment; filename="${out.name}"` } : {}),
             });
             res.end(Buffer.from(out.__raw));
             return;

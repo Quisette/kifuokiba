@@ -135,6 +135,15 @@ describe("library API", () => {
     expect(one.readUInt16LE(one.length - 12)).toBe(all.filter((g: { white: string; black: string }) => g.white === "rival" || g.black === "rival").length);
   });
 
+  it("serves a position diagram as SVG", async () => {
+    const sfen = "lnsgkgsnl/1r5b1/ppppppppp/9/9/2P6/PP1PPPPPP/1B5R1/LNSGKGSNL w - 2";
+    const r = await fetch(`${base}/api/diagram.svg?sfen=${encodeURIComponent(sfen)}&last=7g7f`);
+    expect(r.headers.get("content-type")).toBe("image/svg+xml");
+    expect(r.headers.get("content-disposition")).toBeNull();
+    expect(await r.text()).toMatch(/^<svg/);
+    expect((await fetch(`${base}/api/diagram.svg?sfen=junk`)).status).toBe(400);
+  });
+
   it("computes stats", async () => {
     const s = await api("GET", "/api/stats");
     expect(s.totals.games).toBe(2);
@@ -181,8 +190,8 @@ describe("library API", () => {
     expect(rows.length).toBeGreaterThanOrEqual(2);
     for (const row of rows) expect(row.split("\t")).toHaveLength(3);
     const mine = rows.find((l) => l.includes("watch the bishop"))!;
-    expect(mine).toContain("<pre");
-    expect(mine).toContain("後手の持駒");
+    expect(mine).toContain("<svg ");
+    expect(mine).toContain("☖");
     expect(mine.split("\t")[2]).toContain("kifu-study");
   });
 

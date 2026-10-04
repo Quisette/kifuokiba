@@ -1,5 +1,6 @@
-import { Position, Record, exportBOD } from "tsshogi";
+import { Position } from "tsshogi";
 import { Library } from "./library.js";
+import { positionSvg } from "../core/diagram.js";
 import { AnalysisQueue } from "./analysis.js";
 import { Rating, ratingFromLoss } from "../core/sm2.js";
 import { scheduleCard } from "../core/scheduler.js";
@@ -277,11 +278,10 @@ export class Cards {
       if (c.suspended) continue;
       const pos = Position.newBySFEN(c.sfen);
       if (!pos) continue;
-      const rec = new Record(pos);
-      const bod = exportBOD(rec, { returnCode: "\n" });
       const who = c.side === "black" ? "☗先手" : "☖後手";
       const front =
-        `<pre style="font-family:monospace;line-height:1.15">${esc(bod)}</pre>` +
+        // Inline SVG board (Anki renders HTML fields), from the mover's side.
+        `<div style="max-width:420px">${positionSvg(c.sfen, { flip: c.side === "white" }).replace("<svg ", '<svg style="width:100%;height:auto" ')}</div>` +
         `<div>${esc(who)}番 · ${esc(c.black)} vs ${esc(c.white)} ${esc(c.date ?? "")} · ${c.ply}手目</div>` +
         `<div><b>Find a better move than ${esc(c.playedText)}</b></div>`;
       const back =

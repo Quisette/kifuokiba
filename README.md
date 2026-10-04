@@ -16,11 +16,12 @@ Everything stays on your machine, in one SQLite file.
   - Moves are graded 緩手 / 疑問手 / 悪手 / 大悪手 with ShogiHome's win-rate thresholds, plus missed mates and missed wins.
   - Each game gets accuracy, a turning point, and an eval graph with a think-time strip underneath. Missed mates and thrown-away wins are marked separately.
 - **Game view.** ShogiHome's board, keyboard navigation (← → Home End, `[` `]` to jump between mistakes, `f` to flip), and engine candidate moves.
+  - "Diagram" downloads the current position as an SVG image.
   - You can try your own move and get an engine verdict, edit comments, search for the same position across games, and export KIF/CSA with the evals written as ShogiHome-style comments.
 - **Mistake cards.** Your 悪手 and worse become cards automatically. You can also make one from any position.
   - In review you play your answer on the board. The best move, or any move the engine says is within the tolerance, counts as correct. You can replay the engine line.
   - Scheduling is SM-2, or FSRS v4.5 if you pick it in Settings. A card missed four times becomes a leech, and the review screen then asks you to write down the idea or study the game.
-  - "Export to Anki" writes a tab-separated file Anki imports directly.
+  - "Export to Anki" writes a tab-separated file Anki imports directly, with each position drawn as a board diagram.
 - **Play it out.** From any game position or card, play on against the engine at a strength you pick. It's useful for practising the conversion of won positions you let slip.
 - **Mates from my games.** Every analysed position where the side to move had a forced mate becomes a puzzle, with the ones you missed listed first. You solve it on the board while the engine defends, and it tells you the moment a move lets the king escape.
 - **Stats.** Win rate by side, opening, opponent's opening, castle, matchup, time control and opponent, plus a monthly trend, where in the game you lose points, and whether fast moves go wrong more often.

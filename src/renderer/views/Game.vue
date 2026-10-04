@@ -33,6 +33,7 @@
         <a class="btn" :href="`/api/games/${id}/export?format=csa`" download>CSA</a>
         <button type="button" class="btn" @click="writeReview">Write review note</button>
         <a class="btn" :href="`/api/games/${id}/note?portable=1&download=1`" download title="Markdown with :::shogi-view boards for personal-shogi-note">.mdx</a>
+        <a class="btn" :href="diagramHref" download title="This position as an SVG image">Diagram</a>
       </div>
     </div>
 
@@ -516,6 +517,13 @@ async function writeReview() {
     toast(String(e));
   }
 }
+const diagramHref = computed(() => {
+  const p = cur.value;
+  const q = new URLSearchParams({ sfen: p.sfen, download: "1", flip: flip.value ? "1" : "0" });
+  if (p.usi) q.set("last", p.usi);
+  if (cursor.value > 0) q.set("caption", `${cursor.value}手目 ${p.text}`);
+  return "/api/diagram.svg?" + q.toString();
+});
 const notebookSnippet = computed(() => {
   if (variation.value.length) {
     return `:::shogi-view\nsfen ${cur.value.sfen} moves ${variation.value.join(" ")}\n:::`;
