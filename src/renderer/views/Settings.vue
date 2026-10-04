@@ -67,6 +67,15 @@
           Engine options (one per line, Name=Value)
           <textarea v-model="options" rows="4" placeholder="USI_Hash=1024&#10;Threads=4&#10;EvalDir=eval"></textarea>
         </label>
+        <details v-if="testResult?.ok && engineOptions.length" class="opts">
+          <summary class="muted small">This engine's {{ engineOptions.length }} options (click one to add it)</summary>
+          <button v-for="o in engineOptions" :key="o.name" type="button" class="opt" :disabled="hasOption(o.name)" @click="addOption(o)">
+            <code>{{ o.name }}</code>
+            <span class="muted small">
+              {{ o.type }}<template v-if="o.default !== undefined"> · default {{ o.default === "" ? "(empty)" : o.default }}</template><template v-if="o.min !== undefined"> · {{ o.min }}–{{ o.max }}</template><template v-if="o.vars"> · {{ o.vars.join(" / ") }}</template>
+            </span>
+          </button>
+        </details>
         <label class="field">
           Opening book (YaneuraOu .db, optional)
           <input v-model="s.bookPath" placeholder="/path/to/standard_book.db" />
@@ -144,7 +153,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { api, Settings, toast } from "../api";
 
 const s = ref<Settings | null>(null);
@@ -152,7 +161,16 @@ const names = ref("");
 const options = ref("");
 const testing = ref(false);
 const backups = ref<{ dir: string; files: { name: string; date: string; size: number }[] } | null>(null);
-const testResult = ref<{ ok: boolean; name?: string; bestmove?: string; error?: string } | null>(null);
+type EngineOption = { name: string; type: string; default?: string; min?: number; max?: number; vars?: string[] };
+const testResult = ref<{ ok: boolean; name?: string; bestmove?: string; error?: string; options?: EngineOption[] } | null>(null);
+// The app sets these itself; showing them would only invite conflicts.
+const MANAGED = new Set(["USI_Ponder", "MultiPV", "USI_AnalyseMode"]);
+const engineOptions = computed(() => (testResult.value?.options ?? []).filter((o) => o.type !== "button" && !MANAGED.has(o.name)));
+const hasOption = (name: string) => options.value.split("\n").some((l) => l.split("=")[0].trim() === name);
+function addOption(o: EngineOption) {
+  const value = o.default ?? (o.type === "check" ? "true" : "");
+  options.value = (options.value.trim() ? options.value.trimEnd() + "\n" : "") + `${o.name}=${value}`;
+}
 
 onMounted(async () => {
   s.value = await api.get<Settings>("/api/settings");
@@ -228,6 +246,35 @@ async function test() {
 </script>
 
 <style scoped>
+.opts {
+  display: flex;
+  flex-direction: column;
+}
+.opts summary {
+  cursor: pointer;
+  margin-bottom: 6px;
+}
+.opt {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-top: 1px solid #2a2017;
+  color: var(--text);
+  padding: 5px 2px;
+  cursor: pointer;
+  font: inherit;
+}
+.opt:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.opt:hover:not(:disabled) code {
+  color: var(--accent, #d9a441);
+}
 .cols {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));

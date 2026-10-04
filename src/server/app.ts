@@ -453,7 +453,7 @@ export function createApp(opts: AppOptions) {
     try {
       await e.start();
       const r = await e.search("startpos", { movetimeMs: 300 });
-      return { ok: true, name: e.name, author: e.author, options: e.options.map((o) => o.name), bestmove: r.bestmove };
+      return { ok: true, name: e.name, author: e.author, options: e.options, bestmove: r.bestmove };
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : String(err), log: e.log.slice(-20) };
     } finally {

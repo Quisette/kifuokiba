@@ -187,7 +187,7 @@ label.field {
   white-space: nowrap;
 }
 .mark.l1 {
-  background: #8a7a5c;
+  background: #a08f6c;
 }
 .mark.l2 {
   background: var(--gold);
@@ -196,7 +196,7 @@ label.field {
   background: var(--loss);
 }
 .mark.l4 {
-  background: #e0503a;
+  background: #b8321f;
   color: #fff;
 }
 .res {

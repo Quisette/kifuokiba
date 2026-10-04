@@ -18,7 +18,7 @@
         <span class="serif">{{ frames[idx].label }}</span>
         <a v-if="gameId" :href="`#/game/${gameId}?ply=${frames[idx].ply}`" class="muted">open game →</a>
       </figcaption>
-      <ol v-if="kind === 'kifu'" class="excerpt">
+      <ol v-if="kind === 'kifu'" class="excerpt" tabindex="0" aria-label="Moves">
         <li v-for="(f, i) in frames.slice(1)" :key="i" :class="{ on: idx === i + 1 }" @click="idx = i + 1">
           <span class="n">{{ f.ply }}</span>
           <span class="serif">{{ f.text }}</span>

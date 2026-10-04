@@ -5,7 +5,23 @@ import { ChildProcess } from "./process.js";
 import { parseInfoCommand } from "./info.js";
 import { USIInfoCommand } from "../../core/usi.js";
 
-export type EngineOption = { name: string; type: string; default?: string };
+export type EngineOption = { name: string; type: string; default?: string; min?: number; max?: number; vars?: string[] };
+
+/** Parses a USI "option name … type …" line. */
+export function parseOptionLine(line: string): EngineOption | null {
+  const m = /^option name (.+?) type (\S+)(.*)$/.exec(line.trim());
+  if (!m) return null;
+  const o: EngineOption = { name: m[1], type: m[2] };
+  const re = /\b(default|min|max|var) (\S*)/g;
+  let t: RegExpExecArray | null;
+  while ((t = re.exec(m[3]))) {
+    if (t[1] === "default") o.default = t[2] === "<empty>" ? "" : t[2];
+    else if (t[1] === "min") o.min = Number(t[2]);
+    else if (t[1] === "max") o.max = Number(t[2]);
+    else (o.vars ??= []).push(t[2]);
+  }
+  return o;
+}
 
 export type SearchLimit = {
   movetimeMs?: number;
@@ -114,8 +130,8 @@ export class UsiEngine {
           if (l.startsWith("id name ")) this.name = l.slice(8);
           else if (l.startsWith("id author ")) this.author = l.slice(10);
           else if (l.startsWith("option name ")) {
-            const m = /^option name (.+?) type (\S+)(?: default (\S*))?/.exec(l);
-            if (m) this.options.push({ name: m[1], type: m[2], default: m[3] });
+            const o = parseOptionLine(l);
+            if (o) this.options.push(o);
           }
         },
       ),

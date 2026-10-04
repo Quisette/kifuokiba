@@ -210,3 +210,14 @@ describe("board diagram", () => {
     expect(() => positionSvg("not a position")).toThrow();
   });
 });
+
+describe("USI option lines", () => {
+  it("reads type, default, range and choices", async () => {
+    const { parseOptionLine } = await import("../src/server/engine/usi.js");
+    expect(parseOptionLine("option name USI_Hash type spin default 256 min 1 max 33554432")).toEqual({ name: "USI_Hash", type: "spin", default: "256", min: 1, max: 33554432 });
+    expect(parseOptionLine("option name EvalDir type string default eval")).toEqual({ name: "EvalDir", type: "string", default: "eval" });
+    expect(parseOptionLine("option name BookFile type combo default no_book var no_book var standard_book.db var user_book1.db")).toMatchObject({ default: "no_book", vars: ["no_book", "standard_book.db", "user_book1.db"] });
+    expect(parseOptionLine("option name BookDir type string default <empty>")!.default).toBe("");
+    expect(parseOptionLine("id name foo")).toBeNull();
+  });
+});

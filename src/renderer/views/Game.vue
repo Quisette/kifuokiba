@@ -90,7 +90,7 @@
 
       <section class="panel moves-col">
         <div class="cap" style="padding: 12px 14px 6px">棋譜 Moves</div>
-        <ol ref="moveList" class="moves">
+        <ol ref="moveList" class="moves" tabindex="0" aria-label="棋譜 Moves">
           <li
             v-for="p in game.plies"
             :key="p.ply"

@@ -259,6 +259,10 @@ try {
 
   await page.goto(base + "/#/settings");
   await page.waitForSelector("form");
+  await page.click("text=Test engine");
+  await page.waitForSelector("details.opts", { timeout: 20000 });
+  await page.click("details.opts summary");
+  check((await page.textContent("details.opts")).includes("USI_Hash"), "engine test lists the engine's options");
   await shot("08-settings");
 
   await page.keyboard.press("?");
