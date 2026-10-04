@@ -293,6 +293,21 @@ try {
   // The puzzle page has an h1 too: wait for the practice page itself.
   await page.waitForFunction(() => location.hash.startsWith("#/practice") && document.querySelector("h1")?.textContent?.includes("Mate in"), null, { timeout: 10000 }).catch(() => {});
   check((await page.textContent("h1")).includes("Mate in 1"), "a collection problem opens in mate mode");
+  // Solve it: drop the gold from the hand onto 1二.
+  await page.waitForSelector(".board.operation", { state: "attached" });
+  await page.waitForTimeout(400);
+  // The hand's click targets are laid out by size, so click where the gold is drawn.
+  const gold = await page.locator(".hand.front img.piece-image").first().boundingBox();
+  await page.mouse.click(gold.x + gold.width / 2, gold.y + gold.height / 2);
+  await page.waitForTimeout(150);
+  await clickSquare(1, 2);
+  await page.waitForFunction(() => /詰み/.test(document.querySelector(".status")?.textContent ?? ""), null, { timeout: 20000 }).catch(async () => {
+    await shot("08h-debug");
+    console.log("status:", await page.textContent(".status"), "| moves:", await page.textContent(".moves"));
+  });
+  const solvedCol = (await api("GET", "/api/tsume")).find((c) => c.collection === "1te");
+  check(solvedCol?.solved === 1, "solving a tsume problem on the board records it");
+  await shot("08h-tsume-solved");
 
   await page.goto(base + "/#/repertoire");
   await page.waitForSelector(".layout, .empty");
