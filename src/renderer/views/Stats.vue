@@ -109,6 +109,30 @@
           </div>
         </section>
 
+        <section v-if="s.conversion.winning || s.conversion.losing" class="panel box">
+          <div class="cap">勝ち切る力 Converting won positions</div>
+          <div class="conv">
+            <div>
+              <div class="stat">{{ pct(s.conversion.conversionRate) }}<small v-if="s.conversion.conversionRate != null">%</small></div>
+              <div class="muted small">won {{ s.conversion.converted }} of {{ s.conversion.winning }} games where I was clearly winning (85%+)</div>
+            </div>
+            <div>
+              <div class="stat">{{ pct(s.conversion.comebackRate) }}<small v-if="s.conversion.comebackRate != null">%</small></div>
+              <div class="muted small">turned round {{ s.conversion.comebacks }} of {{ s.conversion.losing }} games where I was clearly losing</div>
+            </div>
+          </div>
+          <template v-if="s.conversion.blown.length">
+            <div class="cap" style="margin-top: 12px">Games I let slip</div>
+            <ul class="blown">
+              <li v-for="b in s.conversion.blown" :key="b.id">
+                <a :href="`#/game/${b.id}?ply=${b.slipPly}`">{{ b.date ? b.date.slice(0, 10) : "#" + b.id }} vs {{ b.opponent || "?" }}</a>
+                <span class="muted small">peak {{ b.peak }}% · {{ b.slipPly }}手目 {{ b.slipText }} −{{ b.slipLoss }}</span>
+                <a class="btn small" :href="`#/game/${b.id}?ply=${b.slipPly - 1}`" title="Open the position before this move">Before it</a>
+              </li>
+            </ul>
+          </template>
+        </section>
+
         <section v-if="s.thinkTime.length" class="panel box">
           <div class="cap">考慮時間 Think time vs mistakes (my moves)</div>
           <table class="grid">
@@ -177,6 +201,15 @@ type StatsT = {
   rankChanges: { source: string; date: string; rank: string; id: number }[];
   accuracyTrend: { id: number; date: string; accuracy: number; result: string }[];
   meanAccuracy: number | null;
+  conversion: {
+    winning: number;
+    converted: number;
+    losing: number;
+    comebacks: number;
+    conversionRate: number | null;
+    comebackRate: number | null;
+    blown: { id: number; date: string; opponent: string; result: string; peak: number; slipPly: number; slipText: string; slipLoss: number }[];
+  };
   meanMistakes: number | null;
   phaseProfile: { phase: string; avgLoss: number | null; moves: number; mistakes: number; avgSeconds: number | null }[];
   thinkTime: { label: string; moves: number; avgLoss: number | null; mistakes: number; mistakeRate: number | null }[];
@@ -410,5 +443,27 @@ const BarTable = defineComponent({
 }
 .matrix th {
   font-size: 12px;
+}
+.conv {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.blown {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.blown li {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.blown .btn {
+  margin-left: auto;
 }
 </style>

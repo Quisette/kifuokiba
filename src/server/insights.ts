@@ -68,6 +68,16 @@ export function insightsFromStats(s: Stats, cards: { leeches: number }): Insight
     });
   }
 
+  const c = s.conversion;
+  if (c.winning >= 5 && c.conversionRate !== null && c.conversionRate < 75) {
+    const last = c.blown[0];
+    out.push({
+      kind: "conversion",
+      text: `You won ${c.converted} of the ${c.winning} games where you were clearly winning (${pct(c.conversionRate)}). Playing out the positions you let slip helps.`,
+      link: last ? `#/game/${last.id}?ply=${last.slipPly - 1}` : "#/stats",
+    });
+  }
+
   if (cards.leeches > 0) {
     out.push({
       kind: "leeches",

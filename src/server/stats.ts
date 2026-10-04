@@ -1,5 +1,6 @@
 import { Position, pieceTypeToStringForMove } from "tsshogi";
 import { Library, GameFilter, GameListItem } from "./library.js";
+import { winRate } from "../core/grading.js";
 
 type Score = { games: number; wins: number; losses: number; draws: number; winRate: number | null };
 
@@ -29,6 +30,93 @@ function groupBy(games: GameListItem[], key: (g: GameListItem) => string, minGam
 }
 
 const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+
+// A position counts as clearly won (or lost) at 85% (15%) winning chances, when that
+// happens with at least this many plies left, so the final mating sequence alone doesn't count.
+const CLEAR = 85;
+const MARGIN_PLIES = 6;
+
+export type BlownGame = { id: number; date: string; opponent: string; result: string; peak: number; slipPly: number; slipText: string; slipLoss: number };
+
+/**
+ * Converting won positions: of the analysed games where I was clearly winning, how many
+ * I won; of those where I was clearly losing, how many I turned round; and the games I
+ * let slip, with my costliest move after the peak.
+ */
+export function conversion(lib: Library, games: GameListItem[]) {
+  const decided = games.filter((g) => g.mySide && (g.analysis_status === "done" || g.analysis_status === "imported") && (g.myResult === "win" || g.myResult === "loss" || g.myResult === "draw"));
+  const out = { winning: 0, converted: 0, losing: 0, comebacks: 0, blown: [] as BlownGame[] };
+  if (!decided.length) return { ...out, conversionRate: null as number | null, comebackRate: null as number | null };
+  const byGame = new Map(decided.map((g) => [g.id, g]));
+  const rows = lib.db.all<{ game_id: number; ply: number; score: number | null; mate: number | null; loss: number | null; text: string }>(
+    `SELECT game_id, ply, score, mate, loss, text FROM plies
+     WHERE game_id IN (SELECT id FROM games WHERE analysis_status IN ('done', 'imported')) ORDER BY game_id, ply`,
+  );
+  const firstBlack = new Map(lib.db.all<{ id: number; initial_sfen: string }>("SELECT id, initial_sfen FROM games").map((r) => [r.id, r.initial_sfen.split(" ")[1] !== "w"]));
+  let i = 0;
+  while (i < rows.length) {
+    const gid = rows[i].game_id;
+    let j = i;
+    while (j < rows.length && rows[j].game_id === gid) j++;
+    const g = byGame.get(gid);
+    if (g) {
+      const plies = rows.slice(i, j);
+      const mine = (r: (typeof plies)[number]) => (winRate({ score: r.score ?? undefined, mate: r.mate ?? undefined }) ?? null);
+      const myRate = (r: (typeof plies)[number]) => {
+        const w = mine(r);
+        return w === null ? null : g.mySide === "black" ? w : 100 - w;
+      };
+      const lastPly = plies.at(-1)!.ply;
+      let peakIdx = -1;
+      let peak = 0;
+      let wasLosing = false;
+      for (const [k, r] of plies.entries()) {
+        if (r.ply > lastPly - MARGIN_PLIES) break;
+        const w = myRate(r);
+        if (w === null) continue;
+        if (w >= CLEAR && peakIdx < 0) peakIdx = k;
+        if (peakIdx >= 0 && w > peak) peak = w;
+        if (w <= 100 - CLEAR) wasLosing = true;
+      }
+      if (peakIdx >= 0) {
+        out.winning++;
+        if (g.myResult === "win") out.converted++;
+        else {
+          // My costliest move from the first clearly-won position on.
+          const meBlack = g.mySide === "black";
+          let slip: (typeof plies)[number] | null = null;
+          for (const r of plies.slice(peakIdx + 1)) {
+            const moverBlack = (r.ply % 2 === 1) === (firstBlack.get(gid) ?? true);
+            if (moverBlack !== meBlack || r.loss === null) continue;
+            if (!slip || r.loss > slip.loss!) slip = r;
+          }
+          out.blown.push({
+            id: gid,
+            date: g.date,
+            opponent: g.opponent,
+            result: g.myResult,
+            peak: Math.round(peak),
+            slipPly: slip?.ply ?? plies[peakIdx].ply,
+            slipText: slip?.text ?? "",
+            slipLoss: Math.round((slip?.loss ?? 0) * 10) / 10,
+          });
+        }
+      }
+      if (wasLosing) {
+        out.losing++;
+        if (g.myResult === "win") out.comebacks++;
+      }
+    }
+    i = j;
+  }
+  out.blown.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.id - a.id));
+  return {
+    ...out,
+    blown: out.blown.slice(0, 12),
+    conversionRate: out.winning ? (out.converted / out.winning) * 100 : null,
+    comebackRate: out.losing ? (out.comebacks / out.losing) * 100 : null,
+  };
+}
 
 export function computeStats(lib: Library, filter: GameFilter = {}) {
   const all = lib.listGames(filter);
@@ -125,6 +213,7 @@ export function computeStats(lib: Library, filter: GameFilter = {}) {
     rolling,
     accuracyTrend: analysed.map((g) => ({ id: g.id, date: g.date, accuracy: g.myAccuracy!, result: g.myResult })),
     meanAccuracy: mean(analysed.map((g) => g.myAccuracy!)),
+    conversion: conversion(lib, mine),
     meanMistakes: mean(mine.filter((g) => g.analysis_status !== "none").map((g) => g.mistakes)),
     /** Counts per square, row-major from my side's 9一 corner (index = (rank-1)*9 + (9-file)). */
     mistakeMap: {

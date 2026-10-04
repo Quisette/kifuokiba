@@ -166,6 +166,7 @@ describe("dashboard insights", () => {
       { label: "60s+", moves: 0, avgLoss: null, mistakes: 0, mistakeRate: null },
     ],
     rolling: Array.from({ length: 20 }, () => ({ date: "", winRate: 55 })),
+    conversion: { winning: 3, converted: 1, losing: 2, comebacks: 0, conversionRate: 33, comebackRate: 0, blown: [] },
   };
 
   it("points at the weak opening, the costly phase and fast moves", async () => {
