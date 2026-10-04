@@ -47,3 +47,18 @@ it("scores a guessed move against the move played, without analysing the game fi
   expect((await call("POST", `/api/games/${id}/guess`, { ply: 3, usi: "5a4b" })).status).toBe(400);
   expect((await call("POST", `/api/games/${id}/guess`, { ply: 9, usi: "2g2f" })).status).toBe(400);
 }, 30000);
+
+it("makes a review card from a bad guess, with the guess as the move to fix", async () => {
+  const r = await call("POST", "/api/import", { text: makeKif({ moves: "7g7f 3c3d 2g2f 8c8d", black: "a", white: "c", date: "2026/10/01" }) });
+  const id = r.body.results[0].id;
+  const g = (await call("POST", `/api/games/${id}/guess`, { ply: 3, usi: "8h3c+" })).body;
+  expect(g.guess.level).toBeGreaterThanOrEqual(3);
+  expect(g.best?.usi).toBeTruthy();
+  expect(g.best.usi).not.toBe("8h3c+");
+
+  const made = await call("POST", "/api/cards", { gameId: id, ply: 3, guess: { usi: g.guess.usi, loss: g.guess.loss, level: g.guess.level, best: g.best.usi, pv: g.best.pv } });
+  expect(made.status).toBe(200);
+  const card = (await call("GET", `/api/cards/${made.body.id}`)).body;
+  expect(card).toMatchObject({ kind: "guess", played_usi: "8h3c+", best_usi: g.best.usi, level: g.guess.level });
+  expect(card.played_text).toContain("角");
+}, 30000);

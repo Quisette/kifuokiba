@@ -223,7 +223,11 @@ export class Cards {
   }
 
   /** A hand-made card: the position before `ply`; the answer is the engine's best move, else the game move. */
-  create(gameId: number, ply: number, note = "") {
+  /**
+   * A card from the position before `ply`. `guess` replaces the game move with one the
+   * user guessed in guess-the-move mode (and the engine's choice found there).
+   */
+  create(gameId: number, ply: number, note = "", guess?: { usi: string; loss: number | null; level: number; best?: string; pv?: string }) {
     const plies = this.lib.db.all<{ ply: number; usi: string; text: string; sfen: string; best_usi: string; pv: string; loss: number | null; level: number }>(
       "SELECT ply, usi, text, sfen, best_usi, pv, loss, level FROM plies WHERE game_id = ? AND ply IN (?, ?) ORDER BY ply",
       gameId,
@@ -232,6 +236,11 @@ export class Cards {
     );
     if (plies.length !== 2) throw new Error("no such move");
     const [prev, cur] = plies;
+    if (guess) {
+      const best = guess.best || prev.best_usi;
+      Object.assign(cur, { usi: guess.usi, text: Library.moveText(prev.sfen, guess.usi), loss: guess.loss, level: guess.level });
+      if (best) Object.assign(prev, { best_usi: best, pv: guess.best ? guess.pv || best : prev.pv });
+    }
     const side = prev.sfen.split(" ")[1] === "w" ? "white" : "black";
     const best = prev.best_usi || cur.usi;
     this.lib.db.run(
@@ -248,7 +257,7 @@ export class Cards {
       prev.best_usi ? prev.pv : cur.usi,
       cur.loss ?? 0,
       cur.level,
-      "manual",
+      guess ? "guess" : "manual",
       ply <= 30 ? "opening" : ply <= 80 ? "middlegame" : "endgame",
       Date.now(),
       Date.now(),

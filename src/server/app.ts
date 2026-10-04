@@ -409,8 +409,8 @@ export function createApp(opts: AppOptions) {
   route("GET", "/api/cards/counts", () => cards.counts());
   route("GET", "/api/cards/activity", (_r, url) => cards.activity(Math.min(Math.max(Number(url.searchParams.get("days")) || 182, 7), 730)));
   route("POST", "/api/cards", (_r, _u, _p, body) => {
-    const b = body as { gameId: number; ply: number; note?: string };
-    return cards.create(b.gameId, b.ply, b.note);
+    const b = body as { gameId: number; ply: number; note?: string; guess?: { usi: string; loss: number | null; level: number; best?: string; pv?: string } };
+    return cards.create(b.gameId, b.ply, b.note, b.guess);
   });
   route("GET", "/api/cards/:id", (_r, _u, p) => cards.get(id(p)) ?? Promise.reject(new HttpError(404, "card not found")));
   route("POST", "/api/cards/:id/answer", (_r, _u, p, body) => cards.answer(id(p), (body as { usi: string }).usi));

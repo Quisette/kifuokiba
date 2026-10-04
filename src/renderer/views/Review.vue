@@ -14,6 +14,7 @@
           <option value="phase:endgame">終盤 only</option>
           <option value="kind:missed_mate">Missed mates</option>
           <option value="kind:manual">My own cards</option>
+          <option value="kind:guess">From guess the move</option>
           <option value="leech:1">Leeches (missed 4+ times)</option>
         </select>
       </label>
@@ -51,6 +52,7 @@
           From {{ card.black }} vs {{ card.white }} {{ card.date ? "· " + card.date.slice(0, 10) : "" }} · before move {{ card.ply }} ·
           <a :href="`#/game/${card.game_id}?ply=${card.ply - 1}`">open game here</a>
           <span v-if="card.kind === 'missed_mate'" class="mark l4" style="margin-left: 6px">詰みあり</span>
+          <span v-if="card.kind === 'guess'" class="mark l1" style="margin-left: 6px" title="Made from a guess in guess-the-move mode">次の一手</span>
           <span v-if="card.leech" class="mark l3" style="margin-left: 6px" :title="`Missed ${card.lapses} times`">leech</span>
         </div>
         <ShogiBoard

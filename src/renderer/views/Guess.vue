@@ -41,6 +41,11 @@
               <span class="move">{{ result.best.text }}</span>
             </div>
             <div class="verdict">{{ verdict }}</div>
+            <div v-if="!result.match && result.guess.level >= 2" class="row">
+              <button type="button" class="btn small" :disabled="carded.has(result.ply)" @click="makeCard(result)">
+                {{ carded.has(result.ply) ? "Card made" : "Make a card from this" }}
+              </button>
+            </div>
           </div>
           <div class="row">
             <button v-if="state === 'shown'" ref="nextBtn" type="button" class="btn primary" @click="next">Next →</button>
@@ -77,12 +82,12 @@
 // Replay a game and guess the moves of one side. Each guess goes to
 // /api/games/:id/guess, which grades it like a played move.
 import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
-import { api, sideMark, type GameDetail } from "../api";
+import { api, sideMark, toast, type GameDetail } from "../api";
 import { route } from "../router";
 import ShogiBoard from "../components/ShogiBoard.vue";
 
 type GuessMove = { usi: string; text: string; loss: number | null; level: number };
-type GuessResult = { ply: number; match: boolean; guess: GuessMove; played: GuessMove; best: { usi: string; text: string } | null };
+type GuessResult = { ply: number; match: boolean; guess: GuessMove; played: GuessMove; best: { usi: string; text: string; pv: string } | null };
 type State = "yours" | "checking" | "shown" | "done" | "error";
 
 const LABELS = ["", "緩手", "疑問手", "悪手", "大悪手"];
@@ -96,6 +101,7 @@ const error = ref("");
 const result = ref<GuessResult | null>(null);
 const guesses = ref<GuessResult[]>([]);
 const nextBtn = ref<HTMLButtonElement | null>(null);
+const carded = ref(new Set<number>());
 
 const toMove = (sfen: string) => (sfen.split(" ")[1] === "w" ? "white" : "black");
 const lastMove = computed(() => {
@@ -169,6 +175,20 @@ async function guess(usi: string) {
     error.value = String(e);
     state.value = "error";
     setTimeout(() => state.value === "error" && (state.value = "yours"), 4000);
+  }
+}
+// A review card for this position, with my guess as the move to fix.
+async function makeCard(r: GuessResult) {
+  try {
+    await api.post("/api/cards", {
+      gameId: game.value!.id,
+      ply: r.ply,
+      guess: { usi: r.guess.usi, loss: r.guess.loss, level: r.guess.level, best: r.best?.usi, pv: r.best?.pv },
+    });
+    carded.value = new Set([...carded.value, r.ply]);
+    toast("Card made. It's in your review queue.");
+  } catch (e) {
+    toast(String(e));
   }
 }
 function next() {

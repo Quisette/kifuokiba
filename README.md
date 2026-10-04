@@ -25,7 +25,7 @@ Everything stays on your machine, in one SQLite file.
   - Scheduling is SM-2, or FSRS v4.5 if you pick it in Settings. A card missed four times becomes a leech, and the review screen then asks you to write down the idea or study the game.
   - "Export to Anki" writes a tab-separated file Anki imports directly, with each position drawn as a board diagram.
 - **Play it out.** From any game position or card, play on against the engine at a strength you pick. It's useful for practising the conversion of won positions you let slip.
-- **Guess the moves.** Replay any game, your own or a pro's, and guess each move for one side. Every guess is graded by the engine against the move actually played, with a running score of matches and average loss.
+- **Guess the moves.** Replay any game, your own or a pro's, and guess each move for one side. Every guess is graded by the engine against the move actually played, with a running score of matches and average loss. A bad guess can become a review card.
 - **Mates from my games.** Every analysed position where the side to move had a forced mate becomes a puzzle, with the ones you missed listed first. You solve it on the board while the engine defends, and it tells you the moment a move lets the king escape.
 - **Stats.** Win rate by side, opening, opponent's opening, castle, matchup, time control and opponent, plus a monthly trend, where in the game you lose points, and whether fast moves go wrong more often.
 - **Opening book.** Point Settings at a YaneuraOu-format book (.db) and games show which moves were book moves and where you left the book, with the book's choices there.
