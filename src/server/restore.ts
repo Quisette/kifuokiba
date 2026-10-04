@@ -1,5 +1,5 @@
 // Restore from a backup by merging it into the current library: games are
-// re-imported (duplicates are recognised), then their analysis, notes, tags,
+// re-imported (duplicates are recognised), then their analysis, notes, move marks, tags,
 // cards with their review history, and notebook pages are copied over.
 // Settings are left alone. Works across app versions since the backup is
 // opened with the same migrations.
@@ -48,6 +48,9 @@ export function mergeBackup(lib: Library, backupPath: string): RestoreResult {
         }
         for (const p of src.all<{ ply: number; comment: string }>("SELECT ply, comment FROM plies WHERE game_id = ? AND comment != ''", g.id)) {
           db.run("UPDATE plies SET comment = ? WHERE game_id = ? AND ply = ? AND comment = ''", p.comment, r.id, p.ply);
+        }
+        for (const p of src.all<{ ply: number; user_mark: string }>("SELECT ply, user_mark FROM plies WHERE game_id = ? AND user_mark != ''", g.id)) {
+          db.run("UPDATE plies SET user_mark = ? WHERE game_id = ? AND ply = ? AND user_mark = ''", p.user_mark, r.id, p.ply);
         }
       });
       lib.regrade(r.id);

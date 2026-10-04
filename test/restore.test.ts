@@ -39,6 +39,7 @@ it("merges a backup into another library, keeping analysis, cards, history and n
   await a.api("POST", "/api/analysis", { ids: [g] });
   await waitIdle(a.api);
   await a.api("PATCH", `/api/games/${g}`, { notes: "hung the bishop", tags: ["blunder"] });
+  await a.api("PUT", `/api/games/${g}/marks/3`, { mark: "??" });
   const card = (await a.api("GET", "/api/cards"))[0];
   await a.api("POST", `/api/cards/${card.id}/rate`, { rating: "good" });
   await a.api("POST", "/api/pages", { title: "Bishop trap", body: `:::shogi-view{game=${g} ply=3}\n:::` });
@@ -62,6 +63,7 @@ it("merges a backup into another library, keeping analysis, cards, history and n
   expect(detail.notes).toBe("hung the bishop");
   expect(detail.tags).toEqual(["blunder"]);
   expect(detail.plies[3].level).toBeGreaterThanOrEqual(3);
+  expect(detail.plies[3].user_mark).toBe("??");
   const cards = await b.api("GET", "/api/cards");
   expect(cards).toHaveLength(1);
   expect(cards[0].repetitions).toBe(1);

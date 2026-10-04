@@ -51,6 +51,9 @@ export type AppOptions = {
 
 type Handler = (req: http.IncomingMessage, url: URL, params: string[], body: unknown) => Promise<unknown> | unknown;
 
+/** Annotation symbols a move can carry ("" clears it). */
+export const MOVE_MARKS = ["", "!!", "!", "!?", "?!", "?", "??"];
+
 class HttpError extends Error {
   constructor(
     readonly status: number,
@@ -187,6 +190,12 @@ export function createApp(opts: AppOptions) {
   route("DELETE", "/api/games/:id", (_r, _u, p) => {
     lib.deleteGame(id(p));
     broadcast("library", {});
+    return { ok: true };
+  });
+  route("PUT", "/api/games/:id/marks/:ply", (_r, _u, p, body) => {
+    const mark = (body as { mark: string }).mark ?? "";
+    if (!MOVE_MARKS.includes(mark)) throw new HttpError(400, "unknown mark");
+    lib.setMark(id(p), Number(p[1]), mark);
     return { ok: true };
   });
   route("PUT", "/api/games/:id/comments/:ply", (_r, _u, p, body) => {

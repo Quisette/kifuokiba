@@ -59,7 +59,7 @@ export function reviewNote(lib: Library, id: number, opts: ReviewNoteOptions = {
 
   const mine = (side: string) => !g.mySide || side === g.mySide;
   const mistakes = g.plies
-    .filter((p) => p.ply > 0 && mine(p.side) && (p.level >= 3 || p.missed))
+    .filter((p) => p.ply > 0 && mine(p.side) && (p.level >= 3 || p.missed || p.user_mark === "?" || p.user_mark === "??"))
     .sort((a, b) => (b.loss ?? 0) - (a.loss ?? 0))
     .slice(0, max)
     .sort((a, b) => a.ply - b.ply);
@@ -75,7 +75,7 @@ export function reviewNote(lib: Library, id: number, opts: ReviewNoteOptions = {
   for (const p of mistakes) {
     const prev = g.plies[p.ply - 1];
     const what = p.missed === "mate" ? "missed mate" : p.missed === "win" ? "missed win" : p.label;
-    lines.push(`### ${p.ply}手目 ${p.text}（${what}${p.loss ? `, −${Math.round(p.loss)}%` : ""}）`, "");
+    lines.push(`### ${p.ply}手目 ${p.text}${p.user_mark}（${what || "my mark"}${p.loss ? `, −${Math.round(p.loss)}%` : ""}）`, "");
     lines.push(board(p.ply - 1), "");
     if (prev.best_usi) {
       const best = Library.moveText(prev.sfen, prev.best_usi);

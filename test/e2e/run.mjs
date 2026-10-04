@@ -250,8 +250,14 @@ try {
   await page.waitForFunction(() => location.hash.startsWith("#/game/"));
   check((await api("GET", "/api/games")).length === games.length + 1, "recorded game is saved to the library");
 
+  // Mark the first move as dubious; the mark shows in the move list and is saved.
+  const recordedId = (await page.evaluate(() => location.hash)).split("/")[2].split("?")[0];
+  await page.click(".moves li[data-ply=\"1\"]");
+  await page.click(".umarks .chip[title=Dubious]");
+  await page.waitForSelector(".moves .umark");
+  check((await api("GET", `/api/games/${recordedId}`)).plies[1].user_mark === "?!", "marking a move with ?! saves it");
+
   // Guess the moves of the game just recorded: ☗7六歩 is what was played.
-  const recordedId = (await page.evaluate(() => location.hash)).split("/")[2];
   await page.goto(base + `/#/guess?game=${recordedId}&side=black`);
   await page.waitForSelector(".board.operation", { state: "attached" });
   await page.waitForTimeout(400);

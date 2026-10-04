@@ -160,6 +160,8 @@ export class Db {
     this.ensureColumn("cards", "last_review_at", "INTEGER");
     // First ply each side was clearly winning (-1 never, NULL not computed yet).
     this.ensureColumn("games", "clear_black_ply", "INTEGER");
+    // My own annotation symbol on a move: !, ?, !!, ??, !? or ?!.
+    this.ensureColumn("plies", "user_mark", "TEXT NOT NULL DEFAULT ''");
     this.ensureColumn("games", "clear_white_ply", "INTEGER");
   }
 

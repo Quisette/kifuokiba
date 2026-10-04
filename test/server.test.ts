@@ -53,6 +53,19 @@ describe("library API", () => {
     expect(none).toHaveLength(0);
   });
 
+  it("keeps my own move marks", async () => {
+    const id = (await api("GET", "/api/games"))[0].id;
+    await api("PUT", `/api/games/${id}/marks/2`, { mark: "!?" });
+    expect((await api("GET", `/api/games/${id}`)).plies[2].user_mark).toBe("!?");
+    await api("PUT", `/api/games/${id}/marks/2`, { mark: "" });
+    expect((await api("GET", `/api/games/${id}`)).plies[2].user_mark).toBe("");
+    await expect(api("PUT", `/api/games/${id}/marks/2`, { mark: "!!!" })).rejects.toThrow(/400|mark/);
+    // A move I marked as a blunder goes into the review note even before analysis.
+    await api("PUT", `/api/games/${id}/marks/1`, { mark: "??" });
+    expect((await api("GET", `/api/games/${id}/note`)).body).toMatch(/### 1手目 \S+\?\?（my mark）/);
+    await api("PUT", `/api/games/${id}/marks/1`, { mark: "" });
+  });
+
   it("rejects garbage", async () => {
     const r = await api("POST", "/api/import", { text: "hello world" });
     expect(r.results[0].status).toBe("error");

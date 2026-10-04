@@ -19,6 +19,7 @@ Everything stays on your machine, in one SQLite file.
 - **Game view.** ShogiHome's board, keyboard navigation (← → Home End, `[` `]` to jump between mistakes, `f` to flip), and engine candidate moves.
   - "Diagram" downloads the current position as an SVG image.
   - Variations stored in the file (変化) are marked in the move list; clicking one plays it out on the board with its comment and the engine's view.
+  - Mark moves yourself with !!, !, !?, ?!, ? or ??. They show in the move list, survive backups and restores, and a move you mark ? or ?? goes into the review note even if the engine missed it.
   - You can try your own move and get an engine verdict, edit comments, search for the same position across games, and export KIF/CSA with the evals written as ShogiHome-style comments.
 - **Mistake cards.** Your 悪手 and worse become cards automatically. You can also make one from any position.
   - In review you play your answer on the board. The best move, or any move the engine says is within the tolerance, counts as correct. You can replay the engine line.

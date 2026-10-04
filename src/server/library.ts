@@ -352,7 +352,7 @@ export class Library {
     const plies = this.db.all<{
       ply: number; usi: string; text: string; sfen: string; comment: string; elapsed_ms: number;
       score: number | null; mate: number | null; best_usi: string; pv: string; eval_source: string;
-      loss: number | null; level: number; missed: "" | "mate" | "win";
+      loss: number | null; level: number; missed: "" | "mate" | "win"; user_mark: string;
     }>("SELECT * FROM plies WHERE game_id = ? ORDER BY ply", id);
     const tags = this.db.all<{ tag: string }>("SELECT tag FROM tags WHERE game_id = ? ORDER BY tag", id).map((t) => t.tag);
     const cards = this.db.all<{ id: number; ply: number }>("SELECT id, ply FROM cards WHERE game_id = ?", id);
@@ -401,6 +401,10 @@ export class Library {
         }
       }
     });
+  }
+
+  setMark(id: number, ply: number, mark: string) {
+    this.db.run("UPDATE plies SET user_mark = ? WHERE game_id = ? AND ply = ?", mark, id, ply);
   }
 
   setComment(id: number, ply: number, comment: string) {

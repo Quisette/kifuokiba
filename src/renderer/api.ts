@@ -70,6 +70,7 @@ export type Ply = {
   sfen: string;
   comment: string;
   elapsed_ms: number;
+  user_mark: string;
   score: number | null;
   mate: number | null;
   best_usi: string;

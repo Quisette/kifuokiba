@@ -104,7 +104,7 @@
             @click="jump(p.ply)"
           >
             <span class="n">{{ p.ply || "" }}</span>
-            <span class="m serif">{{ p.ply === 0 ? "開始局面" : p.text }}</span>
+            <span class="m serif">{{ p.ply === 0 ? "開始局面" : p.text }}<b v-if="p.user_mark" class="umark">{{ p.user_mark }}</b></span>
             <span v-if="p.comment.trim() && p.ply" class="cm" title="Has comment">✎</span>
             <span v-if="p.level >= 2" class="mark" :class="'l' + p.level">{{ p.label }}</span>
             <span v-if="bookPlies.has(p.ply)" class="book-mark" title="Opening book move">定</span>
@@ -122,6 +122,20 @@
             <span class="ev">{{ p.ply ? evalText(p.score, p.mate) : "" }}</span>
           </li>
         </ol>
+        <div v-if="cursor > 0" class="umarks" role="group" :aria-label="`My mark on move ${cursor}`">
+          <button
+            v-for="m in MARKS"
+            :key="m"
+            type="button"
+            class="chip"
+            :class="{ on: cur.user_mark === m }"
+            :aria-pressed="cur.user_mark === m"
+            :title="MARK_TITLES[m]"
+            @click="setMark(cur.user_mark === m ? '' : m)"
+          >
+            {{ m }}
+          </button>
+        </div>
         <div class="comment">
           <label class="cap" for="cmt">コメント Comment · move {{ cursor }}</label>
           <textarea id="cmt" v-model="commentDraft" rows="3" placeholder="Your note on this move (saved into the KIF)…" @blur="saveComment"></textarea>
@@ -277,6 +291,21 @@ const flip = ref(false);
 const mode = ref<"winrate" | "cp">("winrate");
 const newTag = ref("");
 const commentDraft = ref("");
+// My own annotation symbols on moves (stored apart from the KIF comment).
+const MARKS = ["!!", "!", "!?", "?!", "?", "??"];
+const MARK_TITLES: Record<string, string> = { "!!": "Brilliant", "!": "Good", "!?": "Interesting", "?!": "Dubious", "?": "Mistake", "??": "Blunder" };
+async function setMark(mark: string) {
+  const p = cur.value;
+  const ply = cursor.value;
+  const before = p.user_mark;
+  p.user_mark = mark;
+  try {
+    await api.put(`/api/games/${props.id}/marks/${ply}`, { mark });
+  } catch (e) {
+    p.user_mark = before;
+    toast(String(e));
+  }
+}
 const notesDraft = ref("");
 const notebookOpen = ref(false);
 const moveList = ref<HTMLElement | null>(null);
@@ -886,5 +915,19 @@ async function findPosition() {
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 6px;
+}
+.umark {
+  margin-left: 2px;
+  color: var(--accent, var(--gold));
+  font-family: var(--sans, inherit);
+}
+.umarks {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+.umarks .chip {
+  min-width: 36px;
+  justify-content: center;
 }
 </style>
