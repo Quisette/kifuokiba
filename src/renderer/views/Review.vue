@@ -31,7 +31,16 @@
     <div v-else-if="!card" class="empty">
       <div class="serif" style="font-size: 20px; margin-bottom: 6px">{{ total ? "今日の復習は完了 · All done for now" : "No cards yet" }}</div>
       <div v-if="!total">Cards are made automatically from your 悪手 and 大悪手 once games are analysed, or with “Make card” on any position.</div>
-      <div v-else>{{ counts?.total }} cards in the deck. Next one is due {{ nextDue }}.</div>
+      <div v-if="session.reviewed" class="session">
+        This session: {{ session.reviewed }} card{{ session.reviewed === 1 ? "" : "s" }}, {{ session.right }} right first time
+        ({{ Math.round((session.right / session.reviewed) * 100) }}%) in {{ sessionMinutes }}.
+        <template v-if="session.missedPhases.length"> Most misses in {{ session.missedPhases[0] }}.</template>
+      </div>
+      <div v-else-if="total">{{ counts?.total }} cards in the deck. Next one is due {{ nextDue }}.</div>
+      <div v-if="session.reviewed" class="row" style="justify-content: center; margin-top: 10px">
+        <a class="btn small" href="#/puzzles">Mates from my games</a>
+        <a class="btn small" href="#/repertoire">Opening drill</a>
+      </div>
       <button v-if="total" type="button" class="btn" style="margin-top: 12px" @click="cram = true; load()">Practise all anyway</button>
     </div>
 
@@ -135,7 +144,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { Position } from "tsshogi";
 import { api, Card, qs, Settings, toast } from "../api";
 import { Rating } from "../../core/sm2";
@@ -284,8 +293,25 @@ async function saveNote() {
   toast("Note saved to the card");
 }
 
+// Tally for the end-of-session summary; a card counts once, on its first rating.
+const session = reactive({ reviewed: 0, right: 0, startedAt: Date.now(), seen: new Set<number>(), misses: {} as Record<string, number>, missedPhases: [] as string[] });
+const PHASE_JA: Record<string, string> = { opening: "序盤", middlegame: "中盤", endgame: "終盤" };
+const sessionMinutes = computed(() => {
+  const m = Math.max(1, Math.round((Date.now() - session.startedAt) / 60000));
+  return `${m} min`;
+});
 async function rate(r: Rating) {
   if (!card.value) return;
+  if (!session.seen.has(card.value.id)) {
+    session.seen.add(card.value.id);
+    session.reviewed++;
+    if (answer.value?.correct) session.right++;
+    else {
+      const ph = PHASE_JA[card.value.phase] ?? card.value.phase;
+      session.misses[ph] = (session.misses[ph] ?? 0) + 1;
+      session.missedPhases = Object.entries(session.misses).sort((a, b) => b[1] - a[1]).map(([k]) => k);
+    }
+  }
   const res = await api.post<{ becameLeech: boolean; lapses: number }>(`/api/cards/${card.value.id}/rate`, {
     rating: r,
     usi: answer.value?.usi ?? "",
@@ -415,6 +441,11 @@ const nextDue = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+.session {
+  max-width: 520px;
+  margin: 0 auto;
+  line-height: 1.6;
 }
 .verdict {
   font-size: 22px;

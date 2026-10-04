@@ -158,6 +158,10 @@ try {
     await page.waitForTimeout(300);
     const counts = await api("GET", "/api/cards/counts");
     check(counts.reviewedToday === 1, "rating a card records a review");
+    if (cards.length === 1) {
+      await page.waitForSelector(".session");
+      check((await page.textContent(".session")).includes("This session: 1 card"), "review ends with a session summary");
+    }
     await page.goto(base + "/#/");
     await page.waitForSelector(".cal .day.l1");
     check((await page.textContent(".streak")).includes("1 day in a row"), "dashboard shows the review streak");
