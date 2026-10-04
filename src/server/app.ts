@@ -15,6 +15,7 @@ import { reviewNote } from "./review-note.js";
 import { findPuzzles } from "./puzzles.js";
 import { repertoire } from "./repertoire.js";
 import { AutoBackup } from "./backup.js";
+import { makeZip } from "./zip.js";
 import { loadSettings, saveSettings, AppSettings } from "./settings.js";
 import { RecordFileFormat } from "../core/recordFile.js";
 import { UsiEngine } from "./engine/usi.js";
@@ -285,6 +286,22 @@ export function createApp(opts: AppOptions) {
       break;
     }
     return { configured: true, inBook, leftBookAt, alternatives };
+  });
+  // Every game matching the library filter, one file each, in a zip.
+  route("GET", "/api/export/games", (_r, url) => {
+    const fmt = url.searchParams.get("format") === "csa" ? RecordFileFormat.CSA : RecordFileFormat.KIF;
+    const utf8 = url.searchParams.get("utf8") === "1";
+    const safe = (t: string) => t.replace(/[\\/:*?"<>|\s]+/g, "_").slice(0, 40);
+    const files = [];
+    for (const g of lib.listGames(filterFromQuery(url))) {
+      const r = lib.exportGame(g.id, fmt, utf8);
+      if (!r) continue;
+      const name = `${g.date.slice(0, 10) || "nodate"}_${safe(g.black || "先手")}_vs_${safe(g.white || "後手")}_${g.id}${fmt}`;
+      files.push({ name, data: r.data, date: g.date ? new Date(g.date.replace(" ", "T")) : undefined });
+    }
+    const valid = (d?: Date) => (d && !Number.isNaN(d.getTime()) ? d : undefined);
+    const zip = makeZip(files.map((f) => ({ ...f, date: valid(f.date) })));
+    return { __raw: zip, type: "application/zip", name: `kifu-study-${files.length}-games.zip` };
   });
   route("GET", "/api/games/:id/export", (_r, url, p) => {
     const fmt = (url.searchParams.get("format") ?? "kif") as string;

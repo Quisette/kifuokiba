@@ -10,7 +10,7 @@ Everything stays on your machine, in one SQLite file.
   - **Lishogi:** set your username in Settings and press "Fetch from Lishogi". Later fetches only ask for new games.
   - **Watched folders:** kifu saved by ShogiGUI, Kifu for Windows or a Wars downloader into a watched folder are imported while the app runs.
   - Each game gets its 戦型, the castles on both sides over time, and its tactics (149 rules converted from HiraganaSuisho and sylwi-kifu-vue).
-  - Filter by side, result, opening, castle, opponent, tag, source or date, and save a filter as a collection.
+  - Filter by side, result, opening, castle, opponent, tag, source or date, and save a filter as a collection. "Export shown" downloads the filtered games as KIF files in a zip.
 - **Analysis.** A background queue runs your USI engine (YaneuraOu, 水匠 etc.) over every position. Evaluations are cached per position.
   - Moves are graded 緩手 / 疑問手 / 悪手 / 大悪手 with ShogiHome's win-rate thresholds, plus missed mates and missed wins.
   - Each game gets accuracy, a turning point, and an eval graph with a think-time strip underneath. Missed mates and thrown-away wins are marked separately.

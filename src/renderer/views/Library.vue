@@ -6,6 +6,7 @@
         <button type="button" class="btn" @click="showImport = !showImport">Import</button>
         <a class="btn" href="#/record">Record a game</a>
         <button type="button" class="btn" :disabled="!games.length" @click="analyse(games.map((g) => g.id))">Analyse shown</button>
+        <a class="btn" :class="{ disabled: !games.length }" :href="'/api/export/games' + qs({ ...f, utf8: '1' })" download title="Every game shown, as KIF files in a zip">Export shown (.zip)</a>
       </div>
     </div>
     <ImportPanel v-if="showImport" style="margin-bottom: 16px" />

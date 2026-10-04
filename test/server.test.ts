@@ -115,6 +115,26 @@ describe("library API", () => {
     expect(page.body).toBe(n.body);
   });
 
+  it("exports the filtered games as a zip of KIF files", async () => {
+    const { inflateRawSync } = await import("node:zlib");
+    const all = await api("GET", "/api/games");
+    const res = await fetch(`${base}/api/export/games?utf8=1`);
+    expect(res.headers.get("content-type")).toBe("application/zip");
+    const buf = Buffer.from(await res.arrayBuffer());
+    const end = buf.length - 22;
+    expect(buf.readUInt32LE(end)).toBe(0x06054b50);
+    expect(buf.readUInt16LE(end + 10)).toBe(all.length);
+    // First entry: inflate it and check it is a KIF with its UTF-8 name.
+    const nameLen = buf.readUInt16LE(26);
+    const name = buf.subarray(30, 30 + nameLen).toString("utf8");
+    expect(name).toMatch(/_vs_.*\.kif$/);
+    const packed = buf.subarray(30 + nameLen, 30 + nameLen + buf.readUInt32LE(18));
+    expect(inflateRawSync(packed).toString("utf8")).toContain("手合割");
+    // The filter applies: one opponent only.
+    const one = Buffer.from(await (await fetch(`${base}/api/export/games?opponent=rival`)).arrayBuffer());
+    expect(one.readUInt16LE(one.length - 12)).toBe(all.filter((g: { white: string; black: string }) => g.white === "rival" || g.black === "rival").length);
+  });
+
   it("computes stats", async () => {
     const s = await api("GET", "/api/stats");
     expect(s.totals.games).toBe(2);
