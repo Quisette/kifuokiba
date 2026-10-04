@@ -1,5 +1,5 @@
 // Electron shell: start the local server in the main process and show it in a window.
-import { app, BrowserWindow, shell, dialog } from "electron";
+import { app, BrowserWindow, Notification, shell, dialog } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createApp } from "../server/app.js";
@@ -58,6 +58,7 @@ async function start() {
   });
   await win.loadURL(`http://127.0.0.1:${port}/`);
   await openFiles(pending.splice(0));
+  watchDue();
   // Smoke test hook: KIFU_STUDY_SMOKE=out.png saves a capture of the first screen and quits.
   const smoke = process.env.KIFU_STUDY_SMOKE;
   if (smoke) {
@@ -66,6 +67,30 @@ async function start() {
     writeFileSync(smoke, (await win!.webContents.capturePage()).toPNG());
     app.quit();
   }
+}
+
+// Due cards on the dock/taskbar badge, and one notification a day while the window is in the background.
+function watchDue() {
+  let notifiedOn = "";
+  const tick = () => {
+    if (!server) return;
+    const { due } = server.cards.counts();
+    app.setBadgeCount(due);
+    const today = new Date().toDateString();
+    if (due > 0 && notifiedOn !== today && win && !win.isFocused() && Notification.isSupported()) {
+      notifiedOn = today;
+      const n = new Notification({ title: "棋譜帖", body: `${due} card${due === 1 ? " is" : "s are"} due for review.` });
+      n.on("click", () => {
+        if (!win) return;
+        if (win.isMinimized()) win.restore();
+        win.focus();
+        void win.loadURL(`http://127.0.0.1:${port}/#/review`);
+      });
+      n.show();
+    }
+  };
+  tick();
+  setInterval(tick, 5 * 60 * 1000).unref();
 }
 
 app.whenReady().then(start).catch((e) => {
