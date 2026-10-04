@@ -7,6 +7,8 @@ import { makeKif } from "./fixtures.js";
 
 const dir = mkdtempSync(path.join(tmpdir(), "kifu-crash-"));
 const MOCK = path.resolve("tools/mock-usi-engine.mjs");
+// Windows cannot spawn a .mjs file directly; the settings use the .cmd wrapper there.
+const ENGINE = path.resolve(process.platform === "win32" ? "tools/mock-usi-engine.cmd" : "tools/mock-usi-engine.mjs");
 let app: ReturnType<typeof createApp>;
 let base = "";
 const api = async (method: string, p: string, body?: unknown) => {
@@ -57,7 +59,7 @@ createInterface({ input: process.stdin }).on("line", (l) => {
   // Nothing is left marked as queued.
   for (const id of ids) expect((await api("GET", `/api/games/${id}`)).analysis_status).not.toBe("queued");
   // With a working engine, analysis runs again.
-  await api("PUT", "/api/settings", { engine: { path: MOCK, options: {}, movetimeMs: 30, nodes: 0, multipv: 1 } });
+  await api("PUT", "/api/settings", { engine: { path: ENGINE, options: {}, movetimeMs: 30, nodes: 0, multipv: 1 } });
   await api("POST", "/api/analysis", { ids });
   const s2 = await waitIdle();
   expect(s2.error).toBeFalsy();
@@ -65,7 +67,7 @@ createInterface({ input: process.stdin }).on("line", (l) => {
 }, 30000);
 
 it("re-checks flagged moves with a deeper search and drops cards that no longer qualify", async () => {
-  await api("PUT", "/api/settings", { myNames: ["me"], cardMinLevel: 3, engine: { path: MOCK, options: {}, movetimeMs: 30, nodes: 0, multipv: 1, verifyFactor: 4 } });
+  await api("PUT", "/api/settings", { myNames: ["me"], cardMinLevel: 3, engine: { path: ENGINE, options: {}, movetimeMs: 30, nodes: 0, multipv: 1, verifyFactor: 4 } });
   // ▲3三角成?? drops the bishop.
   const r = await api("POST", "/api/import", { text: makeKif({ moves: "7g7f 3c3d 8h3c+ 2a3c 2g2f", black: "me", white: "y", date: "2026/09/20" }) });
   const id = r.results[0].id;
