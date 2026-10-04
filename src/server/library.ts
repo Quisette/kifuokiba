@@ -270,7 +270,20 @@ export class Library {
         opponentRating: opp?.rating ?? null,
       };
     });
-    items = items.filter((g) => matchesFilter(g, filter));
+    // Search text also matches what you wrote: move comments and game notes.
+    const textHits = filter.q
+      ? new Set(
+          this.db
+            .all<{ id: number }>(
+              `SELECT DISTINCT game_id id FROM plies WHERE instr(lower(comment), ?) > 0
+               UNION SELECT id FROM games WHERE instr(lower(notes), ?) > 0`,
+              filter.q.toLowerCase(),
+              filter.q.toLowerCase(),
+            )
+            .map((r) => r.id),
+        )
+      : undefined;
+    items = items.filter((g) => matchesFilter(g, filter, textHits));
     const key = (filter.sort ?? "date") as keyof GameListItem;
     const dir = filter.desc === false ? 1 : -1;
     items.sort((a, b) => {
@@ -595,7 +608,7 @@ function stripSearchComment(comment: string): string {
     .trim();
 }
 
-function matchesFilter(g: GameListItem, f: GameFilter): boolean {
+function matchesFilter(g: GameListItem, f: GameFilter, textHits?: Set<number>): boolean {
   if (f.side && g.mySide !== f.side) return false;
   if (f.result && g.myResult !== f.result) return false;
   if (f.opening && ![g.opening, g.black_opening, g.white_opening, g.myOpening, g.strategy].includes(f.opening)) return false;
@@ -613,7 +626,7 @@ function matchesFilter(g: GameListItem, f: GameFilter): boolean {
     const hay = [g.black, g.white, g.event, g.strategy, g.black_castle, g.white_castle, g.file_name, ...g.tags]
       .join(" ")
       .toLowerCase();
-    if (!hay.includes(q)) return false;
+    if (!hay.includes(q) && !textHits?.has(g.id)) return false;
   }
   return true;
 }

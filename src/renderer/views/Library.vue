@@ -30,7 +30,7 @@
     <form class="filters" @submit.prevent>
       <label class="field grow">
         Search
-        <input v-model="f.q" type="search" placeholder="Player, event, tag, file…" />
+        <input v-model="f.q" type="search" placeholder="Player, event, tag, comment, note…" />
       </label>
       <label class="field">
         My side

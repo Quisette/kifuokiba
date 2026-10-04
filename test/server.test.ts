@@ -154,6 +154,17 @@ describe("library API", () => {
     expect(none.status).toBe("nomate");
   });
 
+  it("searches move comments and game notes", async () => {
+    const games = await api("GET", "/api/games");
+    const id = games[0].id;
+    await api("PUT", `/api/games/${id}/comments/2`, { comment: "ここで角交換を考えた" });
+    await api("PATCH", `/api/games/${games[1].id}`, { notes: "Time trouble at the end" });
+    const byComment = await api("GET", "/api/games?q=" + encodeURIComponent("角交換"));
+    expect(byComment.map((g: { id: number }) => g.id)).toEqual([id]);
+    const byNote = await api("GET", "/api/games?q=TIME%20TROUBLE");
+    expect(byNote.map((g: { id: number }) => g.id)).toEqual([games[1].id]);
+  });
+
   it("explores my games move by move", async () => {
     const root = await api("GET", "/api/explorer");
     expect(root.games).toBe(2);
