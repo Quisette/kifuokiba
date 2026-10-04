@@ -15,8 +15,18 @@ import { RecordFileFormat } from "../core/recordFile.js";
 import { UsiEngine } from "./engine/usi.js";
 import { InitialPositionSFEN, Position } from "tsshogi";
 import { explore } from "./explorer.js";
+import { syncLishogi } from "./fetchers/sync.js";
+import type { FetchLike } from "./fetchers/lishogi.js";
 
-export type AppOptions = { dbPath: string; staticDir?: string; port?: number; host?: string };
+export type AppOptions = {
+  dbPath: string;
+  staticDir?: string;
+  port?: number;
+  host?: string;
+  /** Network access for account sync; tests pass a stub. */
+  fetchImpl?: FetchLike;
+  lishogiBase?: string;
+};
 
 type Handler = (req: http.IncomingMessage, url: URL, params: string[], body: unknown) => Promise<unknown> | unknown;
 
@@ -98,6 +108,22 @@ export function createApp(opts: AppOptions) {
     if (added.length && lib.settings.autoAnalyze && lib.settings.engine.path) analysis.enqueue(added);
     broadcast("library", { added: added.length });
     return { results };
+  });
+
+  // ---- account sync
+  route("POST", "/api/sync/lishogi", async (_r, _u, _p, body) => {
+    const b = (body ?? {}) as { username?: string; full?: boolean };
+    const username = (b.username ?? lib.settings.accounts.lishogi).trim();
+    if (!username) throw new HttpError(400, "Set your Lishogi username in Settings first");
+    let r;
+    try {
+      r = await syncLishogi(lib, username, { fetchImpl: opts.fetchImpl, base: opts.lishogiBase, full: b.full });
+    } catch (e) {
+      throw new HttpError(502, e instanceof Error ? e.message : String(e));
+    }
+    if (r.added.length && lib.settings.autoAnalyze && lib.settings.engine.path) analysis.enqueue(r.added);
+    broadcast("library", { added: r.added.length });
+    return r;
   });
 
   // ---- games

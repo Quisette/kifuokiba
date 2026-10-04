@@ -15,6 +15,9 @@
           <input type="file" multiple accept=".kif,.kifu,.ki2,.ki2u,.csa,.jkf,.sfen,.txt" class="sr-only" @change="onPick" />
         </label>
         <button type="button" class="btn" @click="showPaste = !showPaste">Paste text</button>
+        <button v-if="lishogiUser" type="button" class="btn" :disabled="busy" @click="syncLishogi" :title="`Fetch new games for ${lishogiUser}`">
+          Fetch from Lishogi
+        </button>
       </div>
     </div>
     <div v-if="showPaste" class="paste">
@@ -48,8 +51,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import { api, fileToBase64, live, toast } from "../api";
+import { computed, onMounted, ref } from "vue";
+import { api, fileToBase64, live, Settings, toast } from "../api";
 
 type Result = { status: "added" | "duplicate" | "error"; name: string; id?: number; error?: string };
 const emit = defineEmits<{ imported: [results: Result[]] }>();
@@ -62,6 +65,23 @@ const results = ref<Result[]>([]);
 const added = computed(() => results.value.filter((r) => r.status === "added").length);
 const dups = computed(() => results.value.filter((r) => r.status === "duplicate").length);
 const errors = computed(() => results.value.filter((r) => r.status === "error").length);
+
+const lishogiUser = ref("");
+onMounted(async () => {
+  lishogiUser.value = (await api.get<Settings>("/api/settings")).accounts?.lishogi ?? "";
+});
+async function syncLishogi() {
+  busy.value = true;
+  try {
+    const r = await api.post<{ fetched: number; added: number[]; duplicates: number; skipped: number; errors: string[] }>("/api/sync/lishogi", {});
+    live.libraryVersion++;
+    toast(`Lishogi: ${r.added.length} new, ${r.duplicates} already in the library${r.skipped ? `, ${r.skipped} skipped (variants or aborted)` : ""}`);
+  } catch (e) {
+    toast(String(e));
+  } finally {
+    busy.value = false;
+  }
+}
 
 async function send(body: unknown) {
   busy.value = true;

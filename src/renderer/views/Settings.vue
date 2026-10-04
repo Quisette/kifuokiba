@@ -13,6 +13,22 @@
       </section>
 
       <section class="panel box">
+        <h3>対局サイト Online accounts</h3>
+        <label class="field">
+          Lishogi username
+          <input v-model="s.accounts.lishogi" placeholder="your Lishogi name" autocomplete="off" />
+        </label>
+        <div class="row">
+          <button type="button" class="btn" :disabled="!s.accounts.lishogi || syncing" @click="sync">{{ syncing ? "Fetching…" : "Save and fetch new games" }}</button>
+          <span v-if="syncResult" class="small">{{ syncResult }}</span>
+        </div>
+        <div class="muted small">
+          Pulls your finished standard games from lishogi.org (variants are skipped). Later fetches only ask for games since the last one. Add the same name under
+          “My player names” so the app knows which side is you. Shogi Wars has no public API, so download its kifu and drop the files in instead.
+        </div>
+      </section>
+
+      <section class="panel box">
         <h3>エンジン Engine</h3>
         <label class="field">
           USI engine executable (full path)
@@ -117,6 +133,21 @@ async function save() {
   s.value.engine.options = parseOptions();
   s.value = await api.put<Settings>("/api/settings", s.value);
   toast("Settings saved");
+}
+const syncing = ref(false);
+const syncResult = ref("");
+async function sync() {
+  syncing.value = true;
+  syncResult.value = "";
+  try {
+    await save();
+    const r = await api.post<{ fetched: number; added: number[]; duplicates: number; skipped: number; errors: string[] }>("/api/sync/lishogi", {});
+    syncResult.value = `${r.added.length} new, ${r.duplicates} already here` + (r.errors.length ? `, ${r.errors.length} failed` : "");
+  } catch (e) {
+    syncResult.value = String(e);
+  } finally {
+    syncing.value = false;
+  }
 }
 async function test() {
   testing.value = true;

@@ -150,6 +150,7 @@ export type Settings = {
   cardMinLevel: number;
   cardOkLoss: number;
   autoAnalyze: boolean;
+  accounts: { lishogi: string };
 };
 
 export type PageSummary = { id: number; notebook: string; title: string; excerpt: string; updated_at: number };

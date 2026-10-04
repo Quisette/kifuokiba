@@ -19,6 +19,8 @@ export type AppSettings = {
   /** A card answer within this win-rate loss of the best move counts as correct. */
   cardOkLoss: number;
   autoAnalyze: boolean;
+  /** Online accounts to pull games from. */
+  accounts: { lishogi: string };
 };
 
 export const defaultSettings: AppSettings = {
@@ -34,6 +36,7 @@ export const defaultSettings: AppSettings = {
   cardMinLevel: 3,
   cardOkLoss: 3,
   autoAnalyze: true,
+  accounts: { lishogi: "" },
 };
 
 export function loadSettings(db: Db): AppSettings {
@@ -43,6 +46,7 @@ export function loadSettings(db: Db): AppSettings {
     ...saved,
     engine: { ...defaultSettings.engine, ...(saved.engine ?? {}) },
     grading: { ...defaultSettings.grading, ...(saved.grading ?? {}) },
+    accounts: { ...defaultSettings.accounts, ...(saved.accounts ?? {}) },
   };
 }
 
