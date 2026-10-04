@@ -19,6 +19,7 @@ import { explore } from "./explorer.js";
 import { syncLishogi } from "./fetchers/sync.js";
 import { FolderWatcher } from "./watch.js";
 import { BookCache } from "./book.js";
+import { insightsFromStats } from "./insights.js";
 import type { FetchLike } from "./fetchers/lishogi.js";
 
 export type AppOptions = {
@@ -296,6 +297,7 @@ export function createApp(opts: AppOptions) {
 
   // ---- stats
   route("GET", "/api/stats", (_r, url) => computeStats(lib, filterFromQuery(url)));
+  route("GET", "/api/insights", () => insightsFromStats(computeStats(lib), cards.counts()));
   route("GET", "/api/players/:name", (_r, _u, p) => {
     const prof = playerProfile(lib, decodeURIComponent(p[0]));
     if (!prof.games.length) throw new HttpError(404, "no games against that player");

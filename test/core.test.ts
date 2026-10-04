@@ -147,3 +147,49 @@ describe("FSRS scheduling", () => {
     expect(viaSm2.stability).toBeNull();
   });
 });
+
+describe("dashboard insights", () => {
+  const row = (name: string, wins: number, losses: number) => ({ name, games: wins + losses, wins, losses, draws: 0, winRate: (wins / (wins + losses)) * 100 });
+  const base = {
+    totals: { games: 20, wins: 11, losses: 9, draws: 0, winRate: 55 },
+    byOpening: [row("四間飛車", 9, 4), row("居飛車", 2, 5)],
+    byOpponentOpening: [row("相掛かり", 1, 3), row("三間飛車", 6, 2)],
+    phaseProfile: [
+      { phase: "opening", avgLoss: 0.3, moves: 200, mistakes: 1, avgSeconds: 4 },
+      { phase: "middlegame", avgLoss: 0.9, moves: 300, mistakes: 6, avgSeconds: 12 },
+      { phase: "endgame", avgLoss: 0.5, moves: 150, mistakes: 2, avgSeconds: 8 },
+    ],
+    thinkTime: [
+      { label: "< 5s", moves: 100, avgLoss: 1, mistakes: 6, mistakeRate: 6 },
+      { label: "5–15s", moves: 300, avgLoss: 0.4, mistakes: 3, mistakeRate: 1 },
+      { label: "15–60s", moves: 100, avgLoss: 0.3, mistakes: 1, mistakeRate: 1 },
+      { label: "60s+", moves: 0, avgLoss: null, mistakes: 0, mistakeRate: null },
+    ],
+    rolling: Array.from({ length: 20 }, () => ({ date: "", winRate: 55 })),
+  };
+
+  it("points at the weak opening, the costly phase and fast moves", async () => {
+    const { insightsFromStats } = await import("../src/server/insights.js");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const out = insightsFromStats(base as any, { leeches: 2 });
+    expect(out.map((i) => i.kind)).toEqual(["opening", "opponent-opening", "phase", "time"]);
+    expect(out[0].text).toContain("居飛車");
+    expect(out[0].link).toBe("#/library?opening=" + encodeURIComponent("居飛車"));
+    expect(out[1].text).toContain("相掛かり");
+    expect(out[2].text).toContain("中盤");
+    expect(out[3].text).toContain("6.0×");
+  });
+
+  it("stays quiet when the numbers are small or even", async () => {
+    const { insightsFromStats } = await import("../src/server/insights.js");
+    const even = {
+      ...base,
+      byOpening: [row("四間飛車", 1, 1)],
+      byOpponentOpening: [],
+      phaseProfile: base.phaseProfile.map((p) => ({ ...p, avgLoss: 0.5 })),
+      thinkTime: [],
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect(insightsFromStats(even as any, { leeches: 0 })).toEqual([]);
+  });
+});

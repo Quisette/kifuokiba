@@ -65,6 +65,10 @@
       </section>
 
       <aside class="side-col">
+        <div v-if="insights.length" class="panel box insights">
+          <div class="cap" style="margin-bottom: 8px">気づき What stands out</div>
+          <a v-for="i in insights" :key="i.kind" :href="i.link ?? '#/stats'" class="insight">{{ i.text }}</a>
+        </div>
         <div class="panel box">
           <div class="cap" style="margin-bottom: 10px">戦型別 By my opening</div>
           <div v-if="!stats?.byOpening.length" class="muted small">Needs games where your side is known.</div>
@@ -126,6 +130,7 @@ const stats = ref<Stats | null>(null);
 const games = ref<GameListItem[]>([]);
 const counts = ref<{ due: number; total: number; reviewedToday: number } | null>(null);
 const settings = ref<Settings | null>(null);
+const insights = ref<{ kind: string; text: string; link?: string }[]>([]);
 
 async function load() {
   [stats.value, games.value, counts.value, settings.value] = await Promise.all([
@@ -134,6 +139,7 @@ async function load() {
     api.get<{ due: number; total: number; reviewedToday: number }>("/api/cards/counts"),
     api.get<Settings>("/api/settings"),
   ]);
+  insights.value = await api.get<{ kind: string; text: string; link?: string }[]>("/api/insights").catch(() => []);
 }
 onMounted(load);
 watch(() => live.libraryVersion, load);
@@ -157,6 +163,24 @@ async function stop() {
 </script>
 
 <style scoped>
+.insights {
+  border-color: #8a6a3a;
+}
+.insight {
+  display: block;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 13px;
+  line-height: 1.55;
+  padding: 6px 0;
+  border-top: 1px solid #2a2017;
+}
+.insight:first-of-type {
+  border-top: 0;
+}
+.insight:hover {
+  color: var(--gold-soft);
+}
 .banner {
   display: flex;
   gap: 12px;
