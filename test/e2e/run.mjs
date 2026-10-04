@@ -133,6 +133,13 @@ try {
   await page.waitForSelector(".tiles");
   await page.waitForTimeout(300);
   await shot("06-stats");
+  const opp = games.find((g) => g.opponent)?.opponent;
+  if (opp) {
+    await page.goto(base + `/#/player/${encodeURIComponent(opp)}`);
+    await page.waitForSelector(".game");
+    check((await page.$$(".game")).length === games.filter((g) => g.opponent === opp).length, "player profile lists games vs that opponent");
+    await shot("06c-player");
+  }
 
   await page.goto(base + "/#/explorer");
   await page.waitForSelector("table.moves tbody tr");

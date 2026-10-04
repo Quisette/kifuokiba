@@ -8,7 +8,7 @@ import { Db } from "./db.js";
 import { Library, GameFilter } from "./library.js";
 import { AnalysisQueue } from "./analysis.js";
 import { Cards } from "./cards.js";
-import { computeStats } from "./stats.js";
+import { computeStats, playerProfile } from "./stats.js";
 import { Pages } from "./pages.js";
 import { loadSettings, saveSettings, AppSettings } from "./settings.js";
 import { RecordFileFormat } from "../core/recordFile.js";
@@ -250,6 +250,11 @@ export function createApp(opts: AppOptions) {
 
   // ---- stats
   route("GET", "/api/stats", (_r, url) => computeStats(lib, filterFromQuery(url)));
+  route("GET", "/api/players/:name", (_r, _u, p) => {
+    const prof = playerProfile(lib, decodeURIComponent(p[0]));
+    if (!prof.games.length) throw new HttpError(404, "no games against that player");
+    return prof;
+  });
 
   // ---- cards
   route("GET", "/api/cards", (_r, url) =>

@@ -109,6 +109,12 @@ describe("lishogi sync API", () => {
     const stats = (await api("GET", "/api/stats")).body;
     expect(stats.ratingHistory).toEqual([{ source: "lishogi", points: [expect.objectContaining({ rating: 1650, result: "win" })] }]);
 
+    const prof = (await api("GET", "/api/players/foe")).body;
+    expect(prof.totals).toMatchObject({ games: 2, wins: 2, losses: 0 });
+    expect(prof.form).toBe("WW");
+    expect(prof.theirRating).toBe(1700);
+    expect((await api("GET", "/api/players/" + encodeURIComponent("誰か"))).status).toBe(404);
+
     const second = await api("POST", "/api/sync/lishogi");
     expect(second.body.added).toHaveLength(0);
     expect(second.body.duplicates).toBe(2);

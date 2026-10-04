@@ -166,7 +166,7 @@
         <div class="panel box">
           <label class="cap" for="gnotes">メモ Game notes</label>
           <textarea id="gnotes" v-model="notesDraft" rows="3" placeholder="What did you learn from this game?" @blur="saveNotes"></textarea>
-          <a :href="`#/library?opponent=${encodeURIComponent(game.opponent || '')}`" v-if="game.opponent" style="font-size: 12px">All games vs {{ game.opponent }} →</a>
+          <a :href="`#/player/${encodeURIComponent(game.opponent || '')}`" v-if="game.opponent" style="font-size: 12px">My record vs {{ game.opponent }} →</a>
           <a href="#" style="font-size: 12px; margin-left: 10px" @click.prevent="findPosition">Other games with this position →</a>
           <a :href="explorerLink" style="font-size: 12px; margin-left: 10px">Explore from here →</a>
           <div v-if="posHits" class="hits">

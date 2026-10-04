@@ -76,7 +76,7 @@
         <BarTable title="形 Shape" :rows="s.byMatchup" link="matchup" />
         <BarTable title="持ち時間 Time control" :rows="s.byTimeControl" />
         <BarTable title="Source" :rows="s.bySource" link="source" />
-        <BarTable title="相手 Opponents (2+ games)" :rows="s.byOpponent" link="opponent" />
+        <BarTable title="相手 Opponents (2+ games)" :rows="s.byOpponent" link="player" />
 
         <section class="panel box">
           <div class="cap">形勢を損ねた局面 Loss by phase (my moves)</div>
@@ -219,7 +219,7 @@ const BarTable = defineComponent({
           ? p.rows.slice(0, 12).map((r) =>
               h("div", { class: "bar-row", title: `${r.name}: ${r.wins}勝 ${r.losses}敗 ${r.draws}分` }, [
                 p.link
-                  ? h("a", { class: "bar-label", href: `#/library?${p.link}=${encodeURIComponent(r.name)}` }, r.name)
+                  ? h("a", { class: "bar-label", href: p.link === "player" ? `#/player/${encodeURIComponent(r.name)}` : `#/library?${p.link}=${encodeURIComponent(r.name)}` }, r.name)
                   : h("span", { class: "bar-label" }, r.name),
                 h("span", { class: "bar" }, [
                   h("span", { style: { width: (r.wins / max) * 100 + "%", background: "var(--win)" } }),

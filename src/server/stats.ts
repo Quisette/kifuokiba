@@ -156,3 +156,32 @@ export function computeStats(lib: Library, filter: GameFilter = {}) {
     })(),
   };
 }
+
+/** Everything about one opponent: my record, their openings and castles, recent form. */
+export function playerProfile(lib: Library, name: string) {
+  const games = lib
+    .listGames()
+    .filter((g) => g.mySide && g.opponent === name)
+    .sort((a, b) => (a.date < b.date ? 1 : -1));
+  const their = (g: GameListItem) => (g.mySide === "black" ? "white" : "black");
+  const theirOpening = (g: GameListItem) => g.opening || (their(g) === "black" ? g.black_opening || g.black_style : g.white_opening || g.white_style);
+  return {
+    name,
+    totals: score(games),
+    firstPlayed: games.at(-1)?.date ?? "",
+    lastPlayed: games[0]?.date ?? "",
+    /** Their openings and how I scored against each. */
+    theirOpenings: groupBy(games, theirOpening),
+    theirCastles: groupBy(games, (g) => (their(g) === "black" ? g.black_castle : g.white_castle)),
+    myOpenings: groupBy(games, (g) => g.myOpening),
+    bySide: groupBy(games, (g) => (g.mySide === "black" ? "先手" : "後手")),
+    /** Most recent first: W/L string like "WWLW". */
+    form: games
+      .slice(0, 10)
+      .map((g) => (g.myResult === "win" ? "W" : g.myResult === "loss" ? "L" : g.myResult === "draw" ? "D" : "-"))
+      .join(""),
+    meanAccuracy: mean(games.filter((g) => g.myAccuracy !== null).map((g) => g.myAccuracy!)),
+    theirRating: games.find((g) => g.opponentRating !== null)?.opponentRating ?? null,
+    games,
+  };
+}
