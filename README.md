@@ -7,17 +7,21 @@ Everything stays on your machine, in one SQLite file.
 ## What it does
 
 - **Library.** Import KIF, KIFU, KI2, CSA, JKF, SFEN or USI by drag-drop, file picker or paste. Shift_JIS and UTF-8 are detected automatically, and duplicates are skipped.
+  - **Lishogi:** set your username in Settings and press "Fetch from Lishogi". Later fetches only ask for new games.
+  - **Watched folders:** kifu saved by ShogiGUI, Kifu for Windows or a Wars downloader into a watched folder are imported while the app runs.
   - Each game gets its 戦型, the castles on both sides over time, and its tactics (149 rules converted from HiraganaSuisho and sylwi-kifu-vue).
   - Filter by side, result, opening, castle, opponent, tag, source or date, and save a filter as a collection.
 - **Analysis.** A background queue runs your USI engine (YaneuraOu, 水匠 etc.) over every position. Evaluations are cached per position.
   - Moves are graded 緩手 / 疑問手 / 悪手 / 大悪手 with ShogiHome's win-rate thresholds, plus missed mates and missed wins.
-  - Each game gets accuracy, a turning point and an eval graph.
+  - Each game gets accuracy, a turning point, and an eval graph with a think-time strip underneath. Missed mates and thrown-away wins are marked separately.
 - **Game view.** ShogiHome's board, keyboard navigation (← → Home End, `[` `]` to jump between mistakes, `f` to flip), and engine candidate moves.
   - You can try your own move and get an engine verdict, edit comments, search for the same position across games, and export KIF/CSA with the evals written as ShogiHome-style comments.
 - **Mistake cards.** Your 悪手 and worse become cards automatically. You can also make one from any position.
   - In review you play your answer on the board. The best move, or any move the engine says is within the tolerance, counts as correct. You can replay the engine line.
-  - Scheduling is SM-2. Leeches are counted.
-- **Stats.** Win rate by side, opening, opponent's opening, castle, matchup, time control and opponent, plus a monthly trend and where in the game you lose points.
+  - Scheduling is SM-2. A card missed four times becomes a leech, and the review screen then asks you to write down the idea or study the game.
+  - "Export to Anki" writes a tab-separated file Anki imports directly.
+- **Stats.** Win rate by side, opening, opponent's opening, castle, matchup, time control and opponent, plus a monthly trend, where in the game you lose points, and whether fast moves go wrong more often.
+- **Explorer.** Walk the opening tree of your own games: each next move with how often you played it, your score after it, your average loss, and the engine's best move.
 - **Notebooks.** Markdown pages with live boards, using the personal-shogi-note directives:
 
   ```
