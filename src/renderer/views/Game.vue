@@ -93,6 +93,7 @@
             <span class="m serif">{{ p.ply === 0 ? "開始局面" : p.text }}</span>
             <span v-if="p.comment.trim() && p.ply" class="cm" title="Has comment">✎</span>
             <span v-if="p.level >= 2" class="mark" :class="'l' + p.level">{{ p.label }}</span>
+            <span v-if="bookPlies.has(p.ply)" class="book-mark" title="Opening book move">定</span>
             <span v-if="p.missed" class="mark l4" :title="p.missed === 'mate' ? 'Missed a forced mate' : 'Threw away a won position'">{{ missedLabel(p.missed) }}</span>
             <span class="ev">{{ p.ply ? evalText(p.score, p.mate) : "" }}</span>
           </li>
@@ -155,6 +156,11 @@
             <div v-if="game.turning_ply">
               <span class="muted">Turning point</span>
               <a href="#" @click.prevent="jump(game.turning_ply!)">{{ game.turning_ply }}手 {{ game.plies[game.turning_ply]?.text }}</a>
+            </div>
+            <div v-if="bookInfo?.configured && bookInfo.leftBookAt">
+              <span class="muted">Left the book</span>
+              <a href="#" @click.prevent="jump(bookInfo.leftBookAt)">{{ bookInfo.leftBookAt }}手 {{ game.plies[bookInfo.leftBookAt]?.text }}</a>
+              <span v-if="bookInfo.alternatives.length" class="muted"> (book: {{ bookInfo.alternatives.map((a) => a.text).join(", ") }})</span>
             </div>
             <div><span class="muted">Time used</span> ☗ {{ fmtTime("black") }} · ☖ {{ fmtTime("white") }}</div>
           </div>
@@ -254,6 +260,16 @@ async function load() {
   }
 }
 onMounted(load);
+type BookInfo = { configured: boolean; inBook: number[]; leftBookAt: number | null; alternatives: { usi: string; text: string }[] };
+const bookInfo = ref<BookInfo | null>(null);
+const bookPlies = computed(() => new Set(bookInfo.value?.inBook ?? []));
+onMounted(async () => {
+  try {
+    bookInfo.value = await api.get<BookInfo>(`/api/games/${props.id}/book`);
+  } catch {
+    // An unreadable book shouldn't break the game view; Settings reports it.
+  }
+});
 watch(
   () => live.libraryVersion,
   () => {
@@ -488,6 +504,14 @@ async function findPosition() {
 </script>
 
 <style scoped>
+.book-mark {
+  font-size: 10px;
+  padding: 0 4px;
+  border: 1px solid var(--line-2);
+  border-radius: 3px;
+  color: var(--muted);
+  font-family: var(--serif);
+}
 .mate-result {
   margin-top: 8px;
   font-size: 13px;

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createApp } from "../src/server/app.js";
@@ -179,6 +179,42 @@ describe("library API", () => {
     expect(stored.stability).toBeCloseTo(3.7145, 3);
     expect(stored.last_review_at).toBeGreaterThan(0);
     await api("PUT", "/api/settings", { scheduler: "sm2" });
+  });
+
+  it("marks book moves and where a game leaves the book", async () => {
+    const { Position } = await import("tsshogi");
+    const sfenAfter = (usi: string) => {
+      const pos = Position.newBySFEN("lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1")!;
+      for (const u of usi.split(" ").filter(Boolean)) pos.doMove(pos.createMoveByUSI(u)!);
+      return pos.sfen;
+    };
+    const book = [
+      "#YANEURAOU-DB2016 1.00",
+      `sfen ${sfenAfter("")}`,
+      "2g2f none 30 20 5",
+      "7g7f 3c3d 40 20 10",
+      `sfen ${sfenAfter("7g7f")}`,
+      "8c8d none -10 20 2",
+      "3c3d none -20 20 8",
+      `sfen ${sfenAfter("7g7f 3c3d")}`,
+      "2g2f none 50 20 4 // 居飛車",
+    ].join("\n");
+    const file = path.join(mkdtempSync(path.join(tmpdir(), "kifu-book-")), "book.db");
+    writeFileSync(file, book);
+    expect((await api("GET", "/api/book")).configured).toBe(false);
+    await api("PUT", "/api/settings", { bookPath: file });
+
+    const root = await api("GET", "/api/book");
+    expect(root.moves.map((m: { usi: string }) => m.usi)).toEqual(["7g7f", "2g2f"]);
+    expect(root.moves[0]).toMatchObject({ count: 10, score: 40, text: "☗７六歩" });
+
+    const games = await api("GET", "/api/games");
+    const blunder = games.find((g: { move_count: number }) => g.move_count === 5);
+    const b = await api("GET", `/api/games/${blunder.id}/book`);
+    expect(b.inBook).toEqual([1, 2]);
+    expect(b.leftBookAt).toBe(3);
+    expect(b.alternatives.map((m: { usi: string }) => m.usi)).toEqual(["2g2f"]);
+    await api("PUT", "/api/settings", { bookPath: "" });
   });
 
   it("explores my games move by move", async () => {

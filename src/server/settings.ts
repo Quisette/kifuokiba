@@ -27,6 +27,8 @@ export type AppSettings = {
   scheduler: "sm2" | "fsrs";
   /** FSRS target recall probability; higher means more reviews. */
   desiredRetention: number;
+  /** YaneuraOu-format opening book (.db), to mark book moves and where games leave the book. */
+  bookPath: string;
 };
 
 export const defaultSettings: AppSettings = {
@@ -46,6 +48,7 @@ export const defaultSettings: AppSettings = {
   watchFolders: [],
   scheduler: "sm2",
   desiredRetention: 0.9,
+  bookPath: "",
 };
 
 export function loadSettings(db: Db): AppSettings {

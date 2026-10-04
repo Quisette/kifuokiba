@@ -157,6 +157,7 @@ export type Settings = {
   watchFolders: string[];
   scheduler: "sm2" | "fsrs";
   desiredRetention: number;
+  bookPath: string;
 };
 
 export type PageSummary = { id: number; notebook: string; title: string; excerpt: string; updated_at: number };

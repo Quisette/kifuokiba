@@ -67,6 +67,10 @@
           Engine options (one per line, Name=Value)
           <textarea v-model="options" rows="4" placeholder="USI_Hash=1024&#10;Threads=4&#10;EvalDir=eval"></textarea>
         </label>
+        <label class="field">
+          Opening book (YaneuraOu .db, optional)
+          <input v-model="s.bookPath" placeholder="/path/to/standard_book.db" />
+        </label>
         <label class="check"><input v-model="s.autoAnalyze" type="checkbox" /> Analyse new imports automatically</label>
         <div class="muted small">
           A real engine is needed for meaningful analysis, for example YaneuraOu with a 水匠 NNUE eval. For testing, the bundled

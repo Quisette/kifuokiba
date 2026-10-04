@@ -5,7 +5,7 @@
 //
 // Defaults: the mock engine in tools/ and two generated games.
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, mkdirSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { chromium } from "playwright";
@@ -42,7 +42,11 @@ const check = (cond, msg) => {
 
 let browser;
 try {
+  // A two-move opening book so book marks show up.
+  const bookFile = path.join(data, "book.db");
+  writeFileSync(bookFile, ["#YANEURAOU-DB2016 1.00", "sfen lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1", "7g7f 3c3d 0 20 10", "2g2f none 0 20 5", "5g5f none 0 20 1", ""].join("\n"));
   await api("PUT", "/api/settings", {
+    bookPath: bookFile,
     myNames: ["Q"],
     engine: { path: engine, options: { USI_Hash: 64, Threads: 1, BookFile: "no_book" }, movetimeMs: 60, nodes: 0, multipv: 1 },
     autoAnalyze: true,
@@ -111,6 +115,8 @@ try {
   await page.waitForSelector(".moves li");
   await page.waitForTimeout(500);
   check((await page.$$(".board img.piece-image")).length >= 38, "board renders pieces");
+  await page.waitForSelector(".book-mark");
+  check((await page.$$(".book-mark")).length >= 1, "game view marks book moves");
   await page.keyboard.press("]");
   await page.waitForTimeout(300);
   await page.click("text=詰みチェック");
@@ -147,6 +153,8 @@ try {
   await page.goto(base + "/#/explorer");
   await page.waitForSelector("table.moves tbody tr");
   check((await page.$$("table.moves tbody tr")).length >= 1, "explorer lists first moves");
+  await page.waitForSelector("table.moves .tag:has-text('定跡')");
+  check((await page.$$(".book-only .chip")).length >= 1, "explorer shows book moves");
   await page.click("table.moves tbody tr >> nth=0");
   await page.waitForFunction(() => location.hash.includes("moves="));
   await page.waitForSelector("table.moves tbody tr, .empty");

@@ -62,6 +62,7 @@
                 <td class="serif mv">
                   {{ m.text }}
                   <span v-if="data.engine?.bestUsi === m.usi" class="tag" title="Engine's best move">最善</span>
+                  <span v-if="bookUsis.has(m.usi)" class="tag" title="In the opening book">定跡</span>
                 </td>
                 <td style="text-align: right">{{ m.games }}<span v-if="m.mine && m.mine !== m.games" class="muted small"> ({{ m.mine }} mine)</span></td>
                 <td>
@@ -75,6 +76,11 @@
               </tr>
             </tbody>
           </table>
+
+          <div v-if="bookOnly.length" class="book-only">
+            <span class="cap">Book moves you haven't played here</span>
+            <button v-for="b in bookOnly" :key="b.usi" type="button" class="chip" @click="play(b.usi)">{{ b.text }}<span v-if="b.count" class="muted"> ×{{ b.count }}</span></button>
+          </div>
 
           <div v-if="gamesHere.length" class="here-games">
             <div class="cap" style="margin-bottom: 6px">Games through this position</div>
@@ -161,6 +167,22 @@ watch(
   },
   { immediate: true },
 );
+
+type BookMove = { usi: string; text: string; count: number | null };
+const bookMoves = ref<BookMove[]>([]);
+watch(
+  sfen,
+  async (v) => {
+    try {
+      bookMoves.value = (await api.get<{ moves: BookMove[] }>(`/api/book?sfen=${encodeURIComponent(v)}`)).moves;
+    } catch {
+      bookMoves.value = [];
+    }
+  },
+  { immediate: true },
+);
+const bookUsis = computed(() => new Set(bookMoves.value.map((b) => b.usi)));
+const bookOnly = computed(() => bookMoves.value.filter((b) => !data.value?.moves.some((m) => m.usi === b.usi)).slice(0, 6));
 
 const arrows = computed(() => (data.value?.moves ?? []).slice(0, 3).map((m) => ({ usi: m.usi })));
 
@@ -277,6 +299,16 @@ td.bad {
 }
 td.meh {
   color: var(--gold);
+}
+.book-only {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 14px;
+}
+.book-only .cap {
+  width: 100%;
 }
 .here-games {
   margin-top: 18px;

@@ -17,6 +17,7 @@ import { InitialPositionSFEN, Position } from "tsshogi";
 import { explore } from "./explorer.js";
 import { syncLishogi } from "./fetchers/sync.js";
 import { FolderWatcher } from "./watch.js";
+import { BookCache } from "./book.js";
 import type { FetchLike } from "./fetchers/lishogi.js";
 
 export type AppOptions = {
@@ -88,6 +89,14 @@ export function createApp(opts: AppOptions) {
     broadcast("library", { added: added.length });
   };
   const watcher = new FolderWatcher(lib, (r) => afterImport(r.added));
+  const books = new BookCache();
+  const loadBook = async () => {
+    try {
+      return await books.get(lib.settings.bookPath);
+    } catch (e) {
+      throw new HttpError(400, `Could not read the opening book: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
   watcher.configure(lib.settings.watchFolders);
 
   const routes: [string, RegExp, Handler][] = [];
@@ -239,6 +248,33 @@ export function createApp(opts: AppOptions) {
   });
 
   // ---- export
+  route("GET", "/api/book", async (_r, url) => {
+    const book = await loadBook();
+    if (!book) return { configured: false, moves: [] };
+    const sfen = url.searchParams.get("sfen") || InitialPositionSFEN.STANDARD;
+    return { configured: true, moves: book.moves(sfen).map((m) => ({ ...m, text: Library.moveText(sfen, m.usi) })) };
+  });
+  route("GET", "/api/games/:id/book", async (_r, _u, p) => {
+    const book = await loadBook();
+    if (!book) return { configured: false, inBook: [], leftBookAt: null, alternatives: [] };
+    const plies = db.all<{ ply: number; usi: string; sfen: string }>("SELECT ply, usi, sfen FROM plies WHERE game_id = ? ORDER BY ply", id(p));
+    if (!plies.length) throw new HttpError(404, "game not found");
+    const inBook: number[] = [];
+    let leftBookAt: number | null = null;
+    let alternatives: { usi: string; text: string; count: number | null }[] = [];
+    for (let k = 1; k < plies.length; k++) {
+      const before = plies[k - 1].sfen;
+      const moves = book.moves(before);
+      if (moves.some((m) => m.usi === plies[k].usi)) {
+        inBook.push(k);
+        continue;
+      }
+      leftBookAt = k;
+      alternatives = moves.slice(0, 3).map((m) => ({ usi: m.usi, text: Library.moveText(before, m.usi), count: m.count }));
+      break;
+    }
+    return { configured: true, inBook, leftBookAt, alternatives };
+  });
   route("GET", "/api/games/:id/export", (_r, url, p) => {
     const fmt = (url.searchParams.get("format") ?? "kif") as string;
     const formats: Record<string, RecordFileFormat> = {
