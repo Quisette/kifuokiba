@@ -183,7 +183,7 @@ function insert(text: string) {
   font-size: 14px;
 }
 .pg:hover {
-  background: #2a2017;
+  background: var(--line-soft);
 }
 .pg.on {
   background: var(--gold-bg);

@@ -207,7 +207,7 @@ const ScoreRows = defineComponent({
   text-decoration: none;
   font-size: 13px;
   flex-wrap: wrap;
-  border-bottom: 1px solid #2a2017;
+  border-bottom: 1px solid var(--line-soft);
 }
 .game:hover {
   background: var(--panel-2);

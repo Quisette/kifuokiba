@@ -165,8 +165,8 @@ watch(() => [live.libraryVersion, route.name], refreshDue);
 <style scoped>
 .help {
   color: var(--text);
-  background: var(--panel, #1e1610);
-  border: 1px solid #8a6a3a;
+  background: var(--panel);
+  border: 1px solid var(--edge);
   border-radius: 10px;
   padding: 20px 24px;
   min-width: min(420px, 90vw);
@@ -190,7 +190,7 @@ watch(() => [live.libraryVersion, route.name], refreshDue);
 kbd {
   font-family: var(--mono, monospace);
   font-size: 12px;
-  border: 1px solid var(--line-2, #4a3a28);
+  border: 1px solid var(--line-2);
   border-radius: 4px;
   padding: 1px 6px;
   justify-self: start;
@@ -227,7 +227,7 @@ kbd {
   padding-top: 4px;
   font-family: var(--serif);
   font-weight: 900;
-  color: var(--bg);
+  color: var(--on-accent);
   font-size: 16px;
 }
 nav {

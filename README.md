@@ -65,6 +65,8 @@ npm run serve      # or: build and serve at http://127.0.0.1:3210 in a browser
 npm run dev        # Vite with hot reload on :5173, API on :3210
 ```
 
+Settings → Appearance switches between the dark 漆 theme and a light 和紙 one, or follows the system. The choice is kept per device.
+
 Settings can download a backup and restore one. Restoring merges the backup into the current library: games, analysis, cards with their review history, tags, notes and notebook pages are added and nothing is deleted, so it also works for combining two computers' libraries.
 
 **Phone access** (Settings, off by default) lets a phone on the same Wi-Fi review cards, solve mate puzzles and guess moves: scan the QR code once and the phone keeps a cookie. It needs the token in that link, and from the network only reading and the writes that reviewing needs are allowed, so a phone can't change settings (the engine path is run as a program), import, restore or delete. "New link" locks out every phone let in before. On the phone, "Add to Home Screen" makes it open like an app, straight to the review page. The OS may ask once whether the app may accept network connections.

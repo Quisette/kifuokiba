@@ -743,13 +743,13 @@ async function findPosition() {
   font-weight: 600;
   padding: 0 5px;
   border-radius: 3px;
-  border: 1px solid #6a8fb8;
+  border: 1px solid var(--info-edge);
   background: transparent;
-  color: #9cc0e8;
+  color: var(--info-text);
   cursor: pointer;
 }
 .branch-mark:hover {
-  background: #2a3a4d;
+  background: var(--info-bg);
 }
 .branch-note {
   margin-bottom: 6px;
@@ -792,7 +792,7 @@ async function findPosition() {
   overflow: hidden;
 }
 .evalbar .w {
-  background: #3a2c1a;
+  background: var(--gold-bg);
   transition: flex 0.3s;
 }
 .evalbar .b {
@@ -847,7 +847,7 @@ async function findPosition() {
   cursor: pointer;
 }
 .moves li:hover {
-  background: #2a2017;
+  background: var(--line-soft);
 }
 .moves li.on {
   background: var(--gold-bg);
@@ -959,7 +959,7 @@ async function findPosition() {
 }
 .umark {
   margin-left: 2px;
-  color: var(--accent, var(--gold));
+  color: var(--gold);
   font-family: var(--sans, inherit);
 }
 .umarks {

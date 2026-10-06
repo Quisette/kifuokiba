@@ -504,6 +504,27 @@ try {
   }
   await api("PUT", "/api/lan", { enabled: false });
 
+  // Light theme: chosen in Settings, kept per device, and scanned for contrast like every other screenshot.
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(base + "/#/settings");
+  await page.waitForSelector("select");
+  await page.selectOption("section:has-text('Appearance') select", "light");
+  await page.waitForFunction(() => document.documentElement.dataset.theme === "light");
+  check((await page.evaluate(() => localStorage.getItem("kifu.theme"))) === "light", "the light theme is chosen and saved on this device");
+  for (const [hash, ready, name] of [
+    ["/#/", ".tiles", "10-light-dashboard"],
+    [`/#/game/${worst.id}`, ".moves li", "10-light-game"],
+    ["/#/stats", ".tiles", "10-light-stats"],
+    ["/#/review", ".head select", "10-light-review"],
+  ]) {
+    await page.goto(base + hash);
+    await page.waitForSelector(ready);
+    await page.waitForTimeout(400);
+    await shot(name);
+  }
+  check((await page.evaluate(() => getComputedStyle(document.body).backgroundColor)) === "rgb(246, 240, 228)", "the light theme survives a reload");
+  await page.evaluate(() => localStorage.removeItem("kifu.theme"));
+
   for (const [id, e] of a11y) console.log(`a11y ${e.impact} ${id}: ${e.help} [${[...e.pages].join(", ")}] e.g. ${[...e.targets].slice(0, 3).join(" | ")}`);
   const blocking = [...a11y].filter(([, e]) => e.impact === "critical" || e.impact === "serious");
   check(blocking.length === 0, "no serious accessibility problems" + (blocking.length ? ": " + blocking.map(([id]) => id).join(", ") : ""));

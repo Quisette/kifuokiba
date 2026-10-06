@@ -121,7 +121,7 @@ function reveal(p: Puzzle) {
 }
 .mark.found {
   background: var(--win);
-  color: #111;
+  color: var(--on-accent);
 }
 .row {
   display: flex;

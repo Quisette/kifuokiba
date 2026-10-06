@@ -82,7 +82,7 @@ Ordered by value for the daily study loop. ✅ marks items that are built.
 - ✅ **Custom review decks.** Review only cards from one opening, tag, opponent or kind of move (this would reuse the move kinds from item 2).
 - ✅ **Opponent prep sheet.** A notebook page made from a player profile: their openings against you, the positions where you score badly, and your usual mistakes against them.
 - ✅ **Paste several games at once.** `/api/import` with `text` imports only one record today. Split pasted text on record boundaries (KIF headers, CSA `V2` lines, one SFEN per line).
-- **Light theme.** The palette is in CSS variables in `styles.css`. Add a light set and follow `prefers-color-scheme`, with a setting to override it.
+- ✅ **Light theme.** The palette is in CSS variables in `styles.css`. Add a light set and follow `prefers-color-scheme`, with a setting to override it.
 - **Compare engines.** Analyse one game with a second engine and show where the two disagree.
 
 ## Feature plans
@@ -141,6 +141,13 @@ Each feature gets a short plan here before it is built. The plan stays afterward
 - **Import.** `/api/import` splits pasted text, and files whose decoded text holds more than one record, naming the parts `name #2` and so on. A single-record file still goes through `importBuffer` as before, so the format is still chosen by its extension.
 - **UI.** A Ctrl/⌘+V paste of several games opens the library with a toast that counts them ("Imported 5 games, 1 already there"). A single game still opens directly. The paste box hints that several games can go in at once.
 - **Tests.** Unit tests split two KIFs (one with a 変化), CSA with `/`, and USI lines. An API test pastes three games and gets three results.
+
+### Light theme
+
+- **Tokens.** Every colour in the renderer comes from a CSS variable in `styles.css`. The hard-coded hex and rgba values in components (graph strokes, calendar heat steps, table stripes, hover borders, the `--accent` fallbacks) become tokens: `--link`, `--edge`, `--line-soft`, `--row-alt`, `--grid`, `--axis`, `--heat-1…4`, plus `--win-rgb` and `--loss-rgb` for translucent fills. The dark values stay exactly as they are.
+- **Light palette.** A warm paper version of the lacquer theme under `:root[data-theme="light"]`, with `color-scheme: light`. Text and muted text stay at WCAG AA contrast against the panels. The board, pieces and stands keep their wood images.
+- **Choosing.** `renderer/theme.ts` reads a per-device preference ("system", "light", "dark") from `localStorage` and sets `data-theme` on `<html>`. For "system" it follows `prefers-color-scheme`, including live changes. A tiny inline script in `index.html` applies it before the app loads, so there's no dark flash. Settings gets an "Appearance" menu. It's per device on purpose, because a phone and a desktop may want different themes.
+- **Tests.** The e2e test switches to light, takes dashboard, game and stats screenshots, and the axe scan that runs on every screenshot checks contrast in the light palette too.
 
 ### Tech debt
 

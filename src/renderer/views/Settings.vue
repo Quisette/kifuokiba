@@ -13,6 +13,19 @@
       </section>
 
       <section class="panel box">
+        <h3>表示 Appearance</h3>
+        <label class="field">
+          Theme
+          <select v-model="theme">
+            <option value="system">Follow the system</option>
+            <option value="dark">漆 Dark</option>
+            <option value="light">和紙 Light</option>
+          </select>
+        </label>
+        <div class="muted small">Saved on this device only, and applied straight away.</div>
+      </section>
+
+      <section class="panel box">
         <h3>対局サイト Online accounts</h3>
         <label class="field">
           Lishogi username
@@ -195,6 +208,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { api, live, Settings, toast } from "../api";
+import { theme } from "../theme";
 
 const s = ref<Settings | null>(null);
 const names = ref("");
@@ -334,7 +348,7 @@ async function test() {
   text-align: left;
   background: none;
   border: 0;
-  border-top: 1px solid #2a2017;
+  border-top: 1px solid var(--line-soft);
   color: var(--text);
   padding: 5px 2px;
   cursor: pointer;
@@ -345,7 +359,7 @@ async function test() {
   cursor: default;
 }
 .opt:hover:not(:disabled) code {
-  color: var(--accent, #d9a441);
+  color: var(--gold);
 }
 .cols {
   display: grid;

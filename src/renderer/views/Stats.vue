@@ -28,7 +28,7 @@
         <section class="panel box wide">
           <div class="cap">勝率の推移 Win rate, last 20 games rolling</div>
           <svg v-if="s.rolling.length > 1" viewBox="0 0 1000 160" preserveAspectRatio="none" class="chart" role="img" aria-label="Rolling win rate">
-            <line x1="0" y1="80" x2="1000" y2="80" stroke="#5a4630" vector-effect="non-scaling-stroke" stroke-dasharray="4 4" />
+            <line x1="0" y1="80" x2="1000" y2="80" style="stroke: var(--axis)" vector-effect="non-scaling-stroke" stroke-dasharray="4 4" />
             <polyline :points="rollingPts" fill="none" stroke="var(--win)" stroke-width="2" vector-effect="non-scaling-stroke" />
           </svg>
           <div v-else class="muted small">Needs more decided games.</div>
@@ -52,7 +52,7 @@
         <section class="panel box wide">
           <div class="cap">Accuracy by game (dot colour = result)</div>
           <svg v-if="s.accuracyTrend.length" viewBox="0 0 1000 160" preserveAspectRatio="none" class="chart" role="img" aria-label="Accuracy per game">
-            <line v-for="g in [40, 80, 120]" :key="g" x1="0" :y1="g" x2="1000" :y2="g" stroke="#2c2219" vector-effect="non-scaling-stroke" />
+            <line v-for="g in [40, 80, 120]" :key="g" x1="0" :y1="g" x2="1000" :y2="g" style="stroke: var(--grid)" vector-effect="non-scaling-stroke" />
           </svg>
           <div v-if="s.accuracyTrend.length" class="dots">
             <a
@@ -100,7 +100,7 @@
             <span
               v-for="(n, i) in s.mistakeMap.cells"
               :key="i"
-              :style="{ background: n ? `rgba(217,119,61,${0.15 + 0.85 * (n / heatMax)})` : 'transparent' }"
+              :style="{ background: n ? `rgb(var(--loss-rgb) / ${0.15 + 0.85 * (n / heatMax)})` : 'transparent' }"
               :title="`${squareName(i)}: ${n}`"
             >{{ n || "" }}</span>
           </div>
@@ -284,7 +284,7 @@ const cellTitle = (c?: Cell) => (c ? `${c.wins}勝 ${c.losses}敗` : "");
 const cellStyle = (c?: Cell) => {
   if (!c || c.winRate == null) return {};
   const a = Math.min(0.55, 0.12 + c.games * 0.05);
-  return { background: c.winRate >= 50 ? `rgba(95,149,208,${a})` : `rgba(217,119,61,${a})` };
+  return { background: c.winRate >= 50 ? `rgb(var(--win-rgb) / ${a})` : `rgb(var(--loss-rgb) / ${a})` };
 };
 
 const BarTable = defineComponent({
@@ -321,10 +321,10 @@ const BarTable = defineComponent({
   width: min(100%, 280px);
   aspect-ratio: 1;
   border: 1px solid var(--line-2);
-  background: #2b2118;
+  background: var(--panel-2);
 }
 .heat span {
-  border: 1px solid #3d2f21;
+  border: 1px solid var(--line);
   display: flex;
   align-items: center;
   justify-content: center;
