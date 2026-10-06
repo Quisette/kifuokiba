@@ -10,6 +10,7 @@
         </span>
         <a class="btn small" :href="`#/library?opponent=${encodeURIComponent(p.name)}`">Open in library</a>
         <a class="btn small" :href="`#/explorer?opponent=${encodeURIComponent(p.name)}`">Openings against them</a>
+        <button type="button" class="btn small" :disabled="writing" title="A notebook page to prepare for the next game against them" @click="writePrep">Write prep sheet</button>
       </div>
 
       <div class="tiles panel">
@@ -65,8 +66,22 @@
 
 <script setup lang="ts">
 import { defineComponent, h, ref, watch } from "vue";
-import { api, GameListItem, resultChar } from "../api";
-import { route } from "../router";
+import { api, GameListItem, resultChar, toast } from "../api";
+import { go, route } from "../router";
+
+const writing = ref(false);
+async function writePrep() {
+  if (!p.value) return;
+  writing.value = true;
+  try {
+    const page = await api.post<{ id: number }>("/api/notes/prep", { opponent: p.value.name });
+    go(`notes/${page.id}`);
+  } catch (e) {
+    toast(String(e instanceof Error ? e.message : e));
+  } finally {
+    writing.value = false;
+  }
+}
 
 type Row = { name: string; games: number; wins: number; losses: number; draws: number; winRate: number | null };
 type Profile = {

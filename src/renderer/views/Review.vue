@@ -201,8 +201,10 @@ const queue = ref<Card[]>([]);
 const index = ref(0);
 const loading = ref(true);
 // The Today page links to a saved deck with ?deck=<id>.
-const deck = ref(route.query.get("deck") ? `deck:${route.query.get("deck")}` : "");
-const cram = ref(false);
+// ?opponent=<name> (from a prep sheet) opens the deck builder with that opponent picked.
+const deck = ref(route.query.get("deck") ? `deck:${route.query.get("deck")}` : route.query.get("opponent") ? "custom" : "");
+// A prep sheet link practises all of that opponent's cards, not just the due ones.
+const cram = ref(!!route.query.get("opponent"));
 const answer = ref<Answer | null>(null);
 const checking = ref(false);
 const hint = ref(false);
@@ -230,7 +232,7 @@ const FACETS: { key: FacetKey; label: string; name: (v: string) => string }[] = 
 ];
 const decks = ref<SavedDeck[]>([]);
 const facets = ref<Record<FacetKey, Facet[]> | null>(null);
-const custom = reactive<Record<FacetKey | "phase", string>>({ myOpening: "", opponent: "", tag: "", moveKind: "", side: "", phase: "" });
+const custom = reactive<Record<FacetKey | "phase", string>>({ myOpening: "", opponent: route.query.get("opponent") ?? "", tag: "", moveKind: "", side: "", phase: "" });
 const deckName = ref("");
 const savedDeck = computed(() => (deck.value.startsWith("deck:") ? decks.value.find((d) => `deck:${d.id}` === deck.value) : undefined));
 function deckQuery(extra: Record<string, unknown> = {}) {

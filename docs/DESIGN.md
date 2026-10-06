@@ -80,7 +80,7 @@ Ordered by value for the daily study loop. ✅ marks items that are built.
 ### Later
 
 - ✅ **Custom review decks.** Review only cards from one opening, tag, opponent or kind of move (this would reuse the move kinds from item 2).
-- **Opponent prep sheet.** A notebook page made from a player profile: their openings against you, the positions where you score badly, and your usual mistakes against them.
+- ✅ **Opponent prep sheet.** A notebook page made from a player profile: their openings against you, the positions where you score badly, and your usual mistakes against them.
 - **Paste several games at once.** `/api/import` with `text` imports only one record today. Split pasted text on record boundaries (KIF headers, CSA `V2` lines, one SFEN per line).
 - **Light theme.** The palette is in CSS variables in `styles.css`. Add a light set and follow `prefers-color-scheme`, with a setting to override it.
 - **Compare engines.** Analyse one game with a second engine and show where the two disagree.
@@ -118,6 +118,18 @@ Each feature gets a short plan here before it is built. The plan stays afterward
 - **Review screen.** The deck menu lists the built-in decks, then saved decks with their due counts, then "Custom…". "Custom…" opens a row of filter menus with counts and a "Save as deck" button. Anki export follows the chosen deck.
 - **Today.** The plan names the saved deck with the most due cards when there is one ("四間飛車 deck: 5 due"), linking to review with that deck chosen (`#/review?deck=<id>`).
 - **Tests.** API tests for each filter, for facets and for creating, listing and deleting decks. The e2e test builds a custom deck, saves it and checks that the deck menu offers it.
+
+### Opponent prep sheet
+
+- **Page.** `server/prep.ts` writes a notebook page into the "Opponents" notebook, like the weekly report: `対策 vs <name>`. It has:
+  - my record, win rate and recent form against them, plus their rating
+  - their openings and castles, split by which side I had, with my score against each
+  - the positions I reach most often against them with me to move (between moves 6 and 40, reached in two or more games), each as a board with my usual move, its average loss and the engine's choice
+  - my costliest moves against them as boards
+  - the recent games as links
+  - an empty "作戦 Plan" list to fill in
+- **API and UI.** `POST /api/notes/prep { opponent }` creates the page and returns it. The player profile gets "Write prep sheet", which opens the new page. The page also links to the review screen with that opponent's cards picked (`#/review?opponent=<name>` opens the custom deck builder filled in).
+- **Tests.** An API test writes a sheet for a known opponent and checks the record line, the openings table, a board directive and the review link. The e2e test makes one from the player page.
 
 ### Tech debt
 

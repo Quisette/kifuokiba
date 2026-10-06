@@ -13,6 +13,7 @@ import { computeStats, playerProfile, similarGames } from "./stats.js";
 import { Pages } from "./pages.js";
 import { reviewNote } from "./review-note.js";
 import { weeklyNote } from "./weekly.js";
+import { prepNote } from "./prep.js";
 import { findPuzzles } from "./puzzles.js";
 import { repertoire } from "./repertoire.js";
 import { AutoBackup } from "./backup.js";
@@ -392,6 +393,11 @@ export function createApp(opts: AppOptions) {
     return pages.create({ title: n.title, notebook: "Game reviews", body: n.body });
   });
 
+  route("POST", "/api/notes/prep", (_r, _u, _p, body) => {
+    const n = prepNote(lib, String((body as { opponent?: string }).opponent ?? ""));
+    if (!n) throw new HttpError(404, "no games against that opponent");
+    return pages.create({ title: n.title, notebook: "Opponents", body: n.body });
+  });
   route("POST", "/api/notes/weekly", () => {
     const n = weeklyNote(lib);
     return pages.create({ title: n.title, notebook: "Weekly", body: n.body });

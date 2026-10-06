@@ -210,6 +210,13 @@ try {
     await page.waitForSelector(".game");
     check((await page.$$(".game")).length === games.filter((g) => g.opponent === opp).length, "player profile lists games vs that opponent");
     await shot("06c-player");
+    await page.click("button:has-text('Write prep sheet')");
+    await page.waitForURL(/#\/notes\/\d+/);
+    await page.waitForFunction(() => document.body.textContent?.includes("対策 vs") && document.body.textContent?.includes("作戦 Plan"));
+    check((await page.textContent("body")).includes("Their openings"), "a prep sheet for the opponent is written into the notebook");
+    await shot("06f-prep");
+    await page.goto(base + `/#/player/${encodeURIComponent(opp)}`);
+    await page.waitForSelector(".game");
     await page.click("text=Openings against them");
     await page.waitForSelector(".chip.opp");
     await page.waitForTimeout(300);

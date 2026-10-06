@@ -650,3 +650,33 @@ describe("custom review decks", () => {
     await api("DELETE", `/api/games/${gid}`);
   });
 });
+
+describe("opponent prep sheet", () => {
+  it("writes a notebook page about one opponent", async () => {
+    const moves = SHIKEN_VS_FUNA.split(" ");
+    const ids: number[] = [];
+    for (const [usi, date] of [
+      [SHIKEN_VS_FUNA, "2026/09/10"],
+      [moves.slice(0, 12).join(" "), "2026/09/11"],
+      ["7g7f 3c3d 8h3c+ 2a3c 2g2f", "2026/09/12"],
+    ]) {
+      ids.push((await api("POST", "/api/import", { text: makeKif({ moves: usi, black: "me", white: "prepfoe", date }) })).results[0].id);
+    }
+    await api("POST", "/api/analysis", { ids });
+    await waitIdle();
+    const page = await api("POST", "/api/notes/prep", { opponent: "prepfoe" });
+    expect(page.notebook).toBe("Opponents");
+    expect(page.title).toBe("対策 vs prepfoe");
+    const body: string = page.body;
+    expect(body).toMatch(/3 games · \d勝 \d敗/);
+    expect(body).toContain("| ☗ | 四間飛車 |");
+    expect(body).toContain("Positions I keep reaching");
+    expect(body).toMatch(/reached in 2 games\n\n:::shogi-view\{game=\d+ ply=\d+\}/);
+    expect(body).toContain("My costliest moves against them");
+    expect(body).toContain("#/review?opponent=prepfoe");
+    expect(body).toContain(`](#/game/${ids[2]})`);
+    await expect(api("POST", "/api/notes/prep", { opponent: "nobody-at-all" })).rejects.toThrow(/404|no games/);
+    for (const id of ids) await api("DELETE", `/api/games/${id}`);
+    await api("DELETE", `/api/pages/${page.id}`);
+  });
+});
