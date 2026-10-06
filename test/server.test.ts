@@ -832,3 +832,19 @@ describe("drilling a study", () => {
     expect((await api("GET", "/api/drill/due")).some((d: { id: number }) => d.id === st.id)).toBe(false);
   });
 });
+
+describe("threats", () => {
+  it("shows what the opponent would play if the side to move passed, and a mate threat", async () => {
+    // ☗ king on 5九, a ☖ pawn on 5七 and a gold in ☖'s hand: if ☗ passes, △5八金打 is mate.
+    const sfen = "4k4/9/9/9/9/9/4p4/9/4K4 b g 1";
+    const r = await api("POST", "/api/threat", { sfen, timeMs: 50 });
+    expect(r.status).toBe("ok");
+    expect(r.passedSfen.split(" ")[1]).toBe("w");
+    expect(r.mate).toMatchObject({ moves: ["G*5h"] });
+    expect(r.mate.text).toContain("５八金");
+    expect(r.move).toBeTruthy();
+    // In check: nothing to pass.
+    expect(await api("POST", "/api/threat", { sfen: "4k4/9/9/9/9/9/9/4r4/4K4 b - 1" })).toEqual({ status: "check" });
+    await expect(api("POST", "/api/threat", { sfen: "nonsense" })).rejects.toThrow(/bad sfen/);
+  });
+});

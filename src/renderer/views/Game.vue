@@ -56,6 +56,7 @@
               :sfen="shownSfen"
               :last-move="shownLastMove"
               :arrows="arrows"
+              :arrow-sfen="threat && !variation.length ? threat.sfen : undefined"
               :flip="flip"
               :allow-move="true"
               :black-name="game.black || '先手'"
@@ -144,7 +145,7 @@
       </section>
 
       <section class="side-col">
-        <EnginePanel :ply="cur" :next="next" :engine-name="game.analysis_engine" @lines="(l) => (multi = l)" />
+        <EnginePanel :ply="cur" :next="next" :engine-name="game.analysis_engine" @lines="(l) => (multi = l)" @threat="(a) => (threat = a)" />
 
         <div class="panel box">
           <div class="cap">この局 Game summary</div>
@@ -449,8 +450,11 @@ const barPct = computed(() => {
   const w = p ? winRate(p.score, p.mate) : varEval.value ? winRate(varEval.value.score ?? null, varEval.value.mate ?? null) : null;
   return w ?? 50;
 });
+// The opponent's threat (a move in the passed position) replaces the other arrows while shown.
+const threat = ref<{ usi: string; sfen: string } | null>(null);
 const arrows = computed(() => {
   if (variation.value.length) return [];
+  if (threat.value) return [{ usi: threat.value.usi }];
   if (multi.value.length) return multi.value.map((l) => ({ usi: l.pv[0], score: l.scoreSide }));
   return cur.value.best_usi ? [{ usi: cur.value.best_usi }] : [];
 });

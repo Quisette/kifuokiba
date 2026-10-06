@@ -39,6 +39,7 @@ import { Tsume } from "./tsume.js";
 import { decodeText } from "../core/encode.js";
 import { parseTree, treeFromJson } from "../core/movetree.js";
 import { splitRecords } from "../core/split.js";
+import { passedPosition } from "../core/threat.js";
 import type { FetchLike } from "./fetchers/lishogi.js";
 
 export type AppOptions = {
@@ -273,6 +274,27 @@ export function createApp(opts: AppOptions) {
     const timeMs = Math.min(Math.max(b.timeMs ?? 5000, 100), 60_000);
     const r = await analysis.mateSearch(`sfen ${pos.sfen}`, timeMs);
     return r.status === "mate" ? { ...r, text: Library.pvText(pos.sfen, r.moves.join(" ")) } : r;
+  });
+  // The opponent's threat: what they would play if the side to move passed, and whether that is 詰めろ.
+  route("POST", "/api/threat", async (_r, _u, _p, body) => {
+    const b = body as { sfen: string; timeMs?: number };
+    if (!Position.newBySFEN(b.sfen)) throw new HttpError(400, "bad sfen");
+    const passed = passedPosition(b.sfen);
+    if (!passed) return { status: "check" };
+    const timeMs = Math.min(Math.max(b.timeMs ?? lib.settings.engine.movetimeMs, 100), 10_000);
+    const r = await analysis.searchPosition(`sfen ${passed}`, passed, { movetimeMs: timeMs });
+    const m = await analysis.mateSearch(`sfen ${passed}`, 2000);
+    return {
+      status: "ok",
+      move: r.best,
+      text: r.best ? Library.moveText(passed, r.best) : "",
+      pv: r.pv,
+      pvText: r.pv ? Library.pvText(passed, r.pv) : "",
+      score: r.score ?? null,
+      mateScore: r.mate ?? null,
+      mate: m.status === "mate" ? { moves: m.moves, text: Library.pvText(passed, m.moves.join(" ")) } : null,
+      passedSfen: passed,
+    };
   });
   route("POST", "/api/analyze-position", async (_r, _u, _p, body) => {
     const b = body as { sfen: string; moves?: string[]; multipv?: number; movetimeMs?: number };

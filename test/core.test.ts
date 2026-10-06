@@ -343,3 +343,13 @@ describe("move tree comments", () => {
     expect(merged.children[0].children[1].comment).toBe("居飛車にする");
   });
 });
+
+describe("passing the move for threats", () => {
+  it("flips the side to move, except when the side to move is in check", async () => {
+    const { passedPosition } = await import("../src/core/threat.js");
+    expect(passedPosition("lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1")).toBe("lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL w - 1");
+    // ☗ to move and in check from the ☖ rook on 5a: it can't pass.
+    expect(passedPosition("4r4/9/9/9/9/9/9/9/4K4 b - 1")).toBeNull();
+    expect(passedPosition("nonsense")).toBeNull();
+  });
+});

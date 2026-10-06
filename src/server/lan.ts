@@ -22,6 +22,7 @@ const WRITES: [string, RegExp][] = [
   ["POST", /^\/api\/cards$/],
   ["POST", /^\/api\/games\/\d+\/guess$/],
   ["POST", /^\/api\/analyze-position$/],
+  ["POST", /^\/api\/threat$/],
   ["POST", /^\/api\/tsume\/\d+\/result$/],
   ["POST", /^\/api\/studies\/\d+\/drill$/],
 ];

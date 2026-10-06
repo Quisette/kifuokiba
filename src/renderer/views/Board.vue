@@ -37,6 +37,7 @@
               :sfen="editing ? editSfen : shown.sfen"
               :last-move="editing ? null : lastMove"
               :arrows="editing ? [] : arrows"
+              :arrow-sfen="threat && !editing ? threat.sfen : undefined"
               :flip="flip"
               :allow-move="!editing"
               :allow-edit="editing"
@@ -153,6 +154,7 @@
                 <span class="serif">{{ l.text }}</span>
               </button>
             </div>
+            <ThreatCheck :sfen="shown.sfen" @arrow="(a) => (threat = a)" />
             <label class="field">
               Think for up to
               <select v-model.number="maxMs">
@@ -222,6 +224,7 @@ import { api, evalText, live, toast, winRate } from "../api";
 import { route } from "../router";
 import ShogiBoard from "../components/ShogiBoard.vue";
 import AddToNotebook from "../components/AddToNotebook.vue";
+import ThreatCheck from "../components/ThreatCheck.vue";
 import { liveSearch, LiveResult } from "../live";
 import { setupProblems } from "../../core/setup";
 import { MoveTree, emptyTree, formatTree, hasComments, hasVariations, parseTree, pruneIllegal, recordToTree, selectedLine, treeToRecord } from "../../core/movetree";
@@ -616,7 +619,12 @@ const moverWin = computed(() => {
 const barPct = computed(() => {
   return (current.value ? winRate(topScore.value ?? null, topMate.value ?? null) : null) ?? 50;
 });
-const arrows = computed(() => (current.value?.lines ?? []).filter((l) => l.pv[0]).map((l) => ({ usi: l.pv[0], score: l.scoreCP })));
+// While a threat is shown, its arrow (in the passed position) replaces the engine's lines.
+const threat = ref<{ usi: string; sfen: string } | null>(null);
+watch(editing, () => (threat.value = null));
+const arrows = computed(() =>
+  threat.value ? [{ usi: threat.value.usi }] : (current.value?.lines ?? []).filter((l) => l.pv[0]).map((l) => ({ usi: l.pv[0], score: l.scoreCP })),
+);
 
 // ---- actions
 const notebookOpen = ref(false);

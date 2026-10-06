@@ -135,6 +135,9 @@ try {
   await page.waitForTimeout(300);
   await page.click("text=詰みチェック");
   await page.waitForSelector(".mate-result", { timeout: 20000 });
+  await page.click("button:has-text('狙い Threat?')");
+  await page.waitForSelector(".threat-result", { timeout: 20000 });
+  check(/passes:|no passing/.test(await page.textContent(".threat-result")), "the threat check says what the opponent would play");
   await page.click("button:has-text('Candidate moves')");
   await page.waitForFunction(() => /depth [2-9]/.test(document.querySelector(".mdepth")?.textContent ?? ""), null, { timeout: 20000 });
   check((await page.$$(".multipv .mrow")).length >= 1, "candidate moves stream with a rising depth");

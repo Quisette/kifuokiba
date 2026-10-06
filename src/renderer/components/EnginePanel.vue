@@ -29,6 +29,7 @@
         {{ mateBusy ? "Searching…" : "詰みチェック Mate?" }}
       </button>
     </div>
+    <ThreatCheck :sfen="ply.sfen" @arrow="(a) => emit('threat', a)" />
     <div v-if="mateResult" class="mate-result" :class="mateResult.status">
       <template v-if="mateResult.status === 'mate'">
         <b>{{ mateResult.moves.length }}手詰</b> <span class="serif">{{ mateResult.text }}</span>
@@ -47,11 +48,12 @@
 import { computed, onUnmounted, ref, watch } from "vue";
 import { api, evalText, Ply, toast, winRate } from "../api";
 import { liveSearch } from "../live";
+import ThreatCheck from "./ThreatCheck.vue";
 
 export type CandidateLine = { multipv: number; pv: string[]; text: string; score?: number; mate?: number; scoreSide?: number };
 
 const props = defineProps<{ ply: Ply; next?: Ply; engineName?: string }>();
-const emit = defineEmits<{ lines: [lines: CandidateLine[]] }>();
+const emit = defineEmits<{ lines: [lines: CandidateLine[]]; threat: [arrow: { usi: string; sfen: string } | null] }>();
 
 // Win % for the side to move in this position.
 const moverWin = computed(() => {

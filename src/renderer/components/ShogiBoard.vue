@@ -43,6 +43,8 @@ const props = withDefaults(
     sfen: string;
     lastMove?: { prevSfen: string; usi: string } | null;
     arrows?: { usi: string; score?: number }[];
+    /** The position the arrows' moves belong to, when not the one shown (a threat after passing). */
+    arrowSfen?: string;
     flip?: boolean;
     allowMove?: boolean;
     /** Position editing: pieces are dragged freely and double-clicked to rotate; emits "edit". */
@@ -88,7 +90,7 @@ const lastMoveObj = computed(() => {
   return prev?.createMoveByUSI(props.lastMove.usi) ?? null;
 });
 const candidateMoves = computed(() => {
-  const pos = position.value;
+  const pos = props.arrowSfen ? Position.newBySFEN(props.arrowSfen) : position.value;
   if (!pos) return [];
   return props.arrows
     .map((a) => ({ move: pos.createMoveByUSI(a.usi), score: a.score }))

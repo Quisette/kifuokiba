@@ -180,6 +180,14 @@ Each feature gets a short plan here before it is built. The plan stays afterward
 - **UI.** `#/drill/<id>?side=…` shows the position from the drilled side. You play your move, then see right or wrong, the accepted moves with the main one starred, and the study's comment, then go on. The header has the side switch, due and total counts, and "Practise all". The board offers "Drill this study" for a saved study, the studies list gets a "Drill" link, and Today lists the study with the most due positions.
 - **Tests.** API tests for the positions offered (side to move, accepted alternatives, the opponent's turns skipped), scheduling (right pushes the position back, wrong brings it back in ten minutes, and the drill screen re-asks it before the session ends), due counts, and a study edit that keeps history. The e2e test drills the study saved earlier in the run.
 
+### Threats (狙い)
+
+- **Idea.** Pass the move: give the opponent the move in the same position and ask the engine what they would play. That move is the threat. A mate search in that passed position tells whether the side to move is in 詰めろ (mate threat) and in how many moves. There's no threat to show while the side to move is in check.
+- **Server.** `POST /api/threat { sfen, timeMs? }`. It flips the side to move with `Position.setColor`. While the side to move is in check, passing is impossible, and it answers `{ status: "check" }`. Otherwise it runs a normal search (the move time from settings, capped) and a mate search (2 s), and answers `{ status: "ok", move, text, score (black's view), mate: { moves, text } | null }`. Phones may ask, like `analyze-position`.
+- **Core.** `core/threat.ts` holds `passedPosition(sfen)`, which returns the flipped SFEN or null when passing isn't possible. Both the server and the tests use it.
+- **UI.** The game view's engine panel and the study board get "狙い Threat?". The answer reads "If ☗ passes: △5五角 (−820)" plus "詰めろ: 3手詰 △…" when there's a mate. The threat move shows as an arrow from the opponent's side, using the board's arrows in a passed position. The panel clears it when the position changes.
+- **Tests.** Unit tests for `passedPosition` (normal, and in check where passing is impossible). An API test with a position where ☖ threatens mate in one if ☗ passes, using the mock engine's mate-in-one search. The e2e test asks for a threat in the game view.
+
 ### Tech debt
 
 - `views/Game.vue` (~930 lines) and `server/library.ts` (~710 lines) do too much. Move the move list, the engine panel and the variation handling into components, and move the export code out of `Library`.
