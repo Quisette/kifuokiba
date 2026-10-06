@@ -183,6 +183,22 @@ try {
     await shot("04b-dashboard-streak");
   }
 
+  if (cards.length) {
+    // Build a deck from the cards against one opponent and save it.
+    await page.goto(base + "/#/review");
+    await page.waitForSelector(".head select");
+    await page.selectOption(".head select >> nth=0", "custom");
+    await page.waitForSelector(".builder");
+    const oppOption = await page.$eval(".builder select >> nth=1", (el) => [...el.options].find((o) => o.value)?.value ?? "");
+    check(!!oppOption, "the deck builder offers the opponents that have cards");
+    await page.selectOption(".builder select >> nth=1", oppOption);
+    await page.fill(".builder input", "e2e deck");
+    await page.click("button:has-text('Save as deck')");
+    await page.waitForSelector("button:has-text('Delete deck')");
+    check((await page.$$eval(".head select >> nth=0 >> option", (os) => os.map((o) => o.textContent))).some((t) => t?.startsWith("e2e deck")), "a saved deck appears in the deck menu");
+    await shot("04c-review-deck");
+  }
+
   await page.goto(base + "/#/stats");
   await page.waitForSelector(".tiles");
   await page.waitForTimeout(300);

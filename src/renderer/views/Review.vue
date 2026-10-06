@@ -16,8 +16,13 @@
           <option value="kind:manual">My own cards</option>
           <option value="kind:guess">From guess the move</option>
           <option value="leech:1">Leeches (missed 4+ times)</option>
+          <optgroup v-if="decks.length" label="My decks">
+            <option v-for="d in decks" :key="d.id" :value="`deck:${d.id}`">{{ d.name }} ({{ d.due }} due)</option>
+          </optgroup>
+          <option value="custom">Custom…</option>
         </select>
       </label>
+      <button v-if="savedDeck" type="button" class="btn small" :title="`Delete the deck ${savedDeck.name} (its cards stay)`" @click="deleteDeck">Delete deck</button>
       <label class="field">
         Mode
         <select v-model="cram" @change="load">
@@ -25,8 +30,33 @@
           <option :value="true">Practise all</option>
         </select>
       </label>
-      <a class="btn small" href="/api/cards/export/anki" download="kifu-study-cards.txt" title="Tab-separated file for Anki's File → Import">Export to Anki</a>
+      <a class="btn small" :href="`/api/cards/export/anki${deckQuery()}`" download="kifu-study-cards.txt" title="Tab-separated file for Anki's File → Import (the chosen deck)">Export to Anki</a>
     </div>
+
+    <form v-if="deck === 'custom'" class="builder panel" @submit.prevent="saveDeck">
+      <label v-for="f in FACETS" :key="f.key" class="field">
+        {{ f.label }}
+        <select v-model="custom[f.key]" @change="load">
+          <option value="">Any</option>
+          <option v-for="o in facets?.[f.key] ?? []" :key="o.value" :value="o.value">{{ f.name(o.value) }} ({{ o.due }}/{{ o.total }})</option>
+        </select>
+      </label>
+      <label class="field">
+        Phase
+        <select v-model="custom.phase" @change="load">
+          <option value="">Any</option>
+          <option value="opening">序盤</option>
+          <option value="middlegame">中盤</option>
+          <option value="endgame">終盤</option>
+        </select>
+      </label>
+      <label class="field">
+        Deck name
+        <input v-model="deckName" placeholder="e.g. 四間飛車 drops" />
+      </label>
+      <button type="submit" class="btn" :disabled="!deckName.trim() || !Object.values(custom).some(Boolean)">Save as deck</button>
+      <span class="muted small">Counts are due / total.</span>
+    </form>
 
     <div v-if="loading" class="empty">Loading…</div>
     <div v-else-if="!card" class="empty">
@@ -37,7 +67,8 @@
         ({{ Math.round((session.right / session.reviewed) * 100) }}%) in {{ sessionMinutes }}.
         <template v-if="session.missedPhases.length"> Most misses in {{ session.missedPhases[0] }}.</template>
       </div>
-      <div v-else-if="total">{{ counts?.total }} cards in the deck. Next one is due {{ nextDue }}.</div>
+      <div v-else-if="savedDeck">{{ savedDeck.total }} card{{ savedDeck.total === 1 ? "" : "s" }} in this deck.</div>
+      <div v-else-if="total">{{ total }} card{{ total === 1 ? "" : "s" }} in all. Next one is due {{ nextDue }}.</div>
       <div v-if="session.reviewed" class="row" style="justify-content: center; margin-top: 10px">
         <a class="btn small" href="#/puzzles">Mates from my games</a>
         <a class="btn small" href="#/repertoire">Opening drill</a>
@@ -149,6 +180,7 @@
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { Position } from "tsshogi";
 import { api, Card, qs, Settings, toast } from "../api";
+import { route } from "../router";
 import { Rating } from "../../core/sm2";
 import { scheduleCard, SchedulerName } from "../../core/scheduler";
 import ShogiBoard from "../components/ShogiBoard.vue";
@@ -168,7 +200,8 @@ const ratings: Rating[] = ["again", "hard", "good", "easy"];
 const queue = ref<Card[]>([]);
 const index = ref(0);
 const loading = ref(true);
-const deck = ref("");
+// The Today page links to a saved deck with ?deck=<id>.
+const deck = ref(route.query.get("deck") ? `deck:${route.query.get("deck")}` : "");
 const cram = ref(false);
 const answer = ref<Answer | null>(null);
 const checking = ref(false);
@@ -183,10 +216,47 @@ const replaying = ref(false);
 const total = computed(() => counts.value?.total ?? 0);
 const card = computed(() => queue.value[index.value] ?? null);
 
+// ---- decks: built-in ("phase:opening"), saved ("deck:3") or custom
+type Facet = { value: string; total: number; due: number };
+type FacetKey = "myOpening" | "opponent" | "tag" | "moveKind" | "side";
+type SavedDeck = { id: number; name: string; due: number; total: number };
+const KIND_NAMES: Record<string, string> = { drop: "打 Drops", capture: "取る Captures", check: "王手 Checks", promotion: "成 Promotions", king: "玉 King moves", quiet: "他 Quiet moves" };
+const FACETS: { key: FacetKey; label: string; name: (v: string) => string }[] = [
+  { key: "myOpening", label: "My opening", name: (v) => v },
+  { key: "opponent", label: "Opponent", name: (v) => v },
+  { key: "tag", label: "Tag", name: (v) => "#" + v },
+  { key: "moveKind", label: "Kind of move", name: (v) => KIND_NAMES[v] ?? v },
+  { key: "side", label: "Side", name: (v) => (v === "black" ? "☗ 先手" : "☖ 後手") },
+];
+const decks = ref<SavedDeck[]>([]);
+const facets = ref<Record<FacetKey, Facet[]> | null>(null);
+const custom = reactive<Record<FacetKey | "phase", string>>({ myOpening: "", opponent: "", tag: "", moveKind: "", side: "", phase: "" });
+const deckName = ref("");
+const savedDeck = computed(() => (deck.value.startsWith("deck:") ? decks.value.find((d) => `deck:${d.id}` === deck.value) : undefined));
+function deckQuery(extra: Record<string, unknown> = {}) {
+  if (deck.value === "custom") return qs({ ...custom, ...extra });
+  const [k, v] = deck.value.split(":");
+  return qs({ ...(k ? { [k]: v } : {}), ...extra });
+}
+async function saveDeck() {
+  const d = await api.post<{ id: number; name: string }>("/api/decks", { name: deckName.value, filter: { ...custom } });
+  decks.value = await api.get<SavedDeck[]>("/api/decks");
+  deck.value = `deck:${d.id}`;
+  deckName.value = "";
+  toast(`Saved the deck ${d.name}.`);
+  await load();
+}
+async function deleteDeck() {
+  if (!savedDeck.value || !confirm(`Delete the deck ${savedDeck.value.name}? Its cards stay.`)) return;
+  await api.del(`/api/decks/${savedDeck.value.id}`);
+  deck.value = "";
+  await load();
+}
+
 async function load() {
   loading.value = true;
-  const [k, v] = deck.value.split(":");
-  queue.value = await api.get<Card[]>("/api/cards" + qs({ due: cram.value ? "" : "1", [k]: v }));
+  [decks.value, facets.value] = await Promise.all([api.get<SavedDeck[]>("/api/decks"), deck.value === "custom" ? api.get<Record<FacetKey, Facet[]>>("/api/cards/facets") : facets.value]);
+  queue.value = await api.get<Card[]>("/api/cards" + deckQuery({ due: cram.value ? "" : "1" }));
   queue.value = queue.value.filter((c) => !c.suspended);
   if (cram.value) queue.value.sort(() => Math.random() - 0.5);
   index.value = 0;
@@ -384,6 +454,17 @@ const nextDue = computed(() => {
   align-items: flex-end;
   gap: 12px 18px;
   margin-bottom: 16px;
+}
+.builder {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 14px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+.builder .small {
+  font-size: 12px;
 }
 .leech {
   border-color: var(--loss);

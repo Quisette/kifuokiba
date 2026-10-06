@@ -79,7 +79,7 @@ Ordered by value for the daily study loop. ✅ marks items that are built.
 
 ### Later
 
-- **Custom review decks.** Review only cards from one opening, tag, opponent or kind of move (this would reuse the move kinds from item 2).
+- ✅ **Custom review decks.** Review only cards from one opening, tag, opponent or kind of move (this would reuse the move kinds from item 2).
 - **Opponent prep sheet.** A notebook page made from a player profile: their openings against you, the positions where you score badly, and your usual mistakes against them.
 - **Paste several games at once.** `/api/import` with `text` imports only one record today. Split pasted text on record boundaries (KIF headers, CSA `V2` lines, one SFEN per line).
 - **Light theme.** The palette is in CSS variables in `styles.css`. Add a light set and follow `prefers-color-scheme`, with a setting to override it.
@@ -109,6 +109,15 @@ Each feature gets a short plan here before it is built. The plan stays afterward
 - **Board.** "Edit position" switches the study board to an edit panel in place of the engine: a starting template (平手, 詰将棋 with one or two kings, 香/角/飛/二枚/四枚/六枚落ち, empty), the side to move, "Done" and "Cancel". "Done" checks the position, then makes it the new start with an empty move tree, ending any link to a game.
 - **Checks.** `core/setup.ts` lists what's wrong with a position: more than one king for a side or no king at all, more pieces than a set has, pawns, lances or knights with nowhere to move, 二歩, and the side not to move being in check. "Done" stays disabled while there are problems, and they're listed under the board.
 - **Tests.** Unit tests for each check. The e2e test edits a position (starts from the 詰将棋 template, drags a gold from the stand onto the board, sets the side to move), finishes, and sees the engine start on it.
+
+### Custom review decks
+
+- **Filters.** Cards can also be filtered by the opening of the side the card is for, the opponent (the other side, with names normalised as in the library), a game tag, the kind of the move played (from `plies.move_kind`) and the side. `Cards.list` joins the card's game, tags and ply, and each card says its `opening`, `opponent`, `tags` and `moveKinds`, so the review screen can show where it came from.
+- **Facets.** `GET /api/cards/facets` gives the values present among the cards, each with its total and due count, so the deck builder only offers choices that have cards.
+- **Saved decks.** A deck is a name and a filter, kept in the `cardDecks` setting. `GET/POST/DELETE /api/decks` manage them. Phones only read them, through the existing LAN gate.
+- **Review screen.** The deck menu lists the built-in decks, then saved decks with their due counts, then "Custom…". "Custom…" opens a row of filter menus with counts and a "Save as deck" button. Anki export follows the chosen deck.
+- **Today.** The plan names the saved deck with the most due cards when there is one ("四間飛車 deck: 5 due"), linking to review with that deck chosen (`#/review?deck=<id>`).
+- **Tests.** API tests for each filter, for facets and for creating, listing and deleting decks. The e2e test builds a custom deck, saves it and checks that the deck menu offers it.
 
 ### Tech debt
 

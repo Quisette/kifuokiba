@@ -155,6 +155,7 @@ type Today = {
   missedMates: number;
   weakOpenings: number;
   tsumeRetry: { collection: string; count: number } | null;
+  deck: { id: number; name: string; due: number } | null;
 };
 const today = ref<Today | null>(null);
 const todayItems = computed(() => {
@@ -169,6 +170,7 @@ const todayItems = computed(() => {
       text: `Look back at the loss vs ${g.opponent || "?"} (${g.date.slice(5, 10)}${g.mistakes ? `, ${g.mistakes} 悪手` : ""}) and write a review note`,
       href: `#/game/${g.id}`,
     });
+  if (t.deck) items.push({ key: "deck", text: `Work through your ${t.deck.name} deck: ${t.deck.due} due`, href: `#/review?deck=${t.deck.id}` });
   if (t.missedMates) items.push({ key: "mates", text: `Solve the ${t.missedMates} mate${t.missedMates === 1 ? "" : "s"} you missed in games`, href: "#/puzzles" });
   if (t.tsumeRetry)
     items.push({

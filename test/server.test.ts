@@ -615,3 +615,38 @@ describe("variations saved into a game", () => {
     await api("DELETE", `/api/games/${id}`);
   });
 });
+
+describe("custom review decks", () => {
+  it("filters cards by opponent, tag, kind of move and side, and saves decks", async () => {
+    // ☗ "me" hangs the bishop with ▲3三角成 (a promotion) against "deckfoe".
+    const kif = makeKif({ moves: "7g7f 3c3d 8h3c+ 2a3c 2g2f", black: "me", white: "deckfoe", date: "2026/09/09" });
+    const gid = (await api("POST", "/api/import", { text: kif })).results[0].id;
+    await api("PATCH", `/api/games/${gid}`, { tags: ["deckdemo"] });
+    await api("POST", "/api/analysis", { ids: [gid] });
+    await waitIdle();
+    const mine = await api("GET", "/api/cards?opponent=deckfoe");
+    expect(mine.length).toBeGreaterThanOrEqual(1);
+    expect(mine.every((c: { game_id: number }) => c.game_id === gid)).toBe(true);
+    expect(mine[0]).toMatchObject({ opponent: "deckfoe", tags: ["deckdemo"], side: "black" });
+    expect(mine[0].moveKinds).toContain("promotion");
+    expect(await api("GET", "/api/cards?tag=deckdemo")).toHaveLength(mine.length);
+    expect((await api("GET", "/api/cards?opponent=deckfoe&moveKind=drop")).length).toBe(0);
+    expect((await api("GET", "/api/cards?opponent=deckfoe&side=white")).length).toBe(0);
+
+    const facets = await api("GET", "/api/cards/facets");
+    expect(facets.opponent.find((f: { value: string }) => f.value === "deckfoe").total).toBe(mine.length);
+    expect(facets.tag.map((f: { value: string }) => f.value)).toContain("deckdemo");
+
+    const deck = await api("POST", "/api/decks", { name: "vs deckfoe", filter: { opponent: "deckfoe", due: true, bogus: 1 } });
+    expect(deck.filter).toEqual({ opponent: "deckfoe" });
+    const decks = await api("GET", "/api/decks");
+    expect(decks.find((d: { id: number }) => d.id === deck.id)).toMatchObject({ name: "vs deckfoe", total: mine.length });
+    expect(await api("GET", `/api/cards?deck=${deck.id}`)).toHaveLength(mine.length);
+    const plan = await api("GET", "/api/today");
+    expect(plan.deck).toMatchObject({ id: deck.id, name: "vs deckfoe" });
+    await expect(api("POST", "/api/decks", { name: " " })).rejects.toThrow(/name/);
+    await api("DELETE", `/api/decks/${deck.id}`);
+    expect((await api("GET", "/api/decks")).some((d: { id: number }) => d.id === deck.id)).toBe(false);
+    await api("DELETE", `/api/games/${gid}`);
+  });
+});

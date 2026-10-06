@@ -25,7 +25,8 @@ Everything stays on your machine, in one SQLite file.
 - **Mistake cards.** Your 悪手 and worse become cards automatically. You can also make one from any position.
   - In review you play your answer on the board. The best move, or any move the engine says is within the tolerance, counts as correct. You can replay the engine line.
   - Scheduling is SM-2, or FSRS v4.5 if you pick it in Settings. A card missed four times becomes a leech, and the review screen then asks you to write down the idea or study the game.
-  - "Export to Anki" writes a tab-separated file Anki imports directly, with each position drawn as a board diagram.
+  - Decks: besides the built-in ones (by phase, missed mates, leeches…), build your own from the opening, opponent, tag, kind of move and side, and save it. Today suggests the saved deck with the most due cards.
+  - "Export to Anki" writes the chosen deck as a tab-separated file Anki imports directly, with each position drawn as a board diagram.
 - **Play it out.** From any game position or card, play on against the engine at a strength you pick. For the won games you let slip, Stats has a "Win it again" button that starts from the position before the slip and warns as soon as your winning chances fall below 70%.
 - **Tsume collections.** Import mate problems from tsume KIF/KI2/CSA files, SFEN lines (`<sfen> moves G*1b`) or JSON/NDJSON (as shogimap-crawler writes them) and solve them against the engine; failed ones come back first.
 - **Guess the moves.** Replay any game, your own or a pro's, and guess each move for one side. Every guess is graded by the engine against the move actually played, with a running score of matches and average loss. A bad guess can become a review card.

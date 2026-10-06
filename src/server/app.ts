@@ -8,7 +8,7 @@ import path from "node:path";
 import { Db } from "./db.js";
 import { Library, GameFilter } from "./library.js";
 import { AnalysisQueue, toBlackView } from "./analysis.js";
-import { Cards } from "./cards.js";
+import { CardFilter, Cards } from "./cards.js";
 import { computeStats, playerProfile, similarGames } from "./stats.js";
 import { Pages } from "./pages.js";
 import { reviewNote } from "./review-note.js";
@@ -407,20 +407,36 @@ export function createApp(opts: AppOptions) {
   });
 
   // ---- cards
-  route("GET", "/api/cards", (_r, url) =>
-    cards.list({
-      kind: url.searchParams.get("kind") ?? undefined,
-      phase: url.searchParams.get("phase") ?? undefined,
-      opening: url.searchParams.get("opening") ?? undefined,
-      due: url.searchParams.get("due") === "1",
-      leech: url.searchParams.get("leech") === "1",
-    }),
-  );
+  // A deck's filter from the query string; ?deck=<id> starts from a saved deck.
+  const cardFilter = (url: URL): CardFilter => {
+    const q = url.searchParams;
+    const deckId = Number(q.get("deck"));
+    const base = deckId ? (cards.decks().find((d) => d.id === deckId)?.filter ?? {}) : {};
+    const f: CardFilter = { ...base, due: q.get("due") === "1" };
+    for (const k of ["kind", "phase", "opening", "myOpening", "opponent", "tag", "moveKind", "side"] as const) {
+      const v = q.get(k);
+      if (v) f[k] = v;
+    }
+    if (q.get("leech") === "1") f.leech = true;
+    return f;
+  };
+  route("GET", "/api/cards", (_r, url) => cards.list(cardFilter(url)));
+  route("GET", "/api/cards/facets", () => cards.facets());
   route("GET", "/api/cards/export/anki", (_r, url) => ({
-    __raw: Buffer.from(cards.exportAnki({ kind: url.searchParams.get("kind") ?? undefined, phase: url.searchParams.get("phase") ?? undefined })),
+    __raw: Buffer.from(cards.exportAnki({ ...cardFilter(url), due: false })),
     type: "text/tab-separated-values; charset=utf-8",
     name: "kifu-study-cards.txt",
   }));
+  route("GET", "/api/decks", () => cards.decks());
+  route("POST", "/api/decks", (_r, _u, _p, body) => {
+    const b = body as { name?: string; filter?: CardFilter };
+    if (!b.name?.trim()) throw new HttpError(400, "a deck needs a name");
+    return cards.saveDeck(b.name, b.filter ?? {});
+  });
+  route("DELETE", "/api/decks/:id", (_r, _u, p) => {
+    cards.deleteDeck(id(p));
+    return { ok: true };
+  });
   route("GET", "/api/repertoire", async (_r, url) => {
     const side = url.searchParams.get("side") === "white" ? "white" : "black";
     // A broken book path shouldn't block the drill; it just judges without the book.

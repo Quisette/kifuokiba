@@ -29,5 +29,8 @@ export function todayPlan(lib: Library, cards: Cards, book: OpeningBook | null, 
     "SELECT collection, COUNT(*) n FROM tsume WHERE last_result = 'failed' GROUP BY collection ORDER BY n DESC LIMIT 1",
   );
   const tsumeRetry = retry ? { collection: retry.collection, count: retry.n } : null;
-  return { due: counts.due, reviewedToday: counts.reviewedToday, losses, missedMates, weakOpenings, tsumeRetry };
+  // The saved deck with the most due cards, to suggest working through it.
+  const top = cards.decks(now).sort((a, b) => b.due - a.due)[0];
+  const deck = top?.due ? { id: top.id, name: top.name, due: top.due } : null;
+  return { due: counts.due, reviewedToday: counts.reviewedToday, losses, missedMates, weakOpenings, tsumeRetry, deck };
 }
