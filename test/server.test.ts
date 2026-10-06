@@ -186,6 +186,20 @@ describe("library API", () => {
     // ▲3三角成 lands on 3三: row 3, column for file 3.
     expect(s.mistakeMap.cells[(3 - 1) * 9 + (9 - 3)]).toBeGreaterThanOrEqual(1);
     expect(s.mistakeMap.byPiece.find((p: { piece: string }) => p.piece === "角")?.n).toBeGreaterThanOrEqual(1);
+    // The blunder ▲3三角成 promotes on an empty square (△同桂 then takes it).
+    const kind = (k: string) => s.moveKinds.rows.find((r: { kind: string }) => r.kind === k);
+    expect(s.moveKinds.total).toBeGreaterThan(0);
+    expect(kind("promotion").mistakes).toBeGreaterThanOrEqual(1);
+    expect(kind("promotion").mistakeRate).toBeGreaterThan(kind("quiet").mistakeRate);
+    expect(kind("quiet").moves).toBeGreaterThan(0);
+  });
+
+  it("works out move kinds for plies imported before they were stored", async () => {
+    const before = (await api("GET", "/api/stats")).moveKinds;
+    app.db.run("UPDATE plies SET move_kind = NULL");
+    const after = (await api("GET", "/api/stats")).moveKinds;
+    expect(after).toEqual(before);
+    expect(app.db.get<{ n: number }>("SELECT count(*) n FROM plies WHERE ply > 0 AND move_kind IS NULL")!.n).toBe(0);
   });
 
   it("stores notebook pages and position search", async () => {

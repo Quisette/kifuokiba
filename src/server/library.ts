@@ -9,6 +9,7 @@ import { gradeMoves, accuracy, turningPoint, clearPlies, Eval, mistakeLabels } f
 import { newSm2State } from "../core/sm2.js";
 import { getSituationText } from "../core/score.js";
 import { SCORE_MATE_INFINITE } from "../core/usi.js";
+import { moveKinds } from "../core/movekind.js";
 
 export type ImportResult =
   | { status: "added"; id: number; name: string }
@@ -190,11 +191,14 @@ export class Library {
       );
       const gameId = Number(r.lastInsertRowid);
       this.db.run("INSERT INTO plies (game_id, ply, sfen) VALUES (?, 0, ?)", gameId, summary.initialSfen);
+      let prevSfen = summary.initialSfen;
       for (const p of summary.plies) {
         const hasEval = p.importedScore !== undefined || p.importedMate !== undefined;
+        const kinds = moveKinds(prevSfen, p.usi);
+        prevSfen = p.sfen;
         this.db.run(
-          `INSERT INTO plies (game_id, ply, usi, text, sfen, comment, elapsed_ms, score, mate, eval_source)
-           VALUES (?,?,?,?,?,?,?,?,?,?)`,
+          `INSERT INTO plies (game_id, ply, usi, text, sfen, comment, elapsed_ms, score, mate, eval_source, move_kind)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
           gameId,
           p.ply,
           p.usi,
@@ -205,6 +209,7 @@ export class Library {
           p.importedScore ?? null,
           p.importedMate ?? null,
           hasEval ? "file" : "",
+          kinds ? kinds.join(",") : "",
         );
       }
       return gameId;

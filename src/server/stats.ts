@@ -1,6 +1,7 @@
 import { Position, pieceTypeToStringForMove } from "tsshogi";
 import { Library, GameFilter, GameListItem } from "./library.js";
 import { clearPlies, winRate } from "../core/grading.js";
+import { MOVE_KINDS, MoveKind, moveKinds } from "../core/movekind.js";
 
 type Score = { games: number; wins: number; losses: number; draws: number; winRate: number | null };
 
@@ -191,6 +192,8 @@ export function computeStats(lib: Library, filter: GameFilter = {}) {
     byPiece.set(piece, (byPiece.get(piece) ?? 0) + 1);
   }
 
+  const kindProfile = moveKindProfile(lib, sideById, firstBlack);
+
   const analysed = mine.filter((g) => g.myAccuracy !== null).sort((a, b) => (a.date < b.date ? -1 : 1));
   return {
     totals: score(mine),
@@ -248,6 +251,8 @@ export function computeStats(lib: Library, filter: GameFilter = {}) {
       mistakes: phaseMistakes[p],
       avgSeconds: mean(phaseSeconds[p]),
     })),
+    /** My graded moves by kind (drops, captures, checks…): how much each costs and how often it is a 悪手 or worse. */
+    moveKinds: kindProfile,
     /** Mistake rate by how long I thought; empty when no game has move times. */
     thinkTime: timeBuckets.some((b) => b.losses.length)
       ? timeBuckets.map((b) => ({
@@ -274,6 +279,58 @@ export function computeStats(lib: Library, filter: GameFilter = {}) {
         cells: [...cols.entries()].map(([theirs, gs]) => ({ theirs, ...score(gs) })),
       }));
     })(),
+  };
+}
+
+/**
+ * Loss and mistake rate for each kind of move I play. A move counts under every
+ * kind it belongs to, so the rows don't add up to the total. Kinds are stored
+ * per ply at import; plies from older libraries are worked out here once.
+ */
+function moveKindProfile(lib: Library, sideById: Map<number, GameListItem>, firstBlack: Map<number, boolean>) {
+  const missing = lib.db.all<{ game_id: number; ply: number; usi: string; prev_sfen: string }>(
+    `SELECT p.game_id, p.ply, p.usi, q.sfen prev_sfen FROM plies p
+     JOIN plies q ON q.game_id = p.game_id AND q.ply = p.ply - 1
+     WHERE p.ply > 0 AND p.move_kind IS NULL`,
+  );
+  if (missing.length) {
+    lib.db.tx(() => {
+      for (const r of missing) {
+        lib.db.run("UPDATE plies SET move_kind = ? WHERE game_id = ? AND ply = ?", moveKinds(r.prev_sfen, r.usi)?.join(",") ?? "", r.game_id, r.ply);
+      }
+    });
+  }
+  const acc = new Map<MoveKind, { losses: number[]; mistakes: number }>(MOVE_KINDS.map((k) => [k, { losses: [], mistakes: 0 }]));
+  const rows = lib.db.all<{ game_id: number; ply: number; loss: number; level: number; move_kind: string }>(
+    "SELECT game_id, ply, loss, level, move_kind FROM plies WHERE ply > 0 AND loss IS NOT NULL AND move_kind != ''",
+  );
+  let total = 0;
+  for (const r of rows) {
+    const g = sideById.get(r.game_id);
+    if (!g) continue;
+    const moverBlack = (r.ply % 2 === 1) === (firstBlack.get(r.game_id) ?? true);
+    if ((g.mySide === "black") !== moverBlack) continue;
+    total++;
+    for (const k of r.move_kind.split(",") as MoveKind[]) {
+      const a = acc.get(k);
+      if (!a) continue;
+      a.losses.push(r.loss);
+      if (r.level >= 3) a.mistakes++;
+    }
+  }
+  return {
+    total,
+    rows: MOVE_KINDS.map((kind) => {
+      const a = acc.get(kind)!;
+      return {
+        kind,
+        moves: a.losses.length,
+        share: total ? (a.losses.length / total) * 100 : 0,
+        avgLoss: mean(a.losses),
+        mistakes: a.mistakes,
+        mistakeRate: a.losses.length ? (a.mistakes / a.losses.length) * 100 : null,
+      };
+    }),
   };
 }
 

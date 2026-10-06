@@ -134,6 +134,25 @@
           </template>
         </section>
 
+        <section v-if="s.moveKinds.total" class="panel box">
+          <div class="cap">指し手の種類 Mistakes by kind of move (my moves)</div>
+          <table class="grid">
+            <thead><tr><th>Kind</th><th>Moves</th><th>Avg loss</th><th>悪手+ rate</th></tr></thead>
+            <tbody>
+              <tr v-for="k in s.moveKinds.rows.filter((r) => r.moves)" :key="k.kind" :class="{ worst: k.kind === worstKind }">
+                <td>{{ KIND_NAMES[k.kind] ?? k.kind }}</td>
+                <td :title="`${k.share.toFixed(0)}% of my graded moves`">{{ k.moves }}</td>
+                <td>{{ k.avgLoss != null ? k.avgLoss.toFixed(2) : "–" }}</td>
+                <td>
+                  <span v-if="k.mistakeRate != null" class="rate"><span :style="{ width: Math.min(100, k.mistakeRate * 4) + '%' }"></span></span>
+                  {{ k.mistakeRate != null ? k.mistakeRate.toFixed(1) + "%" : "–" }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="muted small">A move counts under every kind it is, so a capture that gives check is in both rows.<template v-if="worstKind"> Your costliest kind: <b>{{ KIND_NAMES[worstKind] }}</b>.</template></div>
+        </section>
+
         <section v-if="s.thinkTime.length" class="panel box">
           <div class="cap">考慮時間 Think time vs mistakes (my moves)</div>
           <table class="grid">
@@ -214,6 +233,7 @@ type StatsT = {
   meanMistakes: number | null;
   phaseProfile: { phase: string; avgLoss: number | null; moves: number; mistakes: number; avgSeconds: number | null }[];
   thinkTime: { label: string; moves: number; avgLoss: number | null; mistakes: number; mistakeRate: number | null }[];
+  moveKinds: { total: number; rows: { kind: string; moves: number; share: number; avgLoss: number | null; mistakes: number; mistakeRate: number | null }[] };
   matchupGrid: { mine: string; cells: Cell[] }[];
 };
 
@@ -229,6 +249,12 @@ watch(filter, load);
 
 const pct = (v: number | null | undefined) => (v == null ? "–" : v.toFixed(0));
 const phaseName = (p: string) => ({ opening: "序盤 1–30", middlegame: "中盤 31–80", endgame: "終盤 81+" })[p] ?? p;
+const KIND_NAMES: Record<string, string> = { drop: "打 Drops", capture: "取る Captures", check: "王手 Checks", promotion: "成 Promotions", king: "玉 King", quiet: "他 Quiet" };
+// The kind with the highest 悪手+ rate, once it has enough moves to mean something.
+const worstKind = computed(() => {
+  const rows = (s.value?.moveKinds.rows ?? []).filter((r) => r.moves >= 10 && r.mistakeRate);
+  return rows.sort((a, b) => b.mistakeRate! - a.mistakeRate!)[0]?.kind ?? "";
+});
 const heatMax = computed(() => Math.max(1, ...(s.value?.mistakeMap.cells ?? [])));
 const KANJI = ["一", "二", "三", "四", "五", "六", "七", "八", "九"];
 const squareName = (i: number) => `${9 - (i % 9)}${KANJI[Math.floor(i / 9)]}`;
@@ -325,6 +351,10 @@ const BarTable = defineComponent({
 }
 .ranks a {
   text-decoration: none;
+}
+tr.worst td:first-child {
+  color: var(--loss);
+  font-weight: 600;
 }
 .rate {
   display: inline-block;

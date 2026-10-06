@@ -222,3 +222,18 @@ describe("USI option lines", () => {
     expect(parseOptionLine("id name foo")).toBeNull();
   });
 });
+
+describe("move kinds", () => {
+  it("tells drops, captures, checks, promotions, king and quiet moves apart", async () => {
+    const { moveKinds } = await import("../src/core/movekind.js");
+    const start = "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1";
+    expect(moveKinds(start, "7g7f")).toEqual(["quiet"]);
+    expect(moveKinds(start, "5i5h")).toEqual(["king"]);
+    // After 7g7f 3c3d: ☗2二角成 takes the bishop and promotes.
+    const open = "lnsgkgsnl/1r5b1/pppppp1pp/6p2/9/2P6/PP1PPPPPP/1B5R1/LNSGKGSNL b - 3";
+    expect(moveKinds(open, "8h2b+")).toEqual(["capture", "promotion"]);
+    // A gold dropped right in front of a bare king gives check.
+    expect(moveKinds("4k4/9/9/9/9/9/9/9/4K4 b G 1", "G*5b")).toEqual(["drop", "check"]);
+    expect(moveKinds(start, "7g7e")).toBeNull();
+  });
+});

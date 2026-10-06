@@ -163,6 +163,8 @@ export class Db {
     // My own annotation symbol on a move: !, ?, !!, ??, !? or ?!.
     this.ensureColumn("plies", "user_mark", "TEXT NOT NULL DEFAULT ''");
     this.ensureColumn("games", "clear_white_ply", "INTEGER");
+    // Comma-separated kinds of the move (see core/movekind.ts); NULL until worked out.
+    this.ensureColumn("plies", "move_kind", "TEXT");
   }
 
   private ensureColumn(table: string, column: string, decl: string) {
