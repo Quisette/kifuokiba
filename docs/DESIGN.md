@@ -190,6 +190,7 @@ Each feature gets a short plan here before it is built. The plan stays afterward
 
 ### Tech debt
 
-- `views/Game.vue` (~930 lines) and `server/library.ts` (~710 lines) do too much. Move the move list, the engine panel and the variation handling into components, and move the export code out of `Library`.
+- ✅ `views/Game.vue`: the engine panel (`components/EnginePanel.vue`) and the second opinion (`components/SecondOpinion.vue`) are components now, and the file is down to ~850 lines. The move list and the variation handling could follow.
+- ✅ `server/library.ts` is now storage only (import, listing, evals, regrading). `moveText`/`pvText` moved to `core/notation.ts` (pure), and rebuilding a game's record (branches, merging variations, KIF/CSA export with evals) moved to `server/records.ts`. Callers import those directly, with no aliases left on `Library`.
 - `app.ts` registers all routes in one function. Group them by area (`routes/cards.ts` and so on) once it gets past ~800 lines.
 - The mock engine only counts material, so grading quality is tested only by hand against a real engine.

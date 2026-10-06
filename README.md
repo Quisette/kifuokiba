@@ -105,7 +105,7 @@ The mock engine only counts material and looks one capture ahead. It proves the 
 ## Layout
 
 ```
-src/core/       record import/export, summaries, grading, SM-2, classifier (shared, no I/O)
+src/core/       record import/export, notation, move trees, summaries, grading, SM-2/FSRS, classifier (shared, no I/O)
 src/server/     SQLite store, library, analysis queue, USI engine client, cards, stats, HTTP API
 src/electron/   Electron shell: starts the server and opens a window
 src/renderer/   Vue 3 UI; vendor/shogihome holds the board component

@@ -5,6 +5,7 @@
 import { Library, GameListItem } from "./library.js";
 import { sfenKey } from "./db.js";
 import { playerProfile } from "./stats.js";
+import { moveText } from "../core/notation.js";
 
 const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 const pct = (w: number, l: number) => (w + l ? `${Math.round((w / (w + l)) * 100)}%` : "–");
@@ -93,7 +94,7 @@ export function prepNote(lib: Library, opponent: string, today = new Date().toIS
     for (const e of shown) {
       const usual = [...e.moves.entries()].sort((a, b) => b[1].n - a[1].n)[0];
       const loss = mean(usual[1].losses);
-      const best = e.best && e.best !== usual[0] ? `; the engine prefers ${Library.moveText(e.sfen, e.best)}` : e.best ? "; the engine agrees" : "";
+      const best = e.best && e.best !== usual[0] ? `; the engine prefers ${moveText(e.sfen, e.best)}` : e.best ? "; the engine agrees" : "";
       lines.push(
         `### ${e.ply}手目 · reached in ${e.games.size} games`,
         "",

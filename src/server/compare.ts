@@ -6,6 +6,7 @@ import { Library } from "./library.js";
 import { UsiEngine } from "./engine/usi.js";
 import { toBlackView } from "./analysis.js";
 import { Eval, gradeMoves, mistakeLabels, winRate } from "../core/grading.js";
+import { moveText } from "../core/notation.js";
 
 /** Winning chances (0–100) the engines must differ by for a position to be listed. */
 export const WINRATE_GAP = 15;
@@ -145,8 +146,8 @@ export function compare(
       main: { level: a.level, label: mistakeLabels[a.level], loss: Math.round(a.loss * 10) / 10 },
       second: { level: b.level, label: mistakeLabels[b.level], loss: Math.round(b.loss * 10) / 10 },
       winBefore: { main: w1 === undefined ? null : Math.round(w1), second: w2 === undefined ? null : Math.round(w2) },
-      bestMain: before.best_usi ? Library.moveText(before.sfen, before.best_usi) : "",
-      bestSecond: second[a.ply - 1].best ? Library.moveText(before.sfen, second[a.ply - 1].best) : "",
+      bestMain: before.best_usi ? moveText(before.sfen, before.best_usi) : "",
+      bestSecond: second[a.ply - 1].best ? moveText(before.sfen, second[a.ply - 1].best) : "",
     });
   }
   return { engine, moves: graded, agreement: graded ? (same / graded) * 100 : null, bestMovesDiffer, disagreements };

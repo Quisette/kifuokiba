@@ -6,6 +6,7 @@
 import { Move, Position, RecordMetadataKey } from "tsshogi";
 import { importRecordFromText } from "../core/recordFile.js";
 import { Library } from "./library.js";
+import { moveText } from "../core/notation.js";
 
 export type TsumeProblem = { sfen: string; answer: string[]; title: string };
 export type TsumeRow = {
@@ -138,7 +139,7 @@ export class Tsume {
          ORDER BY CASE last_result WHEN 'failed' THEN 0 WHEN '' THEN 1 ELSE 2 END, id`,
         collection,
       )
-      .map((t) => ({ ...t, firstText: t.answer ? Library.moveText(t.sfen, t.answer.split(" ")[0]) : "" }));
+      .map((t) => ({ ...t, firstText: t.answer ? moveText(t.sfen, t.answer.split(" ")[0]) : "" }));
   }
 
   get(id: number) {

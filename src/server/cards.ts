@@ -6,6 +6,7 @@ import { Rating, ratingFromLoss } from "../core/sm2.js";
 import { scheduleCard } from "../core/scheduler.js";
 import { winRate } from "../core/grading.js";
 import { normalizePlayerName } from "../core/summarize.js";
+import { moveText, pvText } from "../core/notation.js";
 
 export type CardRow = {
   id: number;
@@ -189,9 +190,9 @@ export class Cards {
   private present<T extends CardRow>(c: T) {
     return {
       ...c,
-      bestText: Library.moveText(c.sfen, c.best_usi),
-      playedText: Library.moveText(c.sfen, c.played_usi),
-      pvText: Library.pvText(c.sfen, c.pv),
+      bestText: moveText(c.sfen, c.best_usi),
+      playedText: moveText(c.sfen, c.played_usi),
+      pvText: pvText(c.sfen, c.pv),
       leech: c.lapses >= LEECH_LAPSES,
     };
   }
@@ -211,7 +212,7 @@ export class Cards {
       return { legal: false as const };
     }
     const okLoss = this.lib.settings.cardOkLoss;
-    const answerText = Library.moveText(card.sfen, answerUsi);
+    const answerText = moveText(card.sfen, answerUsi);
     const base = {
       legal: true as const,
       answerText,
@@ -341,7 +342,7 @@ export class Cards {
     const [prev, cur] = plies;
     if (guess) {
       const best = guess.best || prev.best_usi;
-      Object.assign(cur, { usi: guess.usi, text: Library.moveText(prev.sfen, guess.usi), loss: guess.loss, level: guess.level });
+      Object.assign(cur, { usi: guess.usi, text: moveText(prev.sfen, guess.usi), loss: guess.loss, level: guess.level });
       if (best) Object.assign(prev, { best_usi: best, pv: guess.best ? guess.pv || best : prev.pv });
     }
     const side = prev.sfen.split(" ")[1] === "w" ? "white" : "black";

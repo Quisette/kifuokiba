@@ -7,6 +7,7 @@ import { Db } from "./db.js";
 import { Library } from "./library.js";
 import { importRecordFromText } from "../core/recordFile.js";
 import { hasVariations, recordToTree } from "../core/movetree.js";
+import { mergeVariations } from "./records.js";
 
 export type RestoreResult = { games: number; added: number; cards: number; reviews: number; pages: number; studies: number };
 
@@ -30,7 +31,7 @@ export function mergeBackup(lib: Library, backupPath: string): RestoreResult {
       else {
         const rec = importRecordFromText(g.original_text);
         const tree = rec instanceof Error ? null : recordToTree(rec);
-        if (tree && hasVariations(tree)) lib.mergeVariations(r.id, tree);
+        if (tree && hasVariations(tree)) mergeVariations(lib, r.id, tree);
       }
       gameMap.set(g.id, r.id);
       db.tx(() => {

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { Color, Move, Position, Record, formatMove, formatPV } from "tsshogi";
+import { Move, Position, Record, formatPV } from "tsshogi";
 import { Db, sfenKey } from "./db.js";
 import { AppSettings, loadSettings } from "./settings.js";
 import { importRecordFromBuffer, importRecordFromText, exportRecordAsBuffer, RecordFileFormat } from "../core/recordFile.js";
@@ -8,9 +8,7 @@ import { classify, strategyLabel, styleMatchup, Classification } from "../core/c
 import { gradeMoves, accuracy, turningPoint, clearPlies, Eval, mistakeLabels } from "../core/grading.js";
 import { newSm2State } from "../core/sm2.js";
 import { getSituationText } from "../core/score.js";
-import { SCORE_MATE_INFINITE } from "../core/usi.js";
 import { moveKinds } from "../core/movekind.js";
-import { MoveTree, mergeTreeIntoRecord } from "../core/movetree.js";
 
 export type ImportResult =
   | { status: "added"; id: number; name: string }
@@ -550,144 +548,6 @@ export class Library {
     });
   }
 
-  /**
-   * Variations stored in the original file (変化), branching off the main line:
-   * at main-line ply k, an alternative to move k with its continuation.
-   */
-  branches(id: number): { ply: number; usis: string[]; texts: string[]; comment: string }[] {
-    const row = this.db.get<{ original_text: string }>("SELECT original_text FROM games WHERE id = ?", id);
-    if (!row) return [];
-    const record = importRecordFromText(row.original_text);
-    if (record instanceof Error) return [];
-    const out: { ply: number; usis: string[]; texts: string[]; comment: string }[] = [];
-    // record.moves is the main line (first branch everywhere after import).
-    for (const node of record.moves) {
-      if (!node.hasBranch || !node.isFirstBranch) continue;
-      for (let alt = node.branch; alt; alt = alt.branch) {
-        const usis: string[] = [];
-        const texts: string[] = [];
-        let comment = "";
-        for (let n: typeof alt | null = alt; n && n.move instanceof Move; n = n.next) {
-          usis.push(n.move.usi);
-          texts.push(n.displayText);
-          if (!comment && n.comment) comment = n.comment.trim();
-        }
-        if (usis.length) out.push({ ply: alt.ply, usis, texts, comment });
-      }
-    }
-    return out;
-  }
-
-  /**
-   * Adds the lines of a move tree (from the game's start position) to the game's
-   * stored record as 変化. The main line, plies, analysis and hash don't change.
-   * Returns how many branches the game has afterwards, or null for no such game.
-   */
-  mergeVariations(id: number, tree: MoveTree): number | null {
-    const row = this.db.get<{ original_text: string }>("SELECT original_text FROM games WHERE id = ?", id);
-    if (!row) return null;
-    const record = importRecordFromText(row.original_text);
-    if (record instanceof Error) throw record;
-    mergeTreeIntoRecord(record, tree);
-    const kif = exportRecordAsBuffer(record, RecordFileFormat.KIF, { utf8: true, returnCode: "\n" }).text;
-    this.db.tx(() => {
-      this.db.run("UPDATE games SET original_text = ?, updated_at = ? WHERE id = ?", kif, Date.now(), id);
-      // Main-line comments live in plies (the game view and exports read them there); fill only empty ones.
-      for (const node of record.moves) {
-        if (node.comment.trim()) this.db.run("UPDATE plies SET comment = ? WHERE game_id = ? AND ply = ? AND comment = ''", node.comment.trim(), id, node.ply);
-      }
-    });
-    return this.branches(id).length;
-  }
-
-  // ---------------------------------------------------------------- export
-
-  /** Rebuild the record with current comments plus analysis in ShogiHome's comment format. */
-  buildRecord(id: number, opts: { withAnalysis?: boolean; engineName?: string } = {}): Record | undefined {
-    const game = this.db.get<{ original_text: string; analysis_engine: string }>(
-      "SELECT original_text, analysis_engine FROM games WHERE id = ?",
-      id,
-    );
-    if (!game) return undefined;
-    const record = importRecordFromText(game.original_text);
-    if (record instanceof Error) return undefined;
-    const plies = this.db.all<{ ply: number; comment: string; score: number | null; mate: number | null; pv: string; level: number; eval_source: string }>(
-      "SELECT ply, comment, score, mate, pv, level, eval_source FROM plies WHERE game_id = ? ORDER BY ply",
-      id,
-    );
-    const engineName = opts.engineName ?? game.analysis_engine;
-    let node = record.first.next;
-    let ply = 0;
-    while (node && node.move instanceof Move) {
-      ply++;
-      const p = plies[ply];
-      if (p) {
-        let comment = stripSearchComment(p.comment);
-        if (opts.withAnalysis !== false && p.eval_source === "engine") {
-          const header = p.level ? `【${mistakeLabels[p.level as 1 | 2 | 3 | 4]}】\n` : "";
-          // The PV at a node is the engine's line from the position after that move.
-          const pos = Position.newBySFEN(node.sfen);
-          let pvText = "";
-          if (pos && p.pv) {
-            const moves: Move[] = [];
-            const q = pos.clone();
-            for (const u of p.pv.split(" ")) {
-              const m = q.createMoveByUSI(u);
-              if (!m || !q.doMove(m)) break;
-              moves.push(m);
-            }
-            pvText = moves.length ? formatPV(pos, moves) : "";
-          }
-          let block = header;
-          if (p.mate !== null && p.mate !== 0) {
-            block += `#詰み=${p.mate > 0 ? "先手勝ち" : "後手勝ち"}`;
-            if (Math.abs(p.mate) !== SCORE_MATE_INFINITE) block += `:${Math.abs(p.mate)}手`;
-            block += "\n";
-          }
-          if (p.score !== null) {
-            block += getSituationText(p.score) + "\n" + `#評価値=${p.score}\n`;
-          }
-          if (pvText) block += `#読み筋=${pvText}\n`;
-          if (engineName) block += `#エンジン=${engineName}\n`;
-          comment = comment ? `${comment}\n${block}` : block;
-        }
-        node.comment = comment.replace(/\n+$/, "");
-      }
-      node = node.next;
-    }
-    return record;
-  }
-
-  exportGame(id: number, format: RecordFileFormat, utf8 = false) {
-    const record = this.buildRecord(id);
-    if (!record) return undefined;
-    return exportRecordAsBuffer(record, format, { utf8 });
-  }
-
-  // ---------------------------------------------------------------- moves
-
-  /** Japanese text for a USI move at a position. */
-  static moveText(sfen: string, usi: string): string {
-    const pos = Position.newBySFEN(sfen);
-    if (!pos) return usi;
-    const m = pos.createMoveByUSI(usi);
-    if (!m) return usi;
-    return formatMove(pos, m); // already starts with ☗/☖
-  }
-
-  static pvText(sfen: string, pv: string): string {
-    const pos = Position.newBySFEN(sfen);
-    if (!pos || !pv) return "";
-    const moves: Move[] = [];
-    const q = pos.clone();
-    for (const u of pv.split(" ")) {
-      const m = q.createMoveByUSI(u);
-      if (!m || !q.doMove(m)) break;
-      moves.push(m);
-    }
-    return formatPV(pos, moves);
-  }
-
   /** Find games that reached a position (exact, ignoring the move number). */
   findPosition(sfen: string) {
     const key = sfenKey(sfen);
@@ -699,19 +559,6 @@ export class Library {
     for (const r of rows) if (!firstByGame.has(r.game_id)) firstByGame.set(r.game_id, r.ply);
     return [...firstByGame.entries()].map(([gameId, ply]) => ({ gameId, ply }));
   }
-}
-
-function stripSearchComment(comment: string): string {
-  return comment
-    .split("\n")
-    .filter(
-      (l) =>
-        !/^#(評価値|読み筋|深さ|ノード数|エンジン|詰み)=/.test(l) &&
-        !/^(先手|後手)(勝勢|優勢|有利|有望)$|^互角$/.test(l) &&
-        !/^【(緩手|疑問手|悪手|大悪手)】$/.test(l),
-    )
-    .join("\n")
-    .trim();
 }
 
 function matchesFilter(g: GameListItem, f: GameFilter, textHits?: Set<number>): boolean {

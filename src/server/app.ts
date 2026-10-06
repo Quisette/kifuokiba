@@ -41,6 +41,8 @@ import { parseTree, treeFromJson } from "../core/movetree.js";
 import { splitRecords } from "../core/split.js";
 import { passedPosition } from "../core/threat.js";
 import type { FetchLike } from "./fetchers/lishogi.js";
+import { moveText, pvText } from "../core/notation.js";
+import { branches, mergeVariations, exportGame } from "./records.js";
 
 export type AppOptions = {
   dbPath: string;
@@ -273,7 +275,7 @@ export function createApp(opts: AppOptions) {
     if (!pos) throw new HttpError(400, "bad sfen");
     const timeMs = Math.min(Math.max(b.timeMs ?? 5000, 100), 60_000);
     const r = await analysis.mateSearch(`sfen ${pos.sfen}`, timeMs);
-    return r.status === "mate" ? { ...r, text: Library.pvText(pos.sfen, r.moves.join(" ")) } : r;
+    return r.status === "mate" ? { ...r, text: pvText(pos.sfen, r.moves.join(" ")) } : r;
   });
   // The opponent's threat: what they would play if the side to move passed, and whether that is 詰めろ.
   route("POST", "/api/threat", async (_r, _u, _p, body) => {
@@ -287,12 +289,12 @@ export function createApp(opts: AppOptions) {
     return {
       status: "ok",
       move: r.best,
-      text: r.best ? Library.moveText(passed, r.best) : "",
+      text: r.best ? moveText(passed, r.best) : "",
       pv: r.pv,
-      pvText: r.pv ? Library.pvText(passed, r.pv) : "",
+      pvText: r.pv ? pvText(passed, r.pv) : "",
       score: r.score ?? null,
       mateScore: r.mate ?? null,
-      mate: m.status === "mate" ? { moves: m.moves, text: Library.pvText(passed, m.moves.join(" ")) } : null,
+      mate: m.status === "mate" ? { moves: m.moves, text: pvText(passed, m.moves.join(" ")) } : null,
       passedSfen: passed,
     };
   });
@@ -313,7 +315,7 @@ export function createApp(opts: AppOptions) {
         ...l,
         score: l.scoreCP !== undefined ? sign * l.scoreCP : undefined,
         mate: l.scoreMate !== undefined ? sign * l.scoreMate : undefined,
-        text: Library.pvText(pos.sfen, l.pv.join(" ")),
+        text: pvText(pos.sfen, l.pv.join(" ")),
       })),
     };
   });
@@ -323,7 +325,7 @@ export function createApp(opts: AppOptions) {
     const book = await loadBook();
     if (!book) return { configured: false, moves: [] };
     const sfen = url.searchParams.get("sfen") || InitialPositionSFEN.STANDARD;
-    return { configured: true, moves: book.moves(sfen).map((m) => ({ ...m, text: Library.moveText(sfen, m.usi) })) };
+    return { configured: true, moves: book.moves(sfen).map((m) => ({ ...m, text: moveText(sfen, m.usi) })) };
   });
   route("POST", "/api/games/:id/guess", async (_r, _u, p, body) => {
     const b = body as { ply: number; usi: string };
@@ -340,7 +342,7 @@ export function createApp(opts: AppOptions) {
     return secondOpinion.start(id(p));
   });
   route("GET", "/api/games/:id/compare", (_r, _u, p) => ({ ...secondOpinion.status(id(p)), configured: secondOpinion.configured }));
-  route("GET", "/api/games/:id/branches", (_r, _u, p) => lib.branches(id(p)));
+  route("GET", "/api/games/:id/branches", (_r, _u, p) => branches(lib, id(p)));
   route("POST", "/api/games/:id/variations", (_r, _u, p, body) => {
     // The tree as text (moves only) or as JSON (with comments).
     const raw = (body as { tree?: unknown }).tree;
@@ -350,7 +352,7 @@ export function createApp(opts: AppOptions) {
     } catch (e) {
       throw new HttpError(400, e instanceof Error ? e.message : String(e));
     }
-    const n = lib.mergeVariations(id(p), tree);
+    const n = mergeVariations(lib, id(p), tree);
     if (n === null) throw new HttpError(404, "game not found");
     return { branches: n };
   });
@@ -371,7 +373,7 @@ export function createApp(opts: AppOptions) {
         continue;
       }
       leftBookAt = k;
-      alternatives = moves.slice(0, 3).map((m) => ({ usi: m.usi, text: Library.moveText(before, m.usi), count: m.count }));
+      alternatives = moves.slice(0, 3).map((m) => ({ usi: m.usi, text: moveText(before, m.usi), count: m.count }));
       break;
     }
     return { configured: true, inBook, leftBookAt, alternatives };
@@ -386,7 +388,7 @@ export function createApp(opts: AppOptions) {
     for (const [i, g] of list.entries()) {
       // Let other requests (and the analysis queue) through on big exports.
       if (i % 100 === 99) await new Promise((r) => setImmediate(r));
-      const r = lib.exportGame(g.id, fmt, utf8);
+      const r = exportGame(lib, g.id, fmt, utf8);
       if (!r) continue;
       const name = `${g.date.slice(0, 10) || "nodate"}_${safe(g.black || "先手")}_vs_${safe(g.white || "後手")}_${g.id}${fmt}`;
       files.push({ name, data: r.data, date: g.date ? new Date(g.date.replace(" ", "T")) : undefined });
@@ -417,7 +419,7 @@ export function createApp(opts: AppOptions) {
     };
     const f = formats[fmt];
     if (!f) throw new HttpError(400, "unknown format");
-    const r = lib.exportGame(id(p), f, url.searchParams.get("utf8") === "1");
+    const r = exportGame(lib, id(p), f, url.searchParams.get("utf8") === "1");
     if (!r) throw new HttpError(404, "game not found");
     return { __raw: r.data, type: "application/octet-stream", name: `game-${p[0]}${f}` };
   });
@@ -501,7 +503,7 @@ export function createApp(opts: AppOptions) {
     return {
       total: all.length,
       missed: all.filter((p) => p.missed).length,
-      puzzles: all.slice(0, limit).map((p) => ({ ...p, bestText: Library.moveText(p.sfen, p.bestUsi) })),
+      puzzles: all.slice(0, limit).map((p) => ({ ...p, bestText: moveText(p.sfen, p.bestUsi) })),
     };
   });
   route("GET", "/api/cards/counts", () => cards.counts());
@@ -679,7 +681,7 @@ export function createApp(opts: AppOptions) {
         scoreCP: l.scoreCP,
         score: l.scoreCP !== undefined ? sign * l.scoreCP : undefined,
         mate: l.scoreMate !== undefined ? sign * l.scoreMate : undefined,
-        text: Library.pvText(sfenAfter, l.pv.join(" ")),
+        text: pvText(sfenAfter, l.pv.join(" ")),
       }));
     const abort = new AbortController();
     res.on("close", () => abort.abort());
