@@ -183,6 +183,7 @@ try {
   await page.waitForSelector(".tiles");
   await page.waitForTimeout(300);
   await shot("06-stats");
+  check((await page.textContent("body")).includes("Mistakes by kind of move"), "stats shows mistakes by kind of move");
   const opp = games.find((g) => g.opponent)?.opponent;
   if (opp) {
     await page.goto(base + `/#/player/${encodeURIComponent(opp)}`);
@@ -207,6 +208,39 @@ try {
   await page.waitForTimeout(400);
   check((await page.$$(".crumbs a")).length === 2, "clicking a move walks the tree");
   await shot("06b-explorer");
+
+  // Study board: open the worst game's line from the game view, let the engine look, play its move.
+  await page.goto(base + `/#/game/${worst.id}`);
+  await page.waitForSelector(".moves li");
+  await page.click("a:has-text('Study board')");
+  await page.waitForURL(/#\/board\?/);
+  await page.waitForSelector(".moves li");
+  check((await page.$$(".moves li")).length === worst.move_count + 1, "study board opens with the game's line");
+  await page.click(".moves li[data-index=\"2\"]");
+  await page.waitForSelector(".lrow", { timeout: 20000 });
+  check((await page.$$(".lrow")).length >= 1, "study board shows engine lines");
+  await page.click(".lrow >> nth=0");
+  await page.waitForFunction(() => document.querySelector(".moves li.on")?.getAttribute("data-index") === "3");
+  check(/[?&]moves=/.test(await page.evaluate(() => location.hash)), "playing on the study board keeps the line in the URL");
+  const boardMoves = (await page.$$(".moves li")).length;
+  await page.reload();
+  await page.waitForSelector(".moves li.on[data-index=\"3\"]");
+  check((await page.$$(".moves li")).length === boardMoves, "the study board line survives a reload");
+  await shot("06d-board");
+  await page.fill("#board-input", "lnsgkgsnl/1r5b1/ppppppppp/9/9/2P6/PP1PPPPPP/1B5R1/LNSGKGSNL w - 2");
+  await page.click("button:has-text('Set up')");
+  await page.waitForFunction(() => document.querySelectorAll(".moves li").length === 1);
+  check((await page.textContent(".sfen")).includes("2P6"), "the study board sets up a pasted SFEN");
+  await page.click(".lrow >> nth=0", { timeout: 20000 });
+  await page.waitForFunction(() => document.querySelectorAll(".moves li").length === 2);
+  await page.click("button:has-text('Save as game')");
+  await page.waitForFunction(() => location.hash.startsWith("#/game/"));
+  const savedId = Number((await page.evaluate(() => location.hash)).split("/")[2]);
+  check((await api("GET", `/api/games/${savedId}`)).plies.length === 2, "a study board line saves as a game");
+  // Leave the game page first, or its live refresh asks for the deleted game.
+  await page.goto(base + "/#/");
+  await page.waitForSelector(".tiles");
+  await api("DELETE", `/api/games/${savedId}`);
 
   const p = await api("POST", "/api/pages", {
     notebook: "四間飛車",

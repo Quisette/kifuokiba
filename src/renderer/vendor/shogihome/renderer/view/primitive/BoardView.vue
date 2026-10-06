@@ -1275,7 +1275,7 @@ const whitePlayerTimeSeverity = computed(() => {
   z-index: 21;
   transform: translate(-50%, -50%);
   background: white;
-  color: #fe0000;
+  color: #c80000; /* darker than upstream #fe0000 for WCAG AA contrast on white */
   font-size: 12px;
   font-weight: bold;
   padding: 1px 4px;

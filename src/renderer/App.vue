@@ -25,6 +25,7 @@
     <Review v-else-if="route.name === 'review'" />
     <Stats v-else-if="route.name === 'stats'" />
     <Explorer v-else-if="route.name === 'explorer'" />
+    <Board v-else-if="route.name === 'board'" />
     <RecordGame v-else-if="route.name === 'record'" />
     <Player v-else-if="route.name === 'player'" />
     <Repertoire v-else-if="route.name === 'repertoire'" />
@@ -56,6 +57,7 @@ import Game from "./views/Game.vue";
 import Review from "./views/Review.vue";
 import Stats from "./views/Stats.vue";
 import Explorer from "./views/Explorer.vue";
+import Board from "./views/Board.vue";
 import RecordGame from "./views/RecordGame.vue";
 import Player from "./views/Player.vue";
 import Notebooks from "./views/Notebooks.vue";
@@ -73,6 +75,7 @@ const nav = [
   { name: "review", label: "復習 Review" },
   { name: "stats", label: "統計 Stats" },
   { name: "explorer", label: "定跡 Explorer" },
+  { name: "board", label: "検討 Board" },
   { name: "notes", label: "研究 Notes" },
   { name: "settings", label: "設定 Settings" },
 ].filter((n) => !remote || (n.name !== "notes" && n.name !== "settings"));
@@ -100,6 +103,7 @@ const shortcuts = [
       ["f", "Flip the board"],
     ],
   },
+  { title: "Study board", keys: [["← →", "Previous / next move"], ["Home End", "Start / end of the line"], ["f", "Flip the board"]] },
   { title: "Review", keys: [["1 2 3 4", "Again / Hard / Good / Easy"], ["Space Enter", "The suggested grade"]] },
   { title: "Guess the move", keys: [["→ Enter", "Next move"], ["s", "Skip this move"], ["Backspace", "Take the last guess back"]] },
 ];
