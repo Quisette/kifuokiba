@@ -7,7 +7,7 @@ Everything stays on your machine, in one SQLite file.
 ## What it does
 
 - **Today.** The dashboard lists what to do now: due cards, recent losses that have no review note yet, mates you missed, and opening positions where your usual move is weak.
-- **Library.** Import KIF, KIFU, KI2, CSA, JKF, SFEN or USI by drag-drop, file picker or paste; Ctrl/⌘+V on any page imports a copied kifu and opens it. Shift_JIS and UTF-8 are detected automatically, and duplicates are skipped.
+- **Library.** Import KIF, KIFU, KI2, CSA, JKF, SFEN or USI by drag-drop, file picker or paste; Ctrl/⌘+V on any page imports a copied kifu and opens it. Several games pasted at once, or in one file (KIF/KI2 one after another, CSA separated by `/`, one SFEN/USI per line), are imported one by one. Shift_JIS and UTF-8 are detected automatically, and duplicates are skipped.
   - **Lishogi:** set your username in Settings and press "Fetch from Lishogi". Later fetches only ask for new games.
   - **Watched folders:** kifu saved by ShogiGUI, Kifu for Windows or a Wars downloader into a watched folder are imported while the app runs.
   - Each game gets its 戦型, the castles on both sides over time, and its tactics (149 rules converted from HiraganaSuisho and sylwi-kifu-vue).

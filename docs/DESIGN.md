@@ -81,7 +81,7 @@ Ordered by value for the daily study loop. ✅ marks items that are built.
 
 - ✅ **Custom review decks.** Review only cards from one opening, tag, opponent or kind of move (this would reuse the move kinds from item 2).
 - ✅ **Opponent prep sheet.** A notebook page made from a player profile: their openings against you, the positions where you score badly, and your usual mistakes against them.
-- **Paste several games at once.** `/api/import` with `text` imports only one record today. Split pasted text on record boundaries (KIF headers, CSA `V2` lines, one SFEN per line).
+- ✅ **Paste several games at once.** `/api/import` with `text` imports only one record today. Split pasted text on record boundaries (KIF headers, CSA `V2` lines, one SFEN per line).
 - **Light theme.** The palette is in CSS variables in `styles.css`. Add a light set and follow `prefers-color-scheme`, with a setting to override it.
 - **Compare engines.** Analyse one game with a second engine and show where the two disagree.
 
@@ -130,6 +130,17 @@ Each feature gets a short plan here before it is built. The plan stays afterward
   - an empty "作戦 Plan" list to fill in
 - **API and UI.** `POST /api/notes/prep { opponent }` creates the page and returns it. The player profile gets "Write prep sheet", which opens the new page. The page also links to the review screen with that opponent's cards picked (`#/review?opponent=<name>` opens the custom deck builder filled in).
 - **Tests.** An API test writes a sheet for a known opponent and checks the record line, the openings table, a board directive and the review link. The e2e test makes one from the player page.
+
+### Paste several games at once
+
+- **Splitting.** `core/split.ts` has `splitRecords(text)`, which cuts text into one string per record:
+  - KIF/KI2: a header line (開始日時, 手合割, 先手 and the like, or `#KIF`) after moves have begun starts a new record. 変化 sections don't count as moves for this, so a game's own variations stay with it.
+  - CSA: a line holding only `/` (the CSA multi-record separator), or a new `V2…` version line after moves.
+  - USI/SFEN: one record per line, when every non-empty line is a `position`, `sfen` or bare SFEN line.
+  - Anything else is one record, as now.
+- **Import.** `/api/import` splits pasted text, and files whose decoded text holds more than one record, naming the parts `name #2` and so on. A single-record file still goes through `importBuffer` as before, so the format is still chosen by its extension.
+- **UI.** A Ctrl/⌘+V paste of several games opens the library with a toast that counts them ("Imported 5 games, 1 already there"). A single game still opens directly. The paste box hints that several games can go in at once.
+- **Tests.** Unit tests split two KIFs (one with a 変化), CSA with `/`, and USI lines. An API test pastes three games and gets three results.
 
 ### Tech debt
 

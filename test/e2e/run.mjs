@@ -475,6 +475,14 @@ try {
   });
   await page.waitForFunction(() => location.hash.startsWith("#/game/"));
   check((await api("GET", "/api/games")).length === before + 1, "pasting a kifu imports and opens it");
+  // Several games in one paste land in the library with a count.
+  await page.evaluate(() => {
+    const dt = new DataTransfer();
+    dt.setData("text/plain", "position startpos moves 7g7f 3c3d 2g2f 4c4d\nposition startpos moves 5g5f 5c5d 2h5h 8b5b\nposition startpos moves 2g2f 8c8d 2f2e 8d8e 6i7h");
+    document.body.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true }));
+  });
+  await page.waitForFunction(() => location.hash.startsWith("#/library") && document.querySelector(".toast")?.textContent?.includes("Imported 2 games, 1 already there"));
+  check((await api("GET", "/api/games")).length === before + 3, "pasting several games imports each of them");
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(base + `/#/game/${worst.id}`);

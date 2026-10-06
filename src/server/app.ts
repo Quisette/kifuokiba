@@ -35,6 +35,7 @@ import { LanServer } from "./lan.js";
 import { Tsume } from "./tsume.js";
 import { decodeText } from "../core/encode.js";
 import { parseTree } from "../core/movetree.js";
+import { splitRecords } from "../core/split.js";
 import type { FetchLike } from "./fetchers/lishogi.js";
 
 export type AppOptions = {
@@ -145,11 +146,16 @@ export function createApp(opts: AppOptions) {
     const b = body as { files?: { name: string; data: string }[]; text?: string };
     const results = [];
     for (const f of b.files ?? []) {
-      results.push(lib.importBuffer(Buffer.from(f.data, "base64"), f.name));
+      const data = Buffer.from(f.data, "base64");
+      // A file holding several games is imported game by game; one game keeps the by-extension path.
+      const parts = splitRecords(decodeText(data, { autoDetect: true, encoding: "SJIS" }));
+      if (parts.length > 1) parts.forEach((t, i) => results.push(lib.importText(t, i ? `${f.name} #${i + 1}` : f.name)));
+      else results.push(lib.importBuffer(data, f.name));
     }
     if (b.text) {
-      // Several games pasted at once are split on blank-line-separated headers is risky; keep one.
-      results.push(lib.importText(b.text));
+      const parts = splitRecords(b.text);
+      if (parts.length > 1) parts.forEach((t, i) => results.push(lib.importText(t, `pasted #${i + 1}`)));
+      else results.push(lib.importText(b.text));
     }
     const added = results.filter((r) => r.status === "added").map((r) => (r as { id: number }).id);
     if (added.length && lib.settings.autoAnalyze && lib.settings.engine.path) analysis.enqueue(added);

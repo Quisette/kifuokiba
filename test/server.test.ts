@@ -680,3 +680,20 @@ describe("opponent prep sheet", () => {
     await api("DELETE", `/api/pages/${page.id}`);
   });
 });
+
+describe("importing several games at once", () => {
+  it("splits pasted text and multi-game files into games", async () => {
+    const kifs = ["7g7f 3c3d 2g2f", "2g2f 8c8d 2f2e", "5g5f 5c5d 2h5h"].map((m, i) => makeKif({ moves: m, black: "me", white: `multi${i}`, date: `2026/09/2${i}` }));
+    const r = await api("POST", "/api/import", { text: kifs.join("\n") });
+    expect(r.results.map((x: { status: string }) => x.status)).toEqual(["added", "added", "added"]);
+    // The same games in one Shift_JIS file: all already there.
+    const file = { name: "three.kif", data: Buffer.from(sjis(kifs.join("\r\n"))).toString("base64") };
+    const again = await api("POST", "/api/import", { files: [file] });
+    expect(again.results.map((x: { status: string; name: string }) => [x.status, x.name])).toEqual([
+      ["duplicate", "three.kif"],
+      ["duplicate", "three.kif #2"],
+      ["duplicate", "three.kif #3"],
+    ]);
+    for (const x of r.results) await api("DELETE", `/api/games/${x.id}`);
+  });
+});

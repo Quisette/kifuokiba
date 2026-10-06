@@ -291,3 +291,26 @@ describe("position setup checks", () => {
     expect(setupProblems("4k4/9/9/9/9/9/9/9/K3R4 w - 1")).toEqual([]);
   });
 });
+
+describe("splitting pasted text into records", () => {
+  it("cuts KIF, CSA and USI lines into games and keeps 変化 with their game", async () => {
+    const { splitRecords } = await import("../src/core/split.js");
+    const kifA = makeKif({ moves: "7g7f 3c3d 2g2f", black: "a", white: "b", date: "2026/09/01" });
+    const kifB = makeKif({ moves: "2g2f 8c8d", black: "c", white: "d", date: "2026/09/02" });
+    const withBranch = ["手合割：平手", "先手：x", "後手：y", "手数----指手---------消費時間--", "   1 ７六歩(77)", "   2 ３四歩(33)", "", "変化：2手", "   2 ８四歩(83)", ""].join("\n");
+    const parts = splitRecords([kifA, withBranch, kifB].join("\n\n"));
+    expect(parts).toHaveLength(3);
+    expect(parts[1]).toContain("変化：2手");
+    for (const p of parts) expect(importRecordFromText(p)).toBeInstanceOf(Record);
+    expect(splitRecords(kifA)).toHaveLength(1);
+
+    const csa = "V2.2\nN+a\nN-b\nPI\n+\n+7776FU\n-3334FU\n%TORYO\n/\nV2.2\nN+c\nN-d\nPI\n+\n+2726FU\n%TORYO\n";
+    const csaParts = splitRecords(csa);
+    expect(csaParts).toHaveLength(2);
+    expect(csaParts[1]).toContain("N+c");
+
+    expect(splitRecords("position startpos moves 7g7f\n\nsfen lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1 moves 2g2f\n")).toHaveLength(2);
+    expect(splitRecords("position startpos moves 7g7f 3c3d")).toHaveLength(1);
+    expect(splitRecords("  \n")).toEqual([]);
+  });
+});

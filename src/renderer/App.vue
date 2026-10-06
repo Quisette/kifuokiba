@@ -132,9 +132,19 @@ async function onGlobalPaste(e: ClipboardEvent) {
   e.preventDefault();
   try {
     const r = await api.post<{ results: { status: string; id: number }[] }>("/api/import", { text });
-    const first = r.results.find((x) => x.status !== "error");
+    const ok = r.results.filter((x) => x.status !== "error");
+    const first = ok[0];
     if (!first) return toast("That doesn't look like a kifu.");
     live.libraryVersion++;
+    if (r.results.length > 1) {
+      // Several games: show them in the library rather than opening one.
+      const added = ok.filter((x) => x.status === "added").length;
+      const dups = ok.length - added;
+      const failed = r.results.length - ok.length;
+      toast(`Imported ${added} game${added === 1 ? "" : "s"}${dups ? `, ${dups} already there` : ""}${failed ? `, ${failed} unreadable` : ""}.`);
+      location.hash = "#/library";
+      return;
+    }
     toast(first.status === "added" ? "Imported the kifu from the clipboard." : "Already in the library; opening it.");
     location.hash = `#/game/${first.id}`;
   } catch (err) {
