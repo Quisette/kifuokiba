@@ -697,3 +697,49 @@ describe("importing several games at once", () => {
     for (const x of r.results) await api("DELETE", `/api/games/${x.id}`);
   });
 });
+
+describe("second opinion", () => {
+  it("compares a game's analysis with a second engine and caches its evals", async () => {
+    // ▲3三角成 takes a pawn and △同角 takes the bishop back.
+    const kif = makeKif({ moves: "7g7f 8c8d 8h3c+ 2b3c 2g2f 4a3b", black: "me", white: "second", date: "2026/09/30" });
+    const gid = (await api("POST", "/api/import", { text: kif })).results[0].id;
+    await api("POST", "/api/analysis", { ids: [gid] });
+    await waitIdle();
+    expect((await api("GET", `/api/games/${gid}/compare`)).configured).toBe(false);
+    await expect(api("POST", `/api/games/${gid}/compare`)).rejects.toThrow(/second engine/);
+
+    await api("PUT", "/api/settings", { engine2: { path: MOCK, options: { Style: "naive" }, movetimeMs: 30 } });
+    const run = async () => {
+      const started = await api("POST", `/api/games/${gid}/compare`);
+      expect(started.total).toBe(7);
+      for (let i = 0; i < 200; i++) {
+        const s = await api("GET", `/api/games/${gid}/compare`);
+        if (!s.running) return s;
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      throw new Error("comparison did not finish");
+    };
+    const t0 = Date.now();
+    const s = await run();
+    const firstMs = Date.now() - t0;
+    expect(s.error).toBe("");
+    expect(s.done).toBe(7);
+    expect(s.engine).toBe("MockEngine 1.0");
+    // The naive engine values a bishop like a pawn, so it sees that trade as even: the engines disagree on it.
+    const r = s.result;
+    expect(r.moves).toBe(6);
+    expect(r.agreement).toBeLessThan(100);
+    const d = r.disagreements.find((x: { ply: number }) => x.ply === 3);
+    expect(d).toBeTruthy();
+    expect(d.main.level).toBeGreaterThanOrEqual(3);
+    expect(d.second.level).toBeLessThan(3);
+    expect(d.text).toContain("角");
+    // Again: every position comes from the cache, kept apart from the main engine's.
+    const t1 = Date.now();
+    expect((await run()).result).toEqual(r);
+    expect(Date.now() - t1).toBeLessThan(Math.max(firstMs, 200));
+    expect(app.db.get<{ n: number }>("SELECT COUNT(*) n FROM evals WHERE limit_key = 'movetime:30|Style=naive'")!.n).toBeGreaterThanOrEqual(7);
+    await api("PUT", "/api/settings", { engine2: { path: "", options: {}, movetimeMs: 1000 } });
+    await api("DELETE", `/api/games/${gid}`);
+  });
+});

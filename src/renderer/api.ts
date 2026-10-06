@@ -150,6 +150,7 @@ export type AnalysisStatus = {
 export type Settings = {
   myNames: string[];
   engine: { path: string; options: Record<string, string | number>; movetimeMs: number; nodes: number; multipv: number; verifyFactor: number };
+  engine2: { path: string; options: Record<string, string | number>; movetimeMs: number };
   grading: { coefficientInSigmoid: number; thresholds: [number, number, number, number] };
   cardMinLevel: number;
   cardOkLoss: number;

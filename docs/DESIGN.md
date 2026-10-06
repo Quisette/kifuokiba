@@ -83,7 +83,7 @@ Ordered by value for the daily study loop. ✅ marks items that are built.
 - ✅ **Opponent prep sheet.** A notebook page made from a player profile: their openings against you, the positions where you score badly, and your usual mistakes against them.
 - ✅ **Paste several games at once.** `/api/import` with `text` imports only one record today. Split pasted text on record boundaries (KIF headers, CSA `V2` lines, one SFEN per line).
 - ✅ **Light theme.** The palette is in CSS variables in `styles.css`. Add a light set and follow `prefers-color-scheme`, with a setting to override it.
-- **Compare engines.** Analyse one game with a second engine and show where the two disagree.
+- ✅ **Compare engines.** Analyse one game with a second engine and show where the two disagree.
 
 ## Feature plans
 
@@ -148,6 +148,17 @@ Each feature gets a short plan here before it is built. The plan stays afterward
 - **Light palette.** A warm paper version of the lacquer theme under `:root[data-theme="light"]`, with `color-scheme: light`. Text and muted text stay at WCAG AA contrast against the panels. The board, pieces and stands keep their wood images.
 - **Choosing.** `renderer/theme.ts` reads a per-device preference ("system", "light", "dark") from `localStorage` and sets `data-theme` on `<html>`. For "system" it follows `prefers-color-scheme`, including live changes. A tiny inline script in `index.html` applies it before the app loads, so there's no dark flash. Settings gets an "Appearance" menu. It's per device on purpose, because a phone and a desktop may want different themes.
 - **Tests.** The e2e test switches to light, takes dashboard, game and stats screenshots, and the axe scan that runs on every screenshot checks contrast in the light palette too.
+
+### Compare engines (second opinion)
+
+- **Settings.** `engine2: { path, options, movetimeMs }`, empty by default. Settings gets a "Second engine" section with its own Test button, which reuses `/api/engine/test`.
+- **Server.** `server/compare.ts` owns a second `UsiEngine` process, separate from the main one, so a comparison never waits behind the analysis queue. `POST /api/games/:id/compare` starts a job that evaluates every position of the game with the second engine and stores the results in `evals` under that engine's name. A repeat comparison, or another game through the same positions, is mostly cache hits. `GET /api/games/:id/compare` returns `{ running, done, total, engine, result }`. Only one comparison runs at a time, and starting another one queues behind it.
+- **Result.** For each move, both engines' grades come from `gradeMoves` with the same grading settings. A move is listed when the two disagree:
+  - one engine calls it a 悪手 or worse and the other doesn't
+  - for the position before it, the two disagree on the winning chances by 15 points or more
+  The result also gives a count of positions where their best moves differ, and the agreement rate (the share of moves graded the same).
+- **UI.** The game view gets a "Second opinion" panel when a second engine is set. It has a "Compare with <name>" button, progress while the job runs, the agreement rate, and the disagreements as rows ("12手 ▲7六歩: 悪手 −14 vs fine −2"). Clicking a row jumps to that move.
+- **Tests.** The API test uses the mock engine as the second engine, plus a mock variant that values pieces differently (`MOCK_STYLE=greedy`) so the two disagree. It checks the job's progress, the result shape, the listed disagreements and that a second run is served from the cache.
 
 ### Tech debt
 

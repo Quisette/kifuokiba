@@ -205,6 +205,8 @@
           </div>
         </div>
 
+        <SecondOpinion :game-id="id" @jump="jump" />
+
         <div class="panel box">
           <div class="cap">戦型・囲い Opening and castles</div>
           <div class="sum">
@@ -274,6 +276,7 @@ import { go, route } from "../router";
 import ShogiBoard from "../components/ShogiBoard.vue";
 import EvalGraph from "../components/EvalGraph.vue";
 import AddToNotebook from "../components/AddToNotebook.vue";
+import SecondOpinion from "../components/SecondOpinion.vue";
 import { liveSearch } from "../live";
 import { addLine, emptyTree, formatTree } from "../../core/movetree";
 

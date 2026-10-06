@@ -14,6 +14,7 @@ import { Pages } from "./pages.js";
 import { reviewNote } from "./review-note.js";
 import { weeklyNote } from "./weekly.js";
 import { prepNote } from "./prep.js";
+import { SecondOpinion } from "./compare.js";
 import { findPuzzles } from "./puzzles.js";
 import { repertoire } from "./repertoire.js";
 import { AutoBackup } from "./backup.js";
@@ -103,6 +104,7 @@ export function createApp(opts: AppOptions) {
   const analysis = new AnalysisQueue(lib);
   const cards = new Cards(lib, analysis);
   const tsume = new Tsume(lib);
+  const secondOpinion = new SecondOpinion(lib);
   const pages = new Pages(db);
   const backups = new AutoBackup(db, opts.dbPath, () => lib.settings.autoBackupKeep);
   if (opts.autoBackup !== false) backups.start();
@@ -306,6 +308,12 @@ export function createApp(opts: AppOptions) {
       throw e;
     }
   });
+  route("POST", "/api/games/:id/compare", (_r, _u, p) => {
+    if (!secondOpinion.configured) throw new HttpError(400, "No second engine set. Add one in Settings.");
+    if (!lib.db.get("SELECT 1 FROM games WHERE id = ?", id(p))) throw new HttpError(404, "game not found");
+    return secondOpinion.start(id(p));
+  });
+  route("GET", "/api/games/:id/compare", (_r, _u, p) => ({ ...secondOpinion.status(id(p)), configured: secondOpinion.configured }));
   route("GET", "/api/games/:id/branches", (_r, _u, p) => lib.branches(id(p)));
   route("POST", "/api/games/:id/variations", (_r, _u, p, body) => {
     let tree;
@@ -742,6 +750,7 @@ export function createApp(opts: AppOptions) {
       backups.stop();
       for (const r of sseClients) r.end();
       await analysis.shutdown();
+      await secondOpinion.shutdown();
       await lan.stop();
       await new Promise<void>((r) => server.close(() => r()));
       db.close();

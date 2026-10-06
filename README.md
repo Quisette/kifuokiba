@@ -15,6 +15,7 @@ Everything stays on your machine, in one SQLite file.
 - **Analysis.** A background queue runs your USI engine (YaneuraOu, 水匠 etc.) over every position. Evaluations are cached per position.
   - Moves are graded 緩手 / 疑問手 / 悪手 / 大悪手 with ShogiHome's win-rate thresholds, plus missed mates and missed wins.
   - Each flagged move is then checked again with a longer search (4× by default), so a short search's horizon doesn't produce false mistakes. Unreviewed cards for moves that no longer count are removed.
+  - **Second opinion.** Set a second engine in Settings (or the same one with other options) and "Compare" in the game view lists the moves the two grade differently or where they disagree on the winning chances by 15 points or more, with the agreement rate. Its evals are cached too.
   - Each game gets accuracy, a turning point, and an eval graph with a think-time strip underneath. Missed mates and thrown-away wins are marked separately.
 - **Game view.** ShogiHome's board, keyboard navigation (← → Home End, `[` `]` to jump between mistakes, `f` to flip), and engine candidate moves that deepen live until you stop them.
   - "Diagram" downloads the current position as an SVG image.

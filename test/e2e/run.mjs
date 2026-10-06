@@ -88,7 +88,8 @@ try {
   console.log(`  ${cards.length} cards, mistakes per game: ${games.map((g) => g.mistakes).join(",")}`);
 
   browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || (existsSync("/opt/pw-browsers/chromium") ? "/opt/pw-browsers/chromium" : undefined) });
-  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  // Dark by default (the app follows the system); the light theme gets its own pass at the end.
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, colorScheme: "dark" });
   const errors = [];
   page.on("pageerror", (e) => errors.push(String(e)));
   // Web fonts come from Google Fonts; a sandbox without them is not an app error.
@@ -160,6 +161,16 @@ try {
   await page.waitForSelector(".branch-note");
   check((await page.textContent(".branch-note")).includes("居飛車にする手"), "stored variations open from the move list");
   await shot("03c-branch");
+
+  // Second opinion: the mock engine with naive piece values grades the bishop sacrifice differently.
+  await api("PUT", "/api/settings", { engine2: { path: engine, options: { Style: "naive" }, movetimeMs: 60 } });
+  await page.goto(base + `/#/game/${worst.id}`);
+  await page.waitForSelector(".second button");
+  await page.click(".second button:has-text('Compare')");
+  await page.waitForSelector(".second .dis li, .second :text('agree on every move')", { timeout: 30000 });
+  check(/Agreement \d+%/.test(await page.textContent(".second")), "the second engine's comparison shows an agreement rate");
+  await shot("03d-second-opinion");
+  await api("PUT", "/api/settings", { engine2: { path: "", options: {}, movetimeMs: 1000 } });
 
   await page.goto(base + "/#/review");
   await api("DELETE", `/api/games/${branchId}`);

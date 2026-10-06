@@ -10,6 +10,9 @@ const VALUE = {
   pawn: 90, lance: 315, knight: 405, silver: 495, gold: 540, bishop: 855, rook: 990,
   promPawn: 540, promLance: 540, promKnight: 540, promSilver: 540, horse: 945, dragon: 1395, king: 0,
 };
+// "setoption name Style value naive": a second opinion that values every piece
+// about the same, so tests can compare two engines that disagree.
+const NAIVE = { pawn: 300, lance: 300, knight: 300, silver: 300, gold: 300, bishop: 300, rook: 300, promPawn: 300, promLance: 300, promKnight: 300, promSilver: 300, horse: 300, dragon: 300, king: 0 };
 
 function material(pos) {
   let score = 0;
@@ -155,6 +158,7 @@ rl.on("line", (raw) => {
       send("id author kifu-study");
       send("option name MultiPV type spin default 1 min 1 max 10");
       send("option name USI_Hash type spin default 16 min 1 max 1024");
+      send("option name Style type combo default material var material var naive");
       send("usiok");
       break;
     case "isready":
@@ -163,6 +167,7 @@ rl.on("line", (raw) => {
     case "setoption": {
       const m = /name (\S+) value (\S+)/.exec(args);
       if (m && m[1] === "MultiPV") multipv = Number(m[2]);
+      if (m && m[1] === "Style" && m[2] === "naive") Object.assign(VALUE, NAIVE);
       break;
     }
     case "position":

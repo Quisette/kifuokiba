@@ -105,6 +105,29 @@
       </section>
 
       <section class="panel box">
+        <h3>セカンドオピニオン Second engine</h3>
+        <div class="muted small">Optional. A second USI engine (or the same one with other options) to compare a game's analysis with, from the game view.</div>
+        <label class="field">
+          USI engine executable (full path)
+          <input v-model="s.engine2.path" placeholder="/path/to/another/engine" />
+        </label>
+        <div class="row">
+          <button type="button" class="btn" :disabled="!s.engine2.path || testing2" @click="test2">{{ testing2 ? "Testing…" : "Test engine" }}</button>
+          <span v-if="testResult2" :style="{ color: testResult2.ok ? 'var(--good)' : 'var(--loss)' }">
+            {{ testResult2.ok ? `OK: ${testResult2.name} (best ${testResult2.bestmove})` : testResult2.error }}
+          </span>
+        </div>
+        <label class="field">
+          Time per move (ms)
+          <input v-model.number="s.engine2.movetimeMs" type="number" min="50" step="50" />
+        </label>
+        <label class="field">
+          Engine options (one per line, Name=Value)
+          <textarea v-model="options2" rows="3" placeholder="Threads=2&#10;EvalDir=eval2"></textarea>
+        </label>
+      </section>
+
+      <section class="panel box">
         <h3>判定 Mistake grading</h3>
         <div class="muted small">Win-rate loss thresholds in percentage points, the same defaults as ShogiHome (sigmoid 600).</div>
         <div class="row">
@@ -249,11 +272,14 @@ onMounted(async () => {
   options.value = Object.entries(s.value.engine.options)
     .map(([k, v]) => `${k}=${v}`)
     .join("\n");
+  options2.value = Object.entries(s.value.engine2.options)
+    .map(([k, v]) => `${k}=${v}`)
+    .join("\n");
 });
 
-function parseOptions(): Record<string, string | number> {
+function parseOptions(text = options.value): Record<string, string | number> {
   const out: Record<string, string | number> = {};
-  for (const line of options.value.split("\n")) {
+  for (const line of text.split("\n")) {
     const m = /^\s*([^=]+?)\s*=\s*(.*?)\s*$/.exec(line);
     if (m) out[m[1]] = /^-?\d+$/.test(m[2]) ? Number(m[2]) : m[2];
   }
@@ -264,6 +290,7 @@ async function save() {
   if (!s.value) return;
   s.value.myNames = names.value.split("\n").map((x) => x.trim()).filter(Boolean);
   s.value.engine.options = parseOptions();
+  s.value.engine2.options = parseOptions(options2.value);
   s.value.watchFolders = folders.value.split("\n").map((x) => x.trim()).filter(Boolean);
   s.value = await api.put<Settings>("/api/settings", s.value);
   toast("Settings saved");
@@ -318,6 +345,18 @@ async function restore(e: Event) {
     live.libraryVersion++;
   } finally {
     restoring.value = false;
+  }
+}
+const options2 = ref("");
+const testing2 = ref(false);
+const testResult2 = ref<{ ok: boolean; name?: string; bestmove?: string; error?: string } | null>(null);
+async function test2() {
+  testing2.value = true;
+  testResult2.value = null;
+  try {
+    testResult2.value = await api.post("/api/engine/test", { path: s.value!.engine2.path });
+  } finally {
+    testing2.value = false;
   }
 }
 async function test() {
