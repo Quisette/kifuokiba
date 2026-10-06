@@ -144,45 +144,7 @@
       </section>
 
       <section class="side-col">
-        <div class="panel box">
-          <div class="cap">検討 Engine {{ game.analysis_engine ? "· " + game.analysis_engine : "" }}</div>
-          <template v-if="cur.score !== null || cur.mate !== null">
-            <div class="big">
-              <span class="serif">{{ moverWin }}%</span>
-              <span class="muted" style="font-size: 13px">{{ evalText(cur.score, cur.mate) }} · {{ cur.situation }}</span>
-            </div>
-            <div v-if="next && (next.level || next.missed)" class="played">
-              Next: <b class="serif">{{ next.text }}</b>
-              <span v-if="next.level" class="mark" :class="'l' + next.level">{{ next.label }}</span>
-              <span v-if="next.missed" class="mark l4">{{ missedLabel(next.missed) }}</span>
-              <span class="muted">−{{ next.loss?.toFixed(1) }} pts</span>
-            </div>
-            <div v-if="cur.pvText" class="pv">最善 {{ cur.pvText }}</div>
-          </template>
-          <div v-else class="muted" style="margin-top: 6px">No evaluation for this position yet.</div>
-          <div v-if="multi.length" class="multipv">
-            <div v-for="l in multi" :key="l.multipv" class="mrow">
-              <span>{{ l.multipv }}. {{ l.text.split(" ")[0] }}</span>
-              <span class="muted">{{ evalText(l.score ?? null, l.mate ?? null) }}</span>
-            </div>
-            <div v-if="multiDepth" class="muted mdepth">depth {{ multiDepth }}{{ multiBusy ? " · thinking…" : "" }}</div>
-          </div>
-          <div class="row" style="margin-top: 10px">
-            <button v-if="multiBusy" type="button" class="btn small" @click="stopCandidates">Stop</button>
-            <button v-else type="button" class="btn small" @click="candidates">Candidate moves</button>
-            <button type="button" class="btn small" :disabled="mateBusy" title="Ask the engine for a forced mate from this position" @click="mateCheck">
-              {{ mateBusy ? "Searching…" : "詰みチェック Mate?" }}
-            </button>
-          </div>
-          <div v-if="mateResult" class="mate-result" :class="mateResult.status">
-            <template v-if="mateResult.status === 'mate'">
-              <b>{{ mateResult.moves.length }}手詰</b> <span class="serif">{{ mateResult.text }}</span>
-            </template>
-            <template v-else-if="mateResult.status === 'nomate'">No forced mate found in {{ MATE_SECONDS }}s.</template>
-            <template v-else-if="mateResult.status === 'timeout'">Ran out of time ({{ MATE_SECONDS }}s) without an answer.</template>
-            <template v-else>This engine has no mate search.</template>
-          </div>
-        </div>
+        <EnginePanel :ply="cur" :next="next" :engine-name="game.analysis_engine" @lines="(l) => (multi = l)" />
 
         <div class="panel box">
           <div class="cap">この局 Game summary</div>
@@ -277,7 +239,7 @@ import ShogiBoard from "../components/ShogiBoard.vue";
 import EvalGraph from "../components/EvalGraph.vue";
 import AddToNotebook from "../components/AddToNotebook.vue";
 import SecondOpinion from "../components/SecondOpinion.vue";
-import { liveSearch } from "../live";
+import EnginePanel, { CandidateLine } from "../components/EnginePanel.vue";
 import { addLine, emptyTree, formatTree } from "../../core/movetree";
 
 const props = defineProps<{ id: number }>();
@@ -377,9 +339,6 @@ const hasEvals = computed(() => game.value!.plies.some((p) => p.score !== null |
 watch(cursor, () => {
   commentDraft.value = cur.value?.comment ?? "";
   variation.value = [];
-  stopCandidates();
-  multi.value = [];
-  multiDepth.value = 0;
   posHits.value = null;
   void nextTick(() => moveList.value?.querySelector(".on")?.scrollIntoView({ block: "nearest" }));
 });
@@ -490,66 +449,13 @@ const barPct = computed(() => {
   const w = p ? winRate(p.score, p.mate) : varEval.value ? winRate(varEval.value.score ?? null, varEval.value.mate ?? null) : null;
   return w ?? 50;
 });
-// Win % for the side to move after this ply.
-const moverWin = computed(() => {
-  const w = winRate(cur.value.score, cur.value.mate) ?? 50;
-  const toMove = cur.value.sfen.split(" ")[1] === "w" ? "white" : "black";
-  return Math.round(toMove === "black" ? w : 100 - w);
-});
 const arrows = computed(() => {
   if (variation.value.length) return [];
   if (multi.value.length) return multi.value.map((l) => ({ usi: l.pv[0], score: l.scoreSide }));
   return cur.value.best_usi ? [{ usi: cur.value.best_usi }] : [];
 });
-type Line = { multipv: number; pv: string[]; text: string; score?: number; mate?: number; scoreSide?: number };
-const multi = ref<Line[]>([]);
-const multiBusy = ref(false);
-const MATE_SECONDS = 5;
-type MateResult = { status: "mate"; moves: string[]; text: string } | { status: "nomate" | "timeout" | "notimplemented" };
-const mateBusy = ref(false);
-const mateResult = ref<MateResult | null>(null);
-watch(() => game.value?.plies[cursor.value]?.sfen, () => (mateResult.value = null));
-async function mateCheck() {
-  mateBusy.value = true;
-  try {
-    mateResult.value = await api.post<MateResult>("/api/mate", { sfen: cur.value.sfen, timeMs: MATE_SECONDS * 1000 });
-  } catch (e) {
-    toast(String(e));
-  } finally {
-    mateBusy.value = false;
-  }
-}
-
-// Streamed for up to CANDIDATE_MS; the lines deepen on screen until then or until Stop.
-const CANDIDATE_MS = 10_000;
-const multiDepth = ref(0);
-let stopMulti: (() => void) | null = null;
-function stopCandidates() {
-  stopMulti?.();
-  stopMulti = null;
-  multiBusy.value = false;
-}
-function candidates() {
-  stopCandidates();
-  multiBusy.value = true;
-  const sfen = cur.value.sfen;
-  stopMulti = liveSearch(
-    { sfen, multipv: 3, maxMs: CANDIDATE_MS },
-    {
-      update: (r) => {
-        if (cur.value.sfen !== sfen) return;
-        multi.value = r.lines.map((l) => ({ ...l, scoreSide: l.scoreCP }));
-        multiDepth.value = r.lines[0]?.depth ?? 0;
-        if (r.done) stopCandidates();
-      },
-      error: (msg) => {
-        toast(msg);
-        stopCandidates();
-      },
-    },
-  );
-}
-onUnmounted(stopCandidates);
+// Candidate moves streamed by the engine panel, shown as arrows.
+const multi = ref<CandidateLine[]>([]);
 
 const resultText = computed(() => {
   const g = game.value!;
@@ -675,16 +581,6 @@ async function findPosition() {
   border-radius: 3px;
   color: var(--muted);
   font-family: var(--serif);
-}
-.mate-result {
-  margin-top: 8px;
-  font-size: 13px;
-  padding: 8px 10px;
-  border-radius: 6px;
-  background: var(--panel-2);
-}
-.mate-result.mate {
-  border: 1px solid var(--loss);
 }
 .title-row {
   display: flex;
@@ -897,34 +793,6 @@ async function findPosition() {
   display: flex;
   flex-direction: column;
   gap: 6px;
-}
-.big {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-}
-.big .serif {
-  font-size: 30px;
-}
-.played {
-  font-size: 13px;
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-.pv {
-  font-size: 13px;
-  color: var(--muted);
-  line-height: 1.6;
-}
-.mdepth {
-  font-size: 12px;
-}
-.multipv .mrow {
-  display: flex;
-  justify-content: space-between;
-  font-size: 13px;
 }
 .sum {
   font-size: 13px;
