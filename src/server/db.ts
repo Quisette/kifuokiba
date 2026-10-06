@@ -137,6 +137,15 @@ CREATE TABLE IF NOT EXISTS tsume (
   created_at INTEGER NOT NULL,
   UNIQUE (collection, sfen)
 );
+CREATE TABLE IF NOT EXISTS studies (
+  id INTEGER PRIMARY KEY,
+  title TEXT NOT NULL,
+  start_sfen TEXT NOT NULL,
+  tree TEXT NOT NULL DEFAULT '{"usi":"","children":[]}',
+  game_id INTEGER REFERENCES games(id) ON DELETE SET NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL

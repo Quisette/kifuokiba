@@ -1,11 +1,25 @@
 // A move tree for the study board. The first child of each node is the main
 // line. Its text form is PGN-like: "7g7f 3c3d (8c8d 2g2f) 2g2f", where a
-// bracketed group is an alternative to the move just before it.
-import { ImmutableNode, Move, Position, Record } from "tsshogi";
+// bracketed group is an alternative to the move just before it. Comments are
+// kept on nodes (the root's is about the start position) but not in the text form.
+import { ImmutableNode, Move, Node, Position, Record } from "tsshogi";
 
-export type MoveTree = { usi: string; children: MoveTree[] };
+export type MoveTree = { usi: string; children: MoveTree[]; comment?: string };
 
 export const emptyTree = (): MoveTree => ({ usi: "", children: [] });
+
+/** A tree from untrusted JSON: only the fields a tree has, comments capped in length. */
+export function treeFromJson(value: unknown, maxComment = 4000): MoveTree {
+  const o = (value ?? {}) as { usi?: unknown; children?: unknown; comment?: unknown };
+  const out: MoveTree = {
+    usi: typeof o.usi === "string" ? o.usi : "",
+    children: Array.isArray(o.children) ? o.children.map((c) => treeFromJson(c, maxComment)) : [],
+  };
+  if (typeof o.comment === "string" && o.comment.trim()) out.comment = o.comment.slice(0, maxComment);
+  return out;
+}
+
+export const hasComments = (n: MoveTree): boolean => !!n.comment || n.children.some(hasComments);
 
 export function lineTree(usis: string[]): MoveTree {
   const root = emptyTree();
@@ -96,6 +110,7 @@ export function selectedLine(root: MoveTree, path: number[]): { node: MoveTree; 
 export function pruneIllegal(root: MoveTree, initialSfen: string): MoveTree {
   const walk = (n: MoveTree, pos: Position): MoveTree => ({
     usi: n.usi,
+    ...(n.comment ? { comment: n.comment } : {}),
     children: n.children.flatMap((c) => {
       const m = pos.createMoveByUSI(c.usi);
       if (!m || !pos.isValidMove(m)) return [];
@@ -111,10 +126,12 @@ export function pruneIllegal(root: MoveTree, initialSfen: string): MoveTree {
 /** The tree of a record's moves, branches included. */
 export function recordToTree(record: Record): MoveTree {
   const root = emptyTree();
+  if (record.first.comment.trim()) root.comment = record.first.comment.trim();
   const add = (parent: MoveTree, first: ImmutableNode | null) => {
     for (let alt = first; alt; alt = alt.branch) {
       if (!(alt.move instanceof Move)) continue;
-      const node = { usi: alt.move.usi, children: [] };
+      const node: MoveTree = { usi: alt.move.usi, children: [] };
+      if (alt.comment.trim()) node.comment = alt.comment.trim();
       parent.children.push(node);
       add(node, alt.next);
     }
@@ -127,16 +144,22 @@ export function recordToTree(record: Record): MoveTree {
  * Adds every line of the tree to the record. Moves the record already has are
  * followed, new ones become branches after the existing ones, so the record's
  * main line stays its main line. Illegal moves are skipped with what follows.
+ * A comment is written only where the record's move has none.
  */
 export function mergeTreeIntoRecord(record: Record, root: MoveTree): void {
+  const note = (node: Node, comment?: string) => {
+    if (comment && !node.comment.trim()) node.comment = comment;
+  };
   const walk = (at: ImmutableNode, n: MoveTree) => {
     for (const c of n.children) {
       record.gotoNode(at);
       const m = record.position.createMoveByUSI(c.usi);
       if (!m || !record.position.isValidMove(m) || !record.append(m)) continue;
+      note(record.current, c.comment);
       walk(record.current, c);
     }
   };
+  note(record.first, root.comment);
   walk(record.first, root);
   record.resetAllBranchSelection();
   record.goto(0);

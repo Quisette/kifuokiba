@@ -590,7 +590,13 @@ export class Library {
     if (record instanceof Error) throw record;
     mergeTreeIntoRecord(record, tree);
     const kif = exportRecordAsBuffer(record, RecordFileFormat.KIF, { utf8: true, returnCode: "\n" }).text;
-    this.db.run("UPDATE games SET original_text = ?, updated_at = ? WHERE id = ?", kif, Date.now(), id);
+    this.db.tx(() => {
+      this.db.run("UPDATE games SET original_text = ?, updated_at = ? WHERE id = ?", kif, Date.now(), id);
+      // Main-line comments live in plies (the game view and exports read them there); fill only empty ones.
+      for (const node of record.moves) {
+        if (node.comment.trim()) this.db.run("UPDATE plies SET comment = ? WHERE game_id = ? AND ply = ? AND comment = ''", node.comment.trim(), id, node.ply);
+      }
+    });
     return this.branches(id).length;
   }
 

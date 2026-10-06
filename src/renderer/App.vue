@@ -25,7 +25,7 @@
     <Review v-else-if="route.name === 'review'" />
     <Stats v-else-if="route.name === 'stats'" />
     <Explorer v-else-if="route.name === 'explorer'" />
-    <Board v-else-if="route.name === 'board'" />
+    <Board v-else-if="route.name === 'board'" :key="route.params[0] ?? ''" />
     <RecordGame v-else-if="route.name === 'record'" />
     <Player v-else-if="route.name === 'player'" />
     <Repertoire v-else-if="route.name === 'repertoire'" />

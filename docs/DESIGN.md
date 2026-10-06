@@ -160,6 +160,14 @@ Each feature gets a short plan here before it is built. The plan stays afterward
 - **UI.** The game view gets a "Second opinion" panel when a second engine is set. It has a "Compare with <name>" button, progress while the job runs, the agreement rate, and the disagreements as rows ("12手 ▲7六歩: 悪手 −14 vs fine −2"). Clicking a row jumps to that move.
 - **Tests.** The API test uses the mock engine as the second engine, plus a mock variant that values pieces differently (`MOCK_STYLE=greedy`) so the two disagree. It checks the job's progress, the result shape, the listed disagreements and that a second run is served from the cache.
 
+### Saved studies with move comments
+
+- **Model.** Tree nodes gain an optional `comment`. The URL text form stays comment-free. `movetree.ts` carries comments to and from tsshogi's `Record` (KIF comments, including on 変化). When merging into a game, `mergeTreeIntoRecord` sets a comment only where the game's move has none.
+- **Storage.** A `studies` table holds `id, title, start_sfen, tree (JSON), game_id, created_at, updated_at`. `server/studies.ts` serves `GET/POST/PUT/DELETE /api/studies`. Restore adds a backup's studies unless one with the same title and tree is already there. Phones may read studies but not write them.
+- **Board.** Each move can have a comment, edited under the move list, and moves with one show ✎. "Save study" names the board and moves it to `#/board/<id>`, after which changes save themselves (debounced `PUT`). Unsaved boards stay URL-only as before. A "Studies" list on the board page shows saved ones, with rename and delete. KIF in and out, "Save as game", "Save into the game" and "Study board" from a game all carry comments.
+- **Notebooks.** `:::shogi-study{id=12}` embeds a saved study: a stepper over the main line with 変 chips and comments. "Add to notebook" on a saved study inserts that directive.
+- **Tests.** Unit tests for the comment round trip through `Record`/KIF. API tests for study CRUD, for comment merging that never overwrites, and for restore. The e2e test comments a move, saves the study, reloads it by id and embeds it in a notebook.
+
 ### Tech debt
 
 - `views/Game.vue` (~930 lines) and `server/library.ts` (~710 lines) do too much. Move the move list, the engine panel and the variation handling into components, and move the export code out of `Library`.

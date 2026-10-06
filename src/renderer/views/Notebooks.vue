@@ -43,6 +43,7 @@
           <template v-for="(b, i) in blocks" :key="i + ':' + blockKey(b)">
             <div v-if="b.type === 'md'" class="md" v-html="b.html"></div>
             <NoteBoard v-else-if="b.type === 'board'" kind="board" :attrs="b.attrs" :body="b.body" />
+            <StudyBlock v-else-if="b.type === 'study'" :id="b.id" />
             <NoteBoard v-else kind="kifu" :attrs="b.attrs" :ref-name="b.ref" />
           </template>
           <div v-if="!blocks.length" class="empty">Empty page. Write Markdown, or use “Add to notebook” from a game or card.</div>
@@ -61,6 +62,7 @@ import { api, Page, PageSummary, toast } from "../api";
 import { go, route } from "../router";
 import { Block, parseNotebook } from "../notebook";
 import NoteBoard from "../components/NoteBoard.vue";
+import StudyBlock from "../components/StudyBlock.vue";
 
 const pages = ref<PageSummary[]>([]);
 const page = ref<Page | null>(null);

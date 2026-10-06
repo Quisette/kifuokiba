@@ -314,3 +314,32 @@ describe("splitting pasted text into records", () => {
     expect(splitRecords("  \n")).toEqual([]);
   });
 });
+
+describe("move tree comments", () => {
+  const START = "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1";
+  it("carries comments through a record and KIF, and never overwrites a game's own", async () => {
+    const { parseTree, treeToRecord, recordToTree, mergeTreeIntoRecord, lineTree } = await import("../src/core/movetree.js");
+    const { exportKIF, importKIF } = await import("tsshogi");
+    const t = parseTree("7g7f 3c3d (8c8d) 2g2f");
+    t.comment = "start note";
+    t.children[0].comment = "角道を開ける";
+    t.children[0].children[1].comment = "居飛車にする";
+    const kif = exportKIF(treeToRecord(START, t));
+    expect(kif).toContain("*角道を開ける");
+    expect(kif).toContain("*居飛車にする");
+    const back = recordToTree(importKIF(kif) as Record);
+    expect(back.comment).toBe("start note");
+    expect(back.children[0].comment).toBe("角道を開ける");
+    expect(back.children[0].children[1]).toMatchObject({ usi: "8c8d", comment: "居飛車にする" });
+    expect(back.children[0].children[0].comment).toBeUndefined();
+
+    // Merging into a game: a move that has a comment keeps it; a bare one gets the study's.
+    const game = treeToRecord(START, lineTree(["7g7f", "3c3d"]));
+    game.goto(1);
+    game.current.comment = "mine";
+    mergeTreeIntoRecord(game, t);
+    const merged = recordToTree(game);
+    expect(merged.children[0].comment).toBe("mine");
+    expect(merged.children[0].children[1].comment).toBe("居飛車にする");
+  });
+});

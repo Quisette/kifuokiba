@@ -364,6 +364,40 @@ try {
   const editedSfen = new URLSearchParams((await page.evaluate(() => location.hash)).split("?")[1]).get("sfen") ?? "";
   check(/^4k4\/9\/9\/9\/9\/9\/9\/9\/[A-Z]{1}8 b /.test(editedSfen) || /^4k4\/9\/9\/9\/9\/9\/9\/9\/8[A-Z] b /.test(editedSfen), `the edited position becomes the board's start (${editedSfen})`);
 
+  // Saved study: comment a move, save, reopen by id, then embed it in a notebook page.
+  await page.goto(base + "/#/board");
+  await page.waitForSelector(".lrow", { timeout: 20000 });
+  await page.click(".lrow >> nth=0");
+  await page.waitForFunction(() => document.querySelectorAll(".moves li").length === 2);
+  await page.fill("#board-comment", "e2e: the engine's first choice");
+  await page.fill("#new-study-title", "e2e study");
+  await page.click("button:has-text('Save study')");
+  await page.waitForFunction(() => /^#\/board\/\d+/.test(location.hash));
+  const studyHash = await page.evaluate(() => location.hash);
+  const studyIdE2e = Number(studyHash.split("/")[2].split("?")[0]);
+  // A later edit saves itself.
+  await page.click(".moves li[data-index=\"0\"]");
+  await page.fill("#board-comment", "e2e: start position note");
+  await page.waitForFunction(() => document.querySelector(".study-title [role=status]")?.textContent === "Saved", null, { timeout: 10000 });
+  await page.reload();
+  await page.waitForSelector(".moves li[data-index=\"1\"]");
+  await page.click(".moves li[data-index=\"1\"]");
+  check((await page.inputValue("#board-comment")) === "e2e: the engine's first choice", "a saved study keeps its move comments after a reload");
+  check((await page.inputValue("#study-title")) === "e2e study" && (await page.textContent(".studies")).includes("e2e study"), "the saved study is listed by title");
+  await shot("06g-study");
+  await page.click("button:has-text('Add to notebook')");
+  await page.waitForSelector("dialog[open]");
+  await page.fill("dialog[open] input[required]", "e2e study page");
+  await page.click("dialog[open] button:has-text('Add')");
+  await page.waitForFunction(() => !document.querySelector("dialog[open]"));
+  const studyPage = (await api("GET", "/api/pages")).find((x) => x.title === "e2e study page");
+  check((await api("GET", `/api/pages/${studyPage.id}`)).body.includes(`:::shogi-study{id=${studyIdE2e}}`), "Add to notebook embeds the saved study");
+  await page.goto(base + `/#/notes/${studyPage.id}`);
+  await page.waitForSelector(".study-block .comment");
+  await page.click(".study-block button[aria-label='Next move']");
+  await page.waitForFunction(() => document.querySelector(".study-block .comment")?.textContent?.includes("first choice"));
+  check(true, "the embedded study steps through its moves with their comments");
+
   // Guess the moves of the game just recorded: ☗7六歩 is what was played.
   await page.goto(base + `/#/guess?game=${recordedId}&side=black`);
   await page.waitForSelector(".board.operation", { state: "attached" });

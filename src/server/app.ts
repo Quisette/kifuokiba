@@ -11,6 +11,7 @@ import { AnalysisQueue, toBlackView } from "./analysis.js";
 import { CardFilter, Cards } from "./cards.js";
 import { computeStats, playerProfile, similarGames } from "./stats.js";
 import { Pages } from "./pages.js";
+import { Studies, StudyInput } from "./studies.js";
 import { reviewNote } from "./review-note.js";
 import { weeklyNote } from "./weekly.js";
 import { prepNote } from "./prep.js";
@@ -35,7 +36,7 @@ import { checkGuess, GuessError } from "./guess.js";
 import { LanServer } from "./lan.js";
 import { Tsume } from "./tsume.js";
 import { decodeText } from "../core/encode.js";
-import { parseTree } from "../core/movetree.js";
+import { parseTree, treeFromJson } from "../core/movetree.js";
 import { splitRecords } from "../core/split.js";
 import type { FetchLike } from "./fetchers/lishogi.js";
 
@@ -106,6 +107,7 @@ export function createApp(opts: AppOptions) {
   const tsume = new Tsume(lib);
   const secondOpinion = new SecondOpinion(lib);
   const pages = new Pages(db);
+  const studies = new Studies(db);
   const backups = new AutoBackup(db, opts.dbPath, () => lib.settings.autoBackupKeep);
   if (opts.autoBackup !== false) backups.start();
   const sseClients = new Set<http.ServerResponse>();
@@ -316,9 +318,11 @@ export function createApp(opts: AppOptions) {
   route("GET", "/api/games/:id/compare", (_r, _u, p) => ({ ...secondOpinion.status(id(p)), configured: secondOpinion.configured }));
   route("GET", "/api/games/:id/branches", (_r, _u, p) => lib.branches(id(p)));
   route("POST", "/api/games/:id/variations", (_r, _u, p, body) => {
+    // The tree as text (moves only) or as JSON (with comments).
+    const raw = (body as { tree?: unknown }).tree;
     let tree;
     try {
-      tree = parseTree(String((body as { tree?: string }).tree ?? ""));
+      tree = typeof raw === "object" && raw !== null ? treeFromJson(raw) : parseTree(String(raw ?? ""));
     } catch (e) {
       throw new HttpError(400, e instanceof Error ? e.message : String(e));
     }
@@ -498,6 +502,28 @@ export function createApp(opts: AppOptions) {
   });
 
   // ---- notebooks
+  route("GET", "/api/studies", () => studies.list());
+  route("GET", "/api/studies/:id", (_r, _u, p) => studies.get(id(p)) ?? Promise.reject(new HttpError(404, "study not found")));
+  route("POST", "/api/studies", (_r, _u, _p, body) => {
+    try {
+      return studies.create(body as StudyInput);
+    } catch (e) {
+      throw new HttpError(400, e instanceof Error ? e.message : String(e));
+    }
+  });
+  route("PUT", "/api/studies/:id", (_r, _u, p, body) => {
+    let s;
+    try {
+      s = studies.update(id(p), body as StudyInput);
+    } catch (e) {
+      throw new HttpError(400, e instanceof Error ? e.message : String(e));
+    }
+    return s ?? Promise.reject(new HttpError(404, "study not found"));
+  });
+  route("DELETE", "/api/studies/:id", (_r, _u, p) => {
+    studies.delete(id(p));
+    return { ok: true };
+  });
   route("GET", "/api/pages", () => pages.list());
   route("GET", "/api/pages/:id", (_r, _u, p) => pages.get(id(p)) ?? Promise.reject(new HttpError(404, "page not found")));
   route("POST", "/api/pages", (_r, _u, _p, body) => pages.create(body as { title: string; notebook?: string; body?: string }));

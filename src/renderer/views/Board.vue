@@ -2,6 +2,11 @@
   <div class="page">
     <div class="head">
       <h1>検討盤 Study board</h1>
+      <span v-if="studyId" class="study-title">
+        <label class="sr-only" for="study-title">Study title</label>
+        <input id="study-title" v-model="studyTitle" class="serif" />
+        <span class="muted small" role="status">{{ { saving: "Saving…", saved: "Saved", error: "Couldn't save", "": "" }[saveState] }}</span>
+      </span>
       <span class="muted">Play both sides from any position. A different move starts a variation; the engine looks at each new position.</span>
       <a v-if="backHref" class="btn small" :href="backHref">← Back to the game</a>
     </div>
@@ -61,6 +66,7 @@
           <li v-for="(p, i) in line" :key="i" :class="{ on: i === cursor, side: p.index > 0 }" :data-index="i" @click="cursor = i">
             <span class="n">{{ i ? p.ply : "" }}</span>
             <span class="m serif">{{ i ? p.text : "開始局面" }}</span>
+            <span v-if="p.node.comment" class="cm" title="Has a comment">✎</span>
             <button
               v-for="a in p.alts"
               :key="a.index"
@@ -78,6 +84,10 @@
           <button type="button" class="btn small" :disabled="onMainLine" title="Make the line up to here the main line" @click="makeMain">Make main line</button>
           <button type="button" class="btn small" :disabled="cursor === 0" title="Delete this move and everything after it" @click="deleteVariation">Delete variation</button>
           <button type="button" class="btn small" :disabled="cursor >= line.length - 1" title="Delete the moves after this one" @click="cutHere">Delete after here</button>
+        </div>
+        <div v-if="!editing" class="comment">
+          <label class="cap" for="board-comment">コメント Comment · {{ cursor ? `${shown.ply}手目 ${shown.text}` : "start position" }}</label>
+          <textarea id="board-comment" v-model="comment" rows="3" placeholder="Why this move, what to remember…"></textarea>
         </div>
       </section>
 
@@ -157,6 +167,11 @@
         </div>
 
         <div class="panel box">
+          <form v-if="!studyId" class="row" @submit.prevent="createStudy">
+            <label class="sr-only" for="new-study-title">Study title</label>
+            <input id="new-study-title" v-model="newTitle" placeholder="Title, e.g. 角換わり ▲4五桂" />
+            <button type="submit" class="btn primary">Save study</button>
+          </form>
           <div class="cap">この局面 This position</div>
           <div class="row">
             <button type="button" class="btn" :disabled="line.length < 2 || saving" @click="saveAsGame">Save as game</button>
@@ -164,8 +179,8 @@
               v-if="gameId"
               type="button"
               class="btn"
-              :disabled="!hasAlts || saving"
-              title="Add this board's variations to the game it came from"
+              :disabled="!(hasAlts || anyComments) || saving"
+              title="Add this board's variations and comments to the game it came from"
               @click="saveIntoGame"
             >
               Save into the game
@@ -181,6 +196,17 @@
       </section>
     </div>
 
+    <section v-if="studies.length" class="panel studies">
+      <div class="cap">保存した研究 Saved studies</div>
+      <ul>
+        <li v-for="st in studies" :key="st.id" :class="{ on: st.id === studyId }">
+          <a :href="`#/board/${st.id}`" class="serif">{{ st.title }}</a>
+          <span class="muted small">{{ st.moves }} move{{ st.moves === 1 ? "" : "s" }} · {{ new Date(st.updated_at).toLocaleDateString() }}</span>
+          <button type="button" class="btn small" :aria-label="`Delete the study ${st.title}`" @click="deleteStudy(st)">Delete</button>
+        </li>
+      </ul>
+    </section>
+
     <AddToNotebook v-if="notebookOpen" :snippet="notebookSnippet" default-title="Study board" @close="notebookOpen = false" />
   </div>
 </template>
@@ -188,7 +214,7 @@
 <script setup lang="ts">
 // A free board for studying any position: not tied to a saved game. The line
 // (start position + moves + cursor) lives in the URL so it can be linked.
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { Color, InitialPositionSFEN, Position, PositionChange, Record as KRecord, RecordFormatType, detectRecordFormat, exportKIF, formatMove, importCSA, importJKFString, importKI2, importKIF } from "tsshogi";
 import { api, evalText, live, toast, winRate } from "../api";
 import { route } from "../router";
@@ -196,7 +222,7 @@ import ShogiBoard from "../components/ShogiBoard.vue";
 import AddToNotebook from "../components/AddToNotebook.vue";
 import { liveSearch, LiveResult } from "../live";
 import { setupProblems } from "../../core/setup";
-import { MoveTree, emptyTree, formatTree, hasVariations, parseTree, pruneIllegal, recordToTree, selectedLine, treeToRecord } from "../../core/movetree";
+import { MoveTree, emptyTree, formatTree, hasComments, hasVariations, parseTree, pruneIllegal, recordToTree, selectedLine, treeToRecord } from "../../core/movetree";
 
 type Alt = { index: number; text: string };
 type Step = { sfen: string; usi: string; text: string; ply: number; prevSfen: string; node: MoveTree; index: number; alts: Alt[] };
@@ -219,6 +245,10 @@ const flip = ref(route.query.get("flip") === "1");
 const backHref = route.query.get("back") ? "#/" + route.query.get("back") : "";
 // The game this board was opened from, which its variations can be saved into.
 const gameId = ref(Number(route.query.get("game")) || 0);
+// A saved study (#/board/<id>) saves itself as it changes; other boards live in the URL only.
+const studyId = ref(Number(route.params[0]) || 0);
+const studyTitle = ref("");
+const saveState = ref<"" | "saving" | "saved" | "error">("");
 
 const line = computed<Step[]>(() => {
   const nodes = selectedLine(tree.value, path.value);
@@ -285,7 +315,14 @@ function deleteVariation() {
 }
 const onMainLine = computed(() => line.value.slice(1, cursor.value + 1).every((s) => s.index === 0));
 const hasAlts = computed(() => hasVariations(tree.value));
+// Starting over leaves a saved study as it was and begins a new, unsaved board.
+function detach() {
+  studyId.value = 0;
+  studyTitle.value = "";
+  saveState.value = "";
+}
 function reset() {
+  detach();
   start.value = STANDARD;
   tree.value = emptyTree();
   path.value = [];
@@ -337,6 +374,7 @@ function setColor(c: "black" | "white") {
 }
 function finishEdit() {
   if (problems.value.length) return;
+  detach();
   start.value = withMoveOne(editSfen.value);
   tree.value = emptyTree();
   path.value = [];
@@ -376,6 +414,7 @@ function loadInput() {
     return;
   }
   inputError.value = "";
+  detach();
   start.value = rec.initialPosition.sfen;
   tree.value = recordToTree(rec);
   path.value = [];
@@ -389,18 +428,113 @@ const usiString = computed(() => {
   const base = start.value === STANDARD ? "position startpos" : `position sfen ${start.value}`;
   return moves.value.length ? `${base} moves ${moves.value.join(" ")}` : base;
 });
-watch([start, tree, path, cursor, flip, gameId], () => {
+watch([start, tree, path, cursor, flip, gameId, studyId], () => {
+  if (loadingStudy) return;
   const q = new URLSearchParams();
-  if (start.value !== STANDARD) q.set("sfen", start.value);
-  if (tree.value.children.length) q.set("moves", formatTree(tree.value));
+  // A saved study's moves are on the server; its URL only says where on the board you are.
+  if (!studyId.value) {
+    if (start.value !== STANDARD) q.set("sfen", start.value);
+    if (tree.value.children.length) q.set("moves", formatTree(tree.value));
+    if (gameId.value) q.set("game", String(gameId.value));
+  }
   if (path.value.some((i) => i)) q.set("path", path.value.join("."));
   if (cursor.value !== moves.value.length) q.set("ply", String(cursor.value));
   if (flip.value) q.set("flip", "1");
-  if (gameId.value) q.set("game", String(gameId.value));
   if (backHref) q.set("back", backHref.slice(2));
   const s = q.toString();
-  history.replaceState(null, "", "#/board" + (s ? "?" + s : ""));
+  history.replaceState(null, "", "#/board" + (studyId.value ? `/${studyId.value}` : "") + (s ? "?" + s : ""));
 }, { deep: true });
+
+// ---- saved studies
+let loadingStudy = false;
+let saveTimer: ReturnType<typeof setTimeout> | undefined;
+let savePending = false;
+const studyBody = () => ({ title: studyTitle.value, start_sfen: start.value, tree: tree.value, game_id: gameId.value || null });
+async function saveStudy() {
+  clearTimeout(saveTimer);
+  if (!studyId.value || !savePending) return;
+  savePending = false;
+  try {
+    await api.put(`/api/studies/${studyId.value}`, studyBody());
+    saveState.value = savePending ? "saving" : "saved";
+  } catch {
+    saveState.value = "error";
+  }
+}
+watch([start, tree, studyTitle, gameId], () => {
+  if (!studyId.value || loadingStudy) return;
+  savePending = true;
+  saveState.value = "saving";
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveStudy, 800);
+}, { deep: true });
+const newTitle = ref("");
+async function createStudy() {
+  try {
+    const st = await api.post<{ id: number; title: string }>("/api/studies", { ...studyBody(), title: newTitle.value });
+    loadingStudy = true;
+    studyId.value = st.id;
+    studyTitle.value = st.title;
+    newTitle.value = "";
+    saveState.value = "saved";
+    loadingStudy = false;
+    toast(`Saved the study ${st.title}. Changes now save as you go.`);
+    void loadStudies();
+  } catch (e) {
+    toast(String(e instanceof Error ? e.message : e));
+  }
+}
+async function loadStudy(id: number) {
+  loadingStudy = true;
+  try {
+    const st = await api.get<{ title: string; start_sfen: string; tree: MoveTree; game_id: number | null }>(`/api/studies/${id}`);
+    start.value = st.start_sfen;
+    tree.value = st.tree;
+    gameId.value = st.game_id ?? 0;
+    studyTitle.value = st.title;
+    const ply = route.query.get("ply");
+    cursor.value = Math.min(ply !== null ? Number(ply) || 0 : Infinity, line.value.length - 1);
+  } catch {
+    toast("That study isn't there any more.");
+    studyId.value = 0;
+  } finally {
+    await nextTick();
+    loadingStudy = false;
+  }
+}
+type StudySummary = { id: number; title: string; start_sfen: string; moves: number; updated_at: number };
+const studies = ref<StudySummary[]>([]);
+async function loadStudies() {
+  studies.value = await api.get<StudySummary[]>("/api/studies").catch(() => []);
+}
+async function deleteStudy(st: StudySummary) {
+  if (!confirm(`Delete the study ${st.title}?`)) return;
+  await api.del(`/api/studies/${st.id}`);
+  if (st.id === studyId.value) detach();
+  await loadStudies();
+}
+// A board opened from a game brings the game's comments onto its main line.
+async function bringGameComments() {
+  const g = await api.get<{ plies: { usi: string; comment: string }[] }>(`/api/games/${gameId.value}`).catch(() => null);
+  if (!g) return;
+  let node: MoveTree | undefined = tree.value;
+  if (g.plies[0]?.comment.trim() && !node.comment) node.comment = g.plies[0].comment.trim();
+  for (const p of g.plies.slice(1)) {
+    node = node?.children.find((c) => c.usi === p.usi);
+    if (!node) break;
+    if (p.comment.trim() && !node.comment) node.comment = p.comment.trim();
+  }
+}
+
+// The current move's comment (the root's is about the start position).
+const comment = computed({
+  get: () => shown.value.node.comment ?? "",
+  set: (v: string) => {
+    if (v.trim()) shown.value.node.comment = v;
+    else delete shown.value.node.comment;
+  },
+});
+const anyComments = computed(() => hasComments(tree.value));
 
 // ---- engine: one streamed search at a time; finished (or stopped) results are kept per position
 const engineSet = ref(true);
@@ -479,7 +613,8 @@ const arrows = computed(() => (current.value?.lines ?? []).filter((l) => l.pv[0]
 
 // ---- actions
 const notebookOpen = ref(false);
-const notebookSnippet = computed(() => `:::shogi-view{move=${cursor.value}}\n${usiString.value}\n:::`);
+// A saved study embeds whole, with its variations and comments; otherwise the current line.
+const notebookSnippet = computed(() => (studyId.value ? `:::shogi-study{id=${studyId.value}}\n:::` : `:::shogi-view{move=${cursor.value}}\n${usiString.value}\n:::`));
 const practiceHref = computed(() => `#/practice?sfen=${encodeURIComponent(shown.value.sfen)}&back=${encodeURIComponent(location.hash.slice(2))}`);
 const diagramHref = computed(() => `/api/diagram.svg?${new URLSearchParams({ sfen: shown.value.sfen, download: "1", flip: flip.value ? "1" : "0" })}`);
 
@@ -504,7 +639,7 @@ async function saveAsGame() {
 async function saveIntoGame() {
   saving.value = true;
   try {
-    const r = await api.post<{ branches: number }>(`/api/games/${gameId.value}/variations`, { tree: formatTree(tree.value) });
+    const r = await api.post<{ branches: number }>(`/api/games/${gameId.value}/variations`, { tree: tree.value });
     toast(`Saved. The game now has ${r.branches} variation${r.branches === 1 ? "" : "s"}.`);
   } catch (e) {
     toast(String(e instanceof Error ? e.message : e));
@@ -541,9 +676,13 @@ onMounted(async () => {
   } catch {
     engineSet.value = false;
   }
+  if (studyId.value) await loadStudy(studyId.value);
+  else if (gameId.value) await bringGameComments();
+  void loadStudies();
   analyse();
 });
 onUnmounted(() => {
+  void saveStudy();
   window.removeEventListener("keydown", onKey);
   clearTimeout(timer);
   cancel();
@@ -718,6 +857,55 @@ watch(cursor, (i) => {
 }
 .small {
   font-size: 12px;
+}
+.study-title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.study-title input {
+  font-size: 18px;
+  min-width: 14em;
+}
+.comment {
+  padding: 0 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.comment textarea {
+  width: 100%;
+  resize: vertical;
+}
+.moves .cm {
+  color: var(--muted);
+  font-size: 12px;
+}
+.studies {
+  margin-top: 18px;
+  padding: 12px 16px;
+}
+.studies ul {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.studies li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+.studies li.on {
+  background: var(--gold-bg);
+}
+.studies li a {
+  flex: 1;
+  min-width: 0;
 }
 .depth {
   display: flex;

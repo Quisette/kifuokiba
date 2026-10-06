@@ -743,3 +743,43 @@ describe("second opinion", () => {
     await api("DELETE", `/api/games/${gid}`);
   });
 });
+
+describe("saved studies", () => {
+  it("creates, updates, lists and deletes studies, keeping only legal moves", async () => {
+    const START = "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1";
+    const tree = { usi: "", comment: "start", children: [{ usi: "7g7f", comment: "角道", children: [{ usi: "3c3d", children: [] }, { usi: "1a1a", children: [] }] }] };
+    const s = await api("POST", "/api/studies", { title: " 角換わり研究 ", start_sfen: START, tree, game_id: 999999 });
+    expect(s).toMatchObject({ title: "角換わり研究", start_sfen: START, game_id: null });
+    expect(s.tree).toEqual({ usi: "", comment: "start", children: [{ usi: "7g7f", comment: "角道", children: [{ usi: "3c3d", children: [] }] }] });
+
+    s.tree.children[0].children[0].comment = "受ける";
+    const u = await api("PUT", `/api/studies/${s.id}`, { tree: s.tree });
+    expect(u.tree.children[0].children[0].comment).toBe("受ける");
+    expect(u.title).toBe("角換わり研究");
+    expect((await api("PUT", `/api/studies/${s.id}`, { title: "renamed" })).tree).toEqual(u.tree);
+
+    const list = await api("GET", "/api/studies");
+    expect(list[0]).toMatchObject({ id: s.id, title: "renamed", moves: 2 });
+    expect(list[0].tree).toBeUndefined();
+    await expect(api("POST", "/api/studies", { start_sfen: "nonsense" })).rejects.toThrow(/400|bad start/);
+    await expect(api("PUT", "/api/studies/999999", { title: "x" })).rejects.toThrow(/not found/);
+    await api("DELETE", `/api/studies/${s.id}`);
+    await expect(api("GET", `/api/studies/${s.id}`)).rejects.toThrow(/not found/);
+  });
+});
+
+describe("comments saved into a game", () => {
+  it("adds a study's comments where the game has none and keeps the game's own", async () => {
+    const kif = makeKif({ moves: "7g7f 3c3d 2g2f", black: "me", white: "commenter", date: "2026/10/01" });
+    const id = (await api("POST", "/api/import", { text: kif })).results[0].id;
+    await api("PUT", `/api/games/${id}/comments/1`, { comment: "my own note" });
+    const tree = { usi: "", children: [{ usi: "7g7f", comment: "study note", children: [{ usi: "3c3d", comment: "受け", children: [] }, { usi: "8c8d", comment: "居飛車", children: [] }] }] };
+    expect((await api("POST", `/api/games/${id}/variations`, { tree })).branches).toBe(1);
+    const g = await api("GET", `/api/games/${id}`);
+    expect(g.plies[1].comment).toBe("my own note");
+    expect((await api("GET", `/api/games/${id}/branches`))[0]).toMatchObject({ usis: ["8c8d"], comment: "居飛車" });
+    const kifOut = new TextDecoder("shift_jis").decode(await (await fetch(`${base}/api/games/${id}/export?format=kif`)).arrayBuffer());
+    expect(kifOut).toContain("*受け");
+    await api("DELETE", `/api/games/${id}`);
+  });
+});
