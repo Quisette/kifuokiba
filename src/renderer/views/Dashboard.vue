@@ -1,0 +1,427 @@
+<template>
+  <div class="page">
+    <div v-if="settings && !settings.myNames.length" class="banner panel">
+      <span>Tell the app which player is you, so wins, stats and cards follow your side.</span>
+      <a href="#/settings" class="btn small">Set my names</a>
+    </div>
+    <div v-if="settings && !settings.engine.path" class="banner panel">
+      <span>No engine yet. Point Settings at a USI engine (YaneuraOu + 水匠, etc.) to analyse games and make mistake cards.</span>
+      <a href="#/settings" class="btn small">Set engine</a>
+    </div>
+
+    <div class="tiles">
+      <div class="tile">
+        <div class="cap">対局数 Games</div>
+        <div class="stat">{{ stats?.gamesInLibrary ?? "–" }}</div>
+      </div>
+      <div class="tile">
+        <div class="cap">勝率 Win rate</div>
+        <div class="stat">{{ pct(stats?.totals.winRate) }}<small v-if="stats?.totals.winRate != null">%</small></div>
+        <div class="muted small">{{ stats?.totals.wins ?? 0 }}勝 {{ stats?.totals.losses ?? 0 }}敗</div>
+      </div>
+      <div class="tile">
+        <div class="cap">先手 / 後手</div>
+        <div class="stat">
+          {{ pct(sideRate("先手")) }}<small>%</small>
+          <span class="muted" style="font-size: 20px">/ {{ pct(sideRate("後手")) }}%</span>
+        </div>
+      </div>
+      <div class="tile">
+        <div class="cap">悪手 / game</div>
+        <div class="stat">{{ stats?.meanMistakes != null ? stats.meanMistakes.toFixed(1) : "–" }}</div>
+      </div>
+      <div class="tile">
+        <div class="cap">Accuracy</div>
+        <div class="stat">{{ pct(stats?.meanAccuracy) }}<small v-if="stats?.meanAccuracy != null">%</small></div>
+      </div>
+      <a class="tile link" href="#/review">
+        <div class="cap">今日の復習 Due cards</div>
+        <div class="stat">{{ counts?.due ?? 0 }}</div>
+        <div class="muted small">{{ counts?.total ?? 0 }} cards · {{ counts?.reviewedToday ?? 0 }} reviewed today</div>
+      </a>
+    </div>
+
+    <div class="cols">
+      <section class="main-col">
+        <div class="head">
+          <h2>最近の対局 Recent games</h2>
+          <a href="#/library">Open library →</a>
+        </div>
+        <div v-if="!games.length" class="empty">No games yet. Drop kifu files below to start.</div>
+        <div class="recent">
+          <a v-for="g in games.slice(0, 10)" :key="g.id" :href="`#/game/${g.id}`" class="gc">
+            <span class="res" :class="g.myResult || 'none'">{{ resultChar(g.myResult) }}</span>
+            <span style="min-width: 0">
+              <span class="name">{{ g.mySide ? "vs " + g.opponent : `${g.black} vs ${g.white}` }}</span>
+              <span class="muted small">
+                {{ g.mySide ? (g.mySide === "black" ? "☗ 先手" : "☖ 後手") : "" }} · {{ g.strategy || "—" }} · {{ g.move_count }}手
+                <template v-if="g.mistakes"> · <span class="mark l3">悪手 {{ g.mistakes }}</span></template>
+              </span>
+            </span>
+            <span class="muted small">{{ g.date.slice(5, 10) || "" }}</span>
+          </a>
+        </div>
+        <ImportPanel style="margin-top: 20px" @imported="load" />
+      </section>
+
+      <aside class="side-col">
+        <div v-if="today && todayItems.length" class="panel box today">
+          <div class="cap" style="margin-bottom: 8px">今日の稽古 Today</div>
+          <a v-for="t in todayItems" :key="t.key" :href="t.href" class="todo">
+            <span class="dot" :class="{ done: t.done }"></span>
+            <span>{{ t.text }}</span>
+          </a>
+        </div>
+        <div v-if="insights.length" class="panel box insights">
+          <div class="cap" style="margin-bottom: 8px">気づき What stands out</div>
+          <a v-for="i in insights" :key="i.kind" :href="i.link ?? '#/stats'" class="insight">{{ i.text }}</a>
+        </div>
+        <div v-if="activity && activity.total" class="panel box">
+          <div class="cap" style="margin-bottom: 8px">復習の記録 Review streak</div>
+          <div class="streak">
+            <span><b>{{ activity.streak }}</b> day{{ activity.streak === 1 ? "" : "s" }} in a row</span>
+            <span class="muted small">best {{ activity.best }} · {{ activity.total }} review{{ activity.total === 1 ? "" : "s" }}</span>
+          </div>
+          <div class="cal" aria-label="Reviews per day over the last 26 weeks">
+            <span v-for="(d, i) in calendar" :key="i" class="day" :class="d ? 'l' + level(d.n) : 'pad'" :title="d ? `${d.date}: ${d.n} reviews` : ''"></span>
+          </div>
+        </div>
+        <div class="panel box">
+          <div class="cap" style="margin-bottom: 10px">戦型別 By my opening</div>
+          <div v-if="!stats?.byOpening.length" class="muted small">Needs games where your side is known.</div>
+          <div v-for="o in (stats?.byOpening ?? []).slice(0, 8)" :key="o.name" class="bar-row" :title="`${o.name}: ${o.wins}勝 ${o.losses}敗`">
+            <a :href="`#/library?opening=${encodeURIComponent(o.name)}`" class="bar-label">{{ o.name }}</a>
+            <span class="bar">
+              <span :style="{ width: (o.wins / maxGames) * 100 + '%', background: 'var(--win)' }"></span>
+              <span :style="{ width: (o.losses / maxGames) * 100 + '%', background: 'var(--loss)' }"></span>
+            </span>
+            <span class="num">{{ o.winRate != null ? Math.round(o.winRate) + "%" : "–" }}</span>
+          </div>
+        </div>
+        <div class="panel box">
+          <div class="cap" style="margin-bottom: 10px">エンジン Analysis queue</div>
+          <template v-if="live.analysis?.running">
+            <div>Analysing game {{ live.analysis.current?.gameId }} · ply {{ live.analysis.current?.ply }} / {{ live.analysis.current?.total }}</div>
+            <div class="muted small">{{ live.analysis.queued.length }} queued · {{ live.analysis.engineName }}</div>
+            <button type="button" class="btn small" style="margin-top: 8px" @click="stop">Stop</button>
+          </template>
+          <template v-else>
+            <div class="muted small" style="margin-bottom: 8px">
+              {{ unanalysed }} game{{ unanalysed === 1 ? "" : "s" }} not analysed yet.
+              <span v-if="live.analysis?.error" style="color: var(--loss)"><br />{{ live.analysis.error }}</span>
+            </div>
+            <button type="button" class="btn small" :disabled="!unanalysed || !settings?.engine.path" @click="analyseAll">Analyse all</button>
+          </template>
+        </div>
+        <div class="panel box">
+          <div class="cap" style="margin-bottom: 10px">形勢の崩れ Where I lose points</div>
+          <div v-for="p in stats?.phaseProfile ?? []" :key="p.phase" class="bar-row">
+            <span class="bar-label">{{ phaseName(p.phase) }}</span>
+            <span class="bar"><span :style="{ width: Math.min(100, (p.avgLoss ?? 0) * 10) + '%', background: 'var(--loss)' }"></span></span>
+            <span class="num">{{ p.avgLoss != null ? p.avgLoss.toFixed(1) : "–" }}</span>
+          </div>
+          <div class="muted small" style="margin-top: 6px">Average win-rate loss per move (points), my moves only.</div>
+        </div>
+      </aside>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed, onMounted, ref, watch } from "vue";
+import { api, GameListItem, live, resultChar, Settings, toast } from "../api";
+import ImportPanel from "../components/ImportPanel.vue";
+
+type StatRow = { name: string; games: number; wins: number; losses: number; winRate: number | null };
+type Stats = {
+  gamesInLibrary: number;
+  totals: { games: number; wins: number; losses: number; winRate: number | null };
+  bySide: StatRow[];
+  byOpening: StatRow[];
+  meanAccuracy: number | null;
+  meanMistakes: number | null;
+  phaseProfile: { phase: string; avgLoss: number | null }[];
+};
+
+const stats = ref<Stats | null>(null);
+const games = ref<GameListItem[]>([]);
+const counts = ref<{ due: number; total: number; reviewedToday: number } | null>(null);
+const settings = ref<Settings | null>(null);
+const insights = ref<{ kind: string; text: string; link?: string }[]>([]);
+type Today = {
+  due: number;
+  reviewedToday: number;
+  losses: { id: number; opponent: string; date: string; strategy: string; mistakes: number; analysed: boolean }[];
+  missedMates: number;
+  weakOpenings: number;
+  tsumeRetry: { collection: string; count: number } | null;
+};
+const today = ref<Today | null>(null);
+const todayItems = computed(() => {
+  const t = today.value;
+  if (!t) return [];
+  const items: { key: string; text: string; href: string; done?: boolean }[] = [];
+  if (t.due) items.push({ key: "due", text: `Review ${t.due} due card${t.due === 1 ? "" : "s"}`, href: "#/review" });
+  else if (t.reviewedToday) items.push({ key: "due", text: `Cards done for today (${t.reviewedToday} reviewed)`, href: "#/review", done: true });
+  for (const g of t.losses)
+    items.push({
+      key: `loss-${g.id}`,
+      text: `Look back at the loss vs ${g.opponent || "?"} (${g.date.slice(5, 10)}${g.mistakes ? `, ${g.mistakes} 悪手` : ""}) and write a review note`,
+      href: `#/game/${g.id}`,
+    });
+  if (t.missedMates) items.push({ key: "mates", text: `Solve the ${t.missedMates} mate${t.missedMates === 1 ? "" : "s"} you missed in games`, href: "#/puzzles" });
+  if (t.tsumeRetry)
+    items.push({
+      key: "tsume",
+      text: `Retry the ${t.tsumeRetry.count} problem${t.tsumeRetry.count === 1 ? "" : "s"} you failed in ${t.tsumeRetry.collection}`,
+      href: `#/puzzles?tab=tsume&collection=${encodeURIComponent(t.tsumeRetry.collection)}`,
+    });
+  if (t.weakOpenings) items.push({ key: "open", text: `Drill ${t.weakOpenings} opening position${t.weakOpenings === 1 ? "" : "s"} where your usual move is weak`, href: "#/repertoire" });
+  return items;
+});
+type Activity = { days: { date: string; n: number; again: number }[]; streak: number; best: number; total: number };
+const activity = ref<Activity | null>(null);
+// Weeks as columns, Sunday on top; blank cells pad the first week.
+const calendar = computed(() => {
+  const days = activity.value?.days ?? [];
+  if (!days.length) return [];
+  const [y, m, d] = days[0].date.split("-").map(Number);
+  const pad = new Date(y, m - 1, d).getDay();
+  return [...Array<null>(pad).fill(null), ...days];
+});
+const level = (n: number) => (n === 0 ? 0 : n < 5 ? 1 : n < 15 ? 2 : n < 30 ? 3 : 4);
+
+async function load() {
+  [stats.value, games.value, counts.value, settings.value] = await Promise.all([
+    api.get<Stats>("/api/stats"),
+    api.get<GameListItem[]>("/api/games?sort=date&desc=true"),
+    api.get<{ due: number; total: number; reviewedToday: number }>("/api/cards/counts"),
+    api.get<Settings>("/api/settings"),
+  ]);
+  insights.value = await api.get<{ kind: string; text: string; link?: string }[]>("/api/insights").catch(() => []);
+  activity.value = await api.get<Activity>("/api/cards/activity").catch(() => null);
+  today.value = await api.get<Today>("/api/today").catch(() => null);
+}
+onMounted(load);
+watch(() => live.libraryVersion, load);
+
+const pct = (v: number | null | undefined) => (v == null ? "–" : v.toFixed(0));
+const sideRate = (name: string) => stats.value?.bySide.find((s) => s.name === name)?.winRate ?? null;
+const maxGames = computed(() => Math.max(1, ...(stats.value?.byOpening ?? []).map((o) => o.games)));
+const unanalysed = computed(() => games.value.filter((g) => g.analysis_status === "none").length);
+const phaseName = (p: string) => ({ opening: "序盤 1–30", middlegame: "中盤 31–80", endgame: "終盤 81+" })[p] ?? p;
+
+async function analyseAll() {
+  try {
+    await api.post("/api/analysis", { all: true });
+  } catch (e) {
+    toast(String(e));
+  }
+}
+async function stop() {
+  await api.post("/api/analysis/stop");
+}
+</script>
+
+<style scoped>
+.insights {
+  border-color: #8a6a3a;
+}
+.today {
+  border-color: #8a6a3a;
+}
+.todo {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 6px 0;
+  border-top: 1px solid #2a2017;
+}
+.todo:first-of-type {
+  border-top: 0;
+}
+.todo:hover {
+  color: var(--accent, #d9a441);
+}
+.todo .dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 2px solid var(--accent, #d9a441);
+}
+.todo .dot.done {
+  background: var(--accent, #d9a441);
+}
+.streak {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+.streak b {
+  font-family: var(--serif);
+  font-size: 22px;
+  color: var(--accent, #d9a441);
+}
+.cal {
+  display: grid;
+  grid-template-rows: repeat(7, 1fr);
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 2px;
+}
+.day {
+  aspect-ratio: 1;
+  border-radius: 2px;
+  background: #2a2017;
+}
+.day.pad {
+  background: transparent;
+}
+.day.l1 {
+  background: #5a4320;
+}
+.day.l2 {
+  background: #8a6a2e;
+}
+.day.l3 {
+  background: #b98d3c;
+}
+.day.l4 {
+  background: #e3b45a;
+}
+.insight {
+  display: block;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 13px;
+  line-height: 1.55;
+  padding: 6px 0;
+  border-top: 1px solid #2a2017;
+}
+.insight:first-of-type {
+  border-top: 0;
+}
+.insight:hover {
+  color: var(--gold-soft);
+}
+.banner {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  border-color: var(--gold);
+  flex-wrap: wrap;
+}
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+.tile {
+  background: var(--bg);
+  padding: 14px 18px;
+  color: var(--text);
+  text-decoration: none;
+}
+.tile.link:hover {
+  background: #1f1812;
+}
+.small {
+  font-size: 12px;
+}
+.cols {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  align-items: flex-start;
+}
+.main-col {
+  flex: 3 1 520px;
+  min-width: 0;
+}
+.side-col {
+  flex: 1 1 320px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 12px;
+}
+.recent {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.gc {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  text-decoration: none;
+}
+.gc:hover {
+  border-color: #8a6a3a;
+}
+.name {
+  display: block;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.box {
+  padding: 14px 16px;
+}
+.bar-row {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) 40px;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+  margin-bottom: 7px;
+}
+.bar-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  text-decoration: none;
+}
+.bar {
+  display: flex;
+  gap: 2px;
+  height: 10px;
+}
+.bar > span {
+  border-radius: 3px;
+}
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+</style>

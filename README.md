@@ -1,3 +1,108 @@
 # 棋譜帖 Kifu Study
 
-Local shogi game study app.
+A local desktop app for studying your own shogi games: import kifu, let a USI engine find your mistakes, drill them as cards, and keep study notes with live boards.
+
+Everything stays on your machine, in one SQLite file.
+
+## What it does
+
+- **Today.** The dashboard lists what to do now: due cards, recent losses that have no review note yet, mates you missed, and opening positions where your usual move is weak.
+- **Library.** Import KIF, KIFU, KI2, CSA, JKF, SFEN or USI by drag-drop, file picker or paste; Ctrl/⌘+V on any page imports a copied kifu and opens it. Shift_JIS and UTF-8 are detected automatically, and duplicates are skipped.
+  - **Lishogi:** set your username in Settings and press "Fetch from Lishogi". Later fetches only ask for new games.
+  - **Watched folders:** kifu saved by ShogiGUI, Kifu for Windows or a Wars downloader into a watched folder are imported while the app runs.
+  - Each game gets its 戦型, the castles on both sides over time, and its tactics (149 rules converted from HiraganaSuisho and sylwi-kifu-vue).
+  - Filter by side, result, opening, castle, opponent, tag, source or date, and save a filter as a collection. "Export shown" downloads the filtered games as KIF files in a zip.
+- **Analysis.** A background queue runs your USI engine (YaneuraOu, 水匠 etc.) over every position. Evaluations are cached per position.
+  - Moves are graded 緩手 / 疑問手 / 悪手 / 大悪手 with ShogiHome's win-rate thresholds, plus missed mates and missed wins.
+  - Each flagged move is then checked again with a longer search (4× by default), so a short search's horizon doesn't produce false mistakes. Unreviewed cards for moves that no longer count are removed.
+  - Each game gets accuracy, a turning point, and an eval graph with a think-time strip underneath. Missed mates and thrown-away wins are marked separately.
+- **Game view.** ShogiHome's board, keyboard navigation (← → Home End, `[` `]` to jump between mistakes, `f` to flip), and engine candidate moves.
+  - "Diagram" downloads the current position as an SVG image.
+  - Variations stored in the file (変化) are marked in the move list; clicking one plays it out on the board with its comment and the engine's view.
+  - Mark moves yourself with !!, !, !?, ?!, ? or ??. They show in the move list, survive backups and restores, and a move you mark ? or ?? goes into the review note even if the engine missed it.
+  - You can try your own move and get an engine verdict, edit comments, search for the same position across games, and export KIF/CSA with the evals written as ShogiHome-style comments.
+- **Mistake cards.** Your 悪手 and worse become cards automatically. You can also make one from any position.
+  - In review you play your answer on the board. The best move, or any move the engine says is within the tolerance, counts as correct. You can replay the engine line.
+  - Scheduling is SM-2, or FSRS v4.5 if you pick it in Settings. A card missed four times becomes a leech, and the review screen then asks you to write down the idea or study the game.
+  - "Export to Anki" writes a tab-separated file Anki imports directly, with each position drawn as a board diagram.
+- **Play it out.** From any game position or card, play on against the engine at a strength you pick. For the won games you let slip, Stats has a "Win it again" button that starts from the position before the slip and warns as soon as your winning chances fall below 70%.
+- **Tsume collections.** Import mate problems from tsume KIF/KI2/CSA files, SFEN lines (`<sfen> moves G*1b`) or JSON/NDJSON (as shogimap-crawler writes them) and solve them against the engine; failed ones come back first.
+- **Guess the moves.** Replay any game, your own or a pro's, and guess each move for one side. Every guess is graded by the engine against the move actually played, with a running score of matches and average loss. A bad guess can become a review card.
+- **Mates from my games.** Every analysed position where the side to move had a forced mate becomes a puzzle, with the ones you missed listed first. You solve it on the board while the engine defends, and it tells you the moment a move lets the king escape.
+- **Stats.** Win rate by side, opening, opponent's opening, castle, matchup, time control and opponent, plus a monthly trend, where in the game you lose points, whether fast moves go wrong more often, and how often you convert clearly won positions (with the games you let slip).
+- **Opening book.** Point Settings at a YaneuraOu-format book (.db) and games show which moves were book moves and where you left the book, with the book's choices there.
+- **Explorer.** Walk the opening tree of your own games: each next move with how often you played it, your score after it, your average loss, and the engine's best move. From a player's profile, "Openings against them" narrows the tree to your games with that opponent, to prepare for the next one.
+- **Opening drill.** The opening positions you reach most often with you to move, as a quiz. A move counts as correct if it's a book move, the engine's choice, or one you play there without losing points. It can filter to the positions where your usual move is weak.
+- **Notebooks.** Markdown pages with live boards, using the personal-shogi-note directives:
+
+  ```
+  :::shogi-view{game=12 ply=48}
+  :::
+
+  :::shogi-view{move=4}
+  position startpos moves 7g7f 3c3d 2g2f 4c4d 2f2e
+  :::
+
+  :kifu[game:12]{start=1 stop=20}
+  ```
+
+  "This week's report" writes a 週報 page: the last seven days' games and results, accuracy against the week before, where the points went, the costliest moves as boards, and the practice done.
+
+  "Write review note" on a game makes a page with the summary and each big mistake as a board with the engine's line, ready to annotate. The ".mdx" button downloads the same note with the moves written out, so it renders in personal-shogi-note as is.
+
+## Run it
+
+Requires Node 22.5 or newer (for `node:sqlite`).
+
+```sh
+npm install
+npm start          # build and open the Electron app
+npm run serve      # or: build and serve at http://127.0.0.1:3210 in a browser
+npm run dev        # Vite with hot reload on :5173, API on :3210
+```
+
+Settings can download a backup and restore one. Restoring merges the backup into the current library: games, analysis, cards with their review history, tags, notes and notebook pages are added and nothing is deleted, so it also works for combining two computers' libraries.
+
+**Phone access** (Settings, off by default) lets a phone on the same Wi-Fi review cards, solve mate puzzles and guess moves: scan the QR code once and the phone keeps a cookie. It needs the token in that link, and from the network only reading and the writes that reviewing needs are allowed, so a phone can't change settings (the engine path is run as a program), import, restore or delete. "New link" locks out every phone let in before. On the phone, "Add to Home Screen" makes it open like an app, straight to the review page. The OS may ask once whether the app may accept network connections.
+
+The library is also backed up once a day to a `backups` folder next to it; the newest 7 are kept (change or turn off in Settings).
+
+`serve` reads `PORT`, `KIFU_STUDY_DATA` (default `~/.kifu-study`) and `KIFU_STUDY_DB`. The Electron app keeps its database in the OS user-data folder.
+
+The installed app opens .kif, .kifu, .ki2, .csa and .jkf files: double-click one (or use "Open with") and it is imported and shown.
+
+On first launch, open Settings, enter your player names, and set the path to a USI engine.
+
+## Installers
+
+`npm run dist` builds an installer for the current OS into `release/` (dmg on macOS, NSIS exe on Windows, AppImage on Linux). The **Installers** GitHub workflow builds all three on every run. Each push to `main` replaces the files on the [nightly pre-release](https://github.com/Quisette/kifuokiba/releases/tag/nightly), and pushing a `v*` tag publishes a release with them attached.
+
+The builds are not code-signed. On macOS, open the app the first time with right-click → Open; on Windows, choose "More info → Run anyway" in SmartScreen.
+
+## Tests
+
+```sh
+npm test           # unit + API tests (vitest); uses tools/mock-usi-engine.mjs
+npm run typecheck
+npm run e2e        # builds, starts the server, drives every screen in Chromium, saves screenshots to test-results/e2e
+```
+
+`E2E_ENGINE=/path/to/engine E2E_KIFU=/dir/of/kifu npm run e2e` runs the browser test against a real engine and your own files. `CHROMIUM_PATH` picks the browser.
+
+The mock engine only counts material and looks one capture ahead. It proves the plumbing works, not the quality of the analysis.
+
+`tools/selfplay.ts` makes demo games by engine self-play. `npx tsx tools/perf.ts 5000` loads 5000 synthetic games and times the heavy endpoints.
+
+## Layout
+
+```
+src/core/       record import/export, summaries, grading, SM-2, classifier (shared, no I/O)
+src/server/     SQLite store, library, analysis queue, USI engine client, cards, stats, HTTP API
+src/electron/   Electron shell: starts the server and opens a window
+src/renderer/   Vue 3 UI; vendor/shogihome holds the board component
+tools/          build, mock engine, classifier rule converter, self-play generator
+```
+
+## Licenses
+
+The app itself is MIT. Code and images from ShogiHome, HiraganaSuisho and sylwi-kifu-vue are MIT; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

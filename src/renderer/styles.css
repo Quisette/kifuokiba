@@ -1,0 +1,309 @@
+/* 棋譜帖 — "Kuro-urushi" dark lacquer theme from the design canvas. */
+:root {
+  --bg: #17120d;
+  --bg-deep: #0e0b08;
+  --panel: #221a13;
+  --panel-2: #2b2118;
+  --input: #1d1611;
+  --line: #3d2f21;
+  --line-2: #4a3a28;
+  --text: #f1e6d0;
+  --muted: #b7a68a;
+  --gold: #d4a24c;
+  --gold-soft: #f3d28f;
+  --gold-bg: #3a2c1a;
+  --win: #5f95d0;
+  --loss: #d9773d;
+  --draw: #9a8c74;
+  --good: #6fae6a;
+  --serif: "Zen Old Mincho", "Hiragino Mincho ProN", "Yu Mincho", serif;
+  --sans: "IBM Plex Sans JP", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+
+  /* Variables ShogiHome's BoardView expects. */
+  --text-color: #14100b;
+  --text-color-danger: #fff;
+  --text-bg-color: #f1e2c0;
+  --text-bg-color-warning: #ffe08a;
+  --text-bg-color-danger: #d9773d;
+  --turn-label-color: #17120d;
+  --turn-label-bg-color: #d4a24c;
+  --turn-label-border-color: #8a6a3a;
+  --promote-bg-color: rgba(255, 245, 220, 0.92);
+  --not-promote-bg-color: rgba(230, 220, 200, 0.92);
+  --shadow-color: rgba(0, 0, 0, 0.55);
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 14px;
+}
+a {
+  color: #e2b45e;
+}
+a:hover {
+  color: #f3cf86;
+}
+h1,
+h2,
+h3,
+.serif {
+  font-family: var(--serif);
+  font-weight: 900;
+}
+h1,
+h2,
+h3 {
+  margin: 0;
+}
+.cap {
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.muted {
+  color: var(--muted);
+}
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.btn {
+  font: inherit;
+  font-size: 13px;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.btn:hover {
+  border-color: #8a6a3a;
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.btn.primary {
+  background: var(--gold);
+  color: var(--bg);
+  border-color: var(--gold);
+  font-weight: 600;
+}
+.btn.on {
+  border-color: var(--gold);
+  color: var(--gold-soft);
+  background: var(--gold-bg);
+}
+.btn.small {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+.btn.danger:hover {
+  border-color: var(--loss);
+  color: var(--loss);
+}
+.chip {
+  font: inherit;
+  font-size: 13px;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 18px;
+  border: 1px solid var(--line-2);
+  background: var(--panel-2);
+  color: var(--text);
+  cursor: pointer;
+}
+.chip.on {
+  border-color: var(--gold);
+  background: var(--gold-bg);
+  color: var(--gold-soft);
+  font-weight: 600;
+}
+input,
+select,
+textarea {
+  font: inherit;
+  font-size: 14px;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  background: var(--input);
+  color: var(--text);
+}
+textarea {
+  padding: 8px 10px;
+  min-height: 80px;
+  resize: vertical;
+  line-height: 1.6;
+}
+input:focus,
+select:focus,
+textarea:focus,
+.btn:focus-visible,
+.chip:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 1px;
+}
+label.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.tag {
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 3px;
+  border: 1px solid var(--line-2);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.mark {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 3px;
+  color: var(--bg);
+  white-space: nowrap;
+}
+.mark.l1 {
+  background: #a08f6c;
+}
+.mark.l2 {
+  background: var(--gold);
+}
+.mark.l3 {
+  background: var(--loss);
+}
+.mark.l4 {
+  background: #b8321f;
+  color: #fff;
+}
+.res {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--serif);
+  font-weight: 900;
+  color: var(--bg);
+  flex: none;
+}
+.res.win {
+  background: var(--win);
+}
+.res.loss {
+  background: var(--loss);
+}
+.res.draw,
+.res.none {
+  background: var(--draw);
+}
+table.grid {
+  border-collapse: collapse;
+  width: 100%;
+}
+table.grid th {
+  text-align: left;
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--muted);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+}
+table.grid th button {
+  all: unset;
+  cursor: pointer;
+}
+table.grid td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #2a2017;
+  white-space: nowrap;
+}
+table.grid tr.row:hover td {
+  background: #1f1812;
+  cursor: pointer;
+}
+.scroll-x {
+  overflow-x: auto;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+.empty {
+  padding: 32px;
+  text-align: center;
+  color: var(--muted);
+  border: 1px dashed var(--line-2);
+  border-radius: 8px;
+}
+.stat {
+  font-family: var(--serif);
+  font-weight: 900;
+  font-size: 30px;
+  line-height: 1.1;
+}
+.stat small {
+  font-size: 16px;
+}
+.toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: var(--panel-2);
+  border: 1px solid var(--gold);
+  padding: 12px 16px;
+  border-radius: 8px;
+  z-index: 100;
+  max-width: 420px;
+}
+.drop-active {
+  outline: 2px dashed var(--gold);
+  outline-offset: -6px;
+}
+.page {
+  max-width: 1480px;
+  margin: 0 auto;
+  padding: 20px 28px 48px;
+}
+@media (max-width: 700px) {
+  .page {
+    padding: 14px 16px 40px;
+  }
+}
+
+/* From ShogiHome src/renderer/css/basic.css (MIT): BoardView sizes its texture and grid with this. */
+.full {
+  width: 100%;
+  height: 100%;
+}
