@@ -10,6 +10,9 @@ const VALUE = {
   pawn: 90, lance: 315, knight: 405, silver: 495, gold: 540, bishop: 855, rook: 990,
   promPawn: 540, promLance: 540, promKnight: 540, promSilver: 540, horse: 945, dragon: 1395, king: 0,
 };
+// "setoption name Style value naive": a second opinion that values every piece
+// about the same, so tests can compare two engines that disagree.
+const NAIVE = { pawn: 300, lance: 300, knight: 300, silver: 300, gold: 300, bishop: 300, rook: 300, promPawn: 300, promLance: 300, promKnight: 300, promSilver: 300, horse: 300, dragon: 300, king: 0 };
 
 function material(pos) {
   let score = 0;
@@ -75,13 +78,32 @@ function setPosition(args) {
   position = pos;
 }
 
-function go() {
+// "go infinite": the same answer as go(), sent again every 50 ms at a rising
+// depth until "stop", like a real engine deepening its search.
+let infinite = null;
+function goInfinite() {
   const moves = legalMoves(position);
-  if (!moves.length) {
-    send("info depth 1 score mate -0 pv");
-    send("bestmove resign");
-    return;
-  }
+  if (!moves.length) return go();
+  let depth = 1;
+  const lines = scoreMoves(moves);
+  const tick = () => {
+    for (let k = 0; k < Math.min(multipv, lines.length); k++) {
+      const { m, score } = lines[k];
+      send(`info depth ${depth} seldepth ${depth} multipv ${k + 1} score cp ${score} nodes ${depth * moves.length * 40} pv ${m.usi}`);
+    }
+    depth++;
+  };
+  tick();
+  infinite = { timer: setInterval(tick, 50), best: lines[0].m.usi };
+}
+function stopInfinite() {
+  if (!infinite) return;
+  clearInterval(infinite.timer);
+  send(`bestmove ${infinite.best}`);
+  infinite = null;
+}
+
+function scoreMoves(moves) {
   const scored = moves.map((m) => {
     const p = position.clone();
     p.doMove(m);
@@ -94,7 +116,17 @@ function go() {
     }
     return { m, score: -oppBest };
   });
-  scored.sort((a, b) => b.score - a.score);
+  return scored.sort((a, b) => b.score - a.score);
+}
+
+function go() {
+  const moves = legalMoves(position);
+  if (!moves.length) {
+    send("info depth 1 score mate -0 pv");
+    send("bestmove resign");
+    return;
+  }
+  const scored = scoreMoves(moves);
   for (let k = 0; k < Math.min(multipv, scored.length); k++) {
     const { m, score } = scored[k];
     send(`info depth 2 seldepth 2 multipv ${k + 1} score cp ${score} nodes ${moves.length * 40} pv ${m.usi}`);
@@ -126,6 +158,7 @@ rl.on("line", (raw) => {
       send("id author kifu-study");
       send("option name MultiPV type spin default 1 min 1 max 10");
       send("option name USI_Hash type spin default 16 min 1 max 1024");
+      send("option name Style type combo default material var material var naive");
       send("usiok");
       break;
     case "isready":
@@ -134,6 +167,7 @@ rl.on("line", (raw) => {
     case "setoption": {
       const m = /name (\S+) value (\S+)/.exec(args);
       if (m && m[1] === "MultiPV") multipv = Number(m[2]);
+      if (m && m[1] === "Style" && m[2] === "naive") Object.assign(VALUE, NAIVE);
       break;
     }
     case "position":
@@ -144,8 +178,15 @@ rl.on("line", (raw) => {
         goMate();
         break;
       }
+      if (args.startsWith("infinite")) {
+        goInfinite();
+        break;
+      }
       if (delayMs) setTimeout(go, delayMs);
       else go();
+      break;
+    case "stop":
+      stopInfinite();
       break;
     case "quit":
       process.exit(0);

@@ -27,6 +27,7 @@
         <button type="button" class="btn" @click="notebookOpen = true">Add to notebook</button>
         <button type="button" class="btn" :disabled="cursor === 0 || variation.length > 0" @click="makeCard">Make card</button>
         <button type="button" class="btn" @click="flip = !flip">Flip 反転</button>
+        <a class="btn" :href="boardHref" title="Open this line on a free board to try other moves">Study board</a>
         <a class="btn" :href="`#/practice?sfen=${encodeURIComponent(cur.sfen)}&back=game/${id}`" title="Play this position out against the engine">Play it out</a>
         <a class="btn" :href="`#/guess?game=${id}&ply=${cursor}`" title="Replay the game from here and guess each move">Guess the moves</a>
         <button type="button" class="btn" @click="analyse">{{ game.analysis_status === "done" ? "Re-analyse" : "Analyse" }}</button>
@@ -55,6 +56,7 @@
               :sfen="shownSfen"
               :last-move="shownLastMove"
               :arrows="arrows"
+              :arrow-sfen="threat && !variation.length ? threat.sfen : undefined"
               :flip="flip"
               :allow-move="true"
               :black-name="game.black || '先手'"
@@ -118,6 +120,7 @@
             >
               変{{ (branchPlies.get(p.ply)?.length ?? 0) > 1 ? bi + 1 : "" }}
             </button>
+            <span v-if="p.missedThreat" class="mark threat" :title="`Missed the threat ${p.threatText}`">狙</span>
             <span v-if="p.missed" class="mark l4" :title="p.missed === 'mate' ? 'Missed a forced mate' : 'Threw away a won position'">{{ missedLabel(p.missed) }}</span>
             <span class="ev">{{ p.ply ? evalText(p.score, p.mate) : "" }}</span>
           </li>
@@ -143,45 +146,7 @@
       </section>
 
       <section class="side-col">
-        <div class="panel box">
-          <div class="cap">検討 Engine {{ game.analysis_engine ? "· " + game.analysis_engine : "" }}</div>
-          <template v-if="cur.score !== null || cur.mate !== null">
-            <div class="big">
-              <span class="serif">{{ moverWin }}%</span>
-              <span class="muted" style="font-size: 13px">{{ evalText(cur.score, cur.mate) }} · {{ cur.situation }}</span>
-            </div>
-            <div v-if="next && (next.level || next.missed)" class="played">
-              Next: <b class="serif">{{ next.text }}</b>
-              <span v-if="next.level" class="mark" :class="'l' + next.level">{{ next.label }}</span>
-              <span v-if="next.missed" class="mark l4">{{ missedLabel(next.missed) }}</span>
-              <span class="muted">−{{ next.loss?.toFixed(1) }} pts</span>
-            </div>
-            <div v-if="cur.pvText" class="pv">最善 {{ cur.pvText }}</div>
-          </template>
-          <div v-else class="muted" style="margin-top: 6px">No evaluation for this position yet.</div>
-          <div v-if="multi.length" class="multipv">
-            <div v-for="l in multi" :key="l.multipv" class="mrow">
-              <span>{{ l.multipv }}. {{ l.text.split(" ")[0] }}</span>
-              <span class="muted">{{ evalText(l.score ?? null, l.mate ?? null) }}</span>
-            </div>
-          </div>
-          <div class="row" style="margin-top: 10px">
-            <button type="button" class="btn small" :disabled="multiBusy" @click="candidates">
-              {{ multiBusy ? "Thinking…" : "Candidate moves" }}
-            </button>
-            <button type="button" class="btn small" :disabled="mateBusy" title="Ask the engine for a forced mate from this position" @click="mateCheck">
-              {{ mateBusy ? "Searching…" : "詰みチェック Mate?" }}
-            </button>
-          </div>
-          <div v-if="mateResult" class="mate-result" :class="mateResult.status">
-            <template v-if="mateResult.status === 'mate'">
-              <b>{{ mateResult.moves.length }}手詰</b> <span class="serif">{{ mateResult.text }}</span>
-            </template>
-            <template v-else-if="mateResult.status === 'nomate'">No forced mate found in {{ MATE_SECONDS }}s.</template>
-            <template v-else-if="mateResult.status === 'timeout'">Ran out of time ({{ MATE_SECONDS }}s) without an answer.</template>
-            <template v-else>This engine has no mate search.</template>
-          </div>
-        </div>
+        <EnginePanel :ply="cur" :next="next" :engine-name="game.analysis_engine" @lines="(l) => (multi = l)" @threat="(a) => (threat = a)" />
 
         <div class="panel box">
           <div class="cap">この局 Game summary</div>
@@ -203,6 +168,8 @@
             <div><span class="muted">Time used</span> ☗ {{ fmtTime("black") }} · ☖ {{ fmtTime("white") }}</div>
           </div>
         </div>
+
+        <SecondOpinion :game-id="id" @jump="jump" />
 
         <div class="panel box">
           <div class="cap">戦型・囲い Opening and castles</div>
@@ -273,6 +240,9 @@ import { go, route } from "../router";
 import ShogiBoard from "../components/ShogiBoard.vue";
 import EvalGraph from "../components/EvalGraph.vue";
 import AddToNotebook from "../components/AddToNotebook.vue";
+import SecondOpinion from "../components/SecondOpinion.vue";
+import EnginePanel, { CandidateLine } from "../components/EnginePanel.vue";
+import { addLine, emptyTree, formatTree } from "../../core/movetree";
 
 const props = defineProps<{ id: number }>();
 const game = ref<GameDetail | null>(null);
@@ -371,7 +341,6 @@ const hasEvals = computed(() => game.value!.plies.some((p) => p.score !== null |
 watch(cursor, () => {
   commentDraft.value = cur.value?.comment ?? "";
   variation.value = [];
-  multi.value = [];
   posHits.value = null;
   void nextTick(() => moveList.value?.querySelector(".on")?.scrollIntoView({ block: "nearest" }));
 });
@@ -482,47 +451,16 @@ const barPct = computed(() => {
   const w = p ? winRate(p.score, p.mate) : varEval.value ? winRate(varEval.value.score ?? null, varEval.value.mate ?? null) : null;
   return w ?? 50;
 });
-// Win % for the side to move after this ply.
-const moverWin = computed(() => {
-  const w = winRate(cur.value.score, cur.value.mate) ?? 50;
-  const toMove = cur.value.sfen.split(" ")[1] === "w" ? "white" : "black";
-  return Math.round(toMove === "black" ? w : 100 - w);
-});
+// The opponent's threat (a move in the passed position) replaces the other arrows while shown.
+const threat = ref<{ usi: string; sfen: string } | null>(null);
 const arrows = computed(() => {
   if (variation.value.length) return [];
+  if (threat.value) return [{ usi: threat.value.usi }];
   if (multi.value.length) return multi.value.map((l) => ({ usi: l.pv[0], score: l.scoreSide }));
   return cur.value.best_usi ? [{ usi: cur.value.best_usi }] : [];
 });
-type Line = { multipv: number; pv: string[]; text: string; score?: number; mate?: number; scoreSide?: number };
-const multi = ref<Line[]>([]);
-const multiBusy = ref(false);
-const MATE_SECONDS = 5;
-type MateResult = { status: "mate"; moves: string[]; text: string } | { status: "nomate" | "timeout" | "notimplemented" };
-const mateBusy = ref(false);
-const mateResult = ref<MateResult | null>(null);
-watch(() => game.value?.plies[cursor.value]?.sfen, () => (mateResult.value = null));
-async function mateCheck() {
-  mateBusy.value = true;
-  try {
-    mateResult.value = await api.post<MateResult>("/api/mate", { sfen: cur.value.sfen, timeMs: MATE_SECONDS * 1000 });
-  } catch (e) {
-    toast(String(e));
-  } finally {
-    mateBusy.value = false;
-  }
-}
-
-async function candidates() {
-  multiBusy.value = true;
-  try {
-    const r = await api.post<{ lines: (Line & { scoreCP?: number })[] }>("/api/analyze-position", { sfen: cur.value.sfen, multipv: 3 });
-    multi.value = r.lines.map((l) => ({ ...l, scoreSide: l.scoreCP }));
-  } catch (e) {
-    toast(String(e));
-  } finally {
-    multiBusy.value = false;
-  }
-}
+// Candidate moves streamed by the engine panel, shown as arrows.
+const multi = ref<CandidateLine[]>([]);
 
 const resultText = computed(() => {
   const g = game.value!;
@@ -592,6 +530,20 @@ async function writeReview() {
     toast(String(e));
   }
 }
+// The game's line up to here (plus any variation being tried), on the free study board.
+// The game with its stored variations (and any line being tried here), on the free study board.
+const boardHref = computed(() => {
+  const g = game.value!;
+  const main = g.plies.slice(1).map((p) => p.usi);
+  const tree = emptyTree();
+  addLine(tree, main);
+  for (const b of branches.value) addLine(tree, [...main.slice(0, b.ply - 1), ...b.usis]);
+  const path = variation.value.length ? addLine(tree, [...main.slice(0, cursor.value), ...variation.value]) : [];
+  const ply = variation.value.length ? path.length : cursor.value;
+  const q = new URLSearchParams({ sfen: g.plies[0].sfen, moves: formatTree(tree), ply: String(ply), game: String(props.id), back: `game/${props.id}` });
+  if (path.some((i) => i)) q.set("path", path.join("."));
+  return "#/board?" + q.toString();
+});
 const diagramHref = computed(() => {
   const p = cur.value;
   const q = new URLSearchParams({ sfen: p.sfen, download: "1", flip: flip.value ? "1" : "0" });
@@ -634,16 +586,6 @@ async function findPosition() {
   border-radius: 3px;
   color: var(--muted);
   font-family: var(--serif);
-}
-.mate-result {
-  margin-top: 8px;
-  font-size: 13px;
-  padding: 8px 10px;
-  border-radius: 6px;
-  background: var(--panel-2);
-}
-.mate-result.mate {
-  border: 1px solid var(--loss);
 }
 .title-row {
   display: flex;
@@ -705,13 +647,13 @@ async function findPosition() {
   font-weight: 600;
   padding: 0 5px;
   border-radius: 3px;
-  border: 1px solid #6a8fb8;
+  border: 1px solid var(--info-edge);
   background: transparent;
-  color: #9cc0e8;
+  color: var(--info-text);
   cursor: pointer;
 }
 .branch-mark:hover {
-  background: #2a3a4d;
+  background: var(--info-bg);
 }
 .branch-note {
   margin-bottom: 6px;
@@ -754,7 +696,7 @@ async function findPosition() {
   overflow: hidden;
 }
 .evalbar .w {
-  background: #3a2c1a;
+  background: var(--gold-bg);
   transition: flex 0.3s;
 }
 .evalbar .b {
@@ -809,7 +751,12 @@ async function findPosition() {
   cursor: pointer;
 }
 .moves li:hover {
-  background: #2a2017;
+  background: var(--line-soft);
+}
+.mark.threat {
+  background: transparent;
+  border: 1px solid var(--loss);
+  color: var(--loss);
 }
 .moves li.on {
   background: var(--gold-bg);
@@ -857,31 +804,6 @@ async function findPosition() {
   flex-direction: column;
   gap: 6px;
 }
-.big {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-}
-.big .serif {
-  font-size: 30px;
-}
-.played {
-  font-size: 13px;
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-.pv {
-  font-size: 13px;
-  color: var(--muted);
-  line-height: 1.6;
-}
-.multipv .mrow {
-  display: flex;
-  justify-content: space-between;
-  font-size: 13px;
-}
 .sum {
   font-size: 13px;
   line-height: 1.8;
@@ -918,7 +840,7 @@ async function findPosition() {
 }
 .umark {
   margin-left: 2px;
-  color: var(--accent, var(--gold));
+  color: var(--gold);
   font-family: var(--sans, inherit);
 }
 .umarks {

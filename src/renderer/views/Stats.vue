@@ -28,7 +28,7 @@
         <section class="panel box wide">
           <div class="cap">勝率の推移 Win rate, last 20 games rolling</div>
           <svg v-if="s.rolling.length > 1" viewBox="0 0 1000 160" preserveAspectRatio="none" class="chart" role="img" aria-label="Rolling win rate">
-            <line x1="0" y1="80" x2="1000" y2="80" stroke="#5a4630" vector-effect="non-scaling-stroke" stroke-dasharray="4 4" />
+            <line x1="0" y1="80" x2="1000" y2="80" style="stroke: var(--axis)" vector-effect="non-scaling-stroke" stroke-dasharray="4 4" />
             <polyline :points="rollingPts" fill="none" stroke="var(--win)" stroke-width="2" vector-effect="non-scaling-stroke" />
           </svg>
           <div v-else class="muted small">Needs more decided games.</div>
@@ -52,7 +52,7 @@
         <section class="panel box wide">
           <div class="cap">Accuracy by game (dot colour = result)</div>
           <svg v-if="s.accuracyTrend.length" viewBox="0 0 1000 160" preserveAspectRatio="none" class="chart" role="img" aria-label="Accuracy per game">
-            <line v-for="g in [40, 80, 120]" :key="g" x1="0" :y1="g" x2="1000" :y2="g" stroke="#2c2219" vector-effect="non-scaling-stroke" />
+            <line v-for="g in [40, 80, 120]" :key="g" x1="0" :y1="g" x2="1000" :y2="g" style="stroke: var(--grid)" vector-effect="non-scaling-stroke" />
           </svg>
           <div v-if="s.accuracyTrend.length" class="dots">
             <a
@@ -100,7 +100,7 @@
             <span
               v-for="(n, i) in s.mistakeMap.cells"
               :key="i"
-              :style="{ background: n ? `rgba(217,119,61,${0.15 + 0.85 * (n / heatMax)})` : 'transparent' }"
+              :style="{ background: n ? `rgb(var(--loss-rgb) / ${0.15 + 0.85 * (n / heatMax)})` : 'transparent' }"
               :title="`${squareName(i)}: ${n}`"
             >{{ n || "" }}</span>
           </div>
@@ -132,6 +132,28 @@
               </li>
             </ul>
           </template>
+        </section>
+
+        <section v-if="s.moveKinds.total" class="panel box">
+          <div class="cap">指し手の種類 Mistakes by kind of move (my moves)</div>
+          <table class="grid">
+            <thead><tr><th>Kind</th><th>Moves</th><th>Avg loss</th><th>悪手+ rate</th></tr></thead>
+            <tbody>
+              <tr v-for="k in s.moveKinds.rows.filter((r) => r.moves)" :key="k.kind" :class="{ worst: k.kind === worstKind }">
+                <td>{{ KIND_NAMES[k.kind] ?? k.kind }}</td>
+                <td :title="`${k.share.toFixed(0)}% of my graded moves`">{{ k.moves }}</td>
+                <td>{{ k.avgLoss != null ? k.avgLoss.toFixed(2) : "–" }}</td>
+                <td>
+                  <span v-if="k.mistakeRate != null" class="rate"><span :style="{ width: Math.min(100, k.mistakeRate * 4) + '%' }"></span></span>
+                  {{ k.mistakeRate != null ? k.mistakeRate.toFixed(1) + "%" : "–" }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="muted small">A move counts under every kind it is, so a capture that gives check is in both rows.<template v-if="worstKind"> Your costliest kind: <b>{{ KIND_NAMES[worstKind] }}</b>.</template></div>
+          <div v-if="s.threats.mistakes" class="small">
+            狙いの見落とし · <b>{{ s.threats.missed }}</b> of your {{ s.threats.mistakes }} 悪手+ ignored a threat the opponent then had as the best reply.
+          </div>
         </section>
 
         <section v-if="s.thinkTime.length" class="panel box">
@@ -214,6 +236,8 @@ type StatsT = {
   meanMistakes: number | null;
   phaseProfile: { phase: string; avgLoss: number | null; moves: number; mistakes: number; avgSeconds: number | null }[];
   thinkTime: { label: string; moves: number; avgLoss: number | null; mistakes: number; mistakeRate: number | null }[];
+  threats: { mistakes: number; missed: number };
+  moveKinds: { total: number; rows: { kind: string; moves: number; share: number; avgLoss: number | null; mistakes: number; mistakeRate: number | null }[] };
   matchupGrid: { mine: string; cells: Cell[] }[];
 };
 
@@ -229,6 +253,12 @@ watch(filter, load);
 
 const pct = (v: number | null | undefined) => (v == null ? "–" : v.toFixed(0));
 const phaseName = (p: string) => ({ opening: "序盤 1–30", middlegame: "中盤 31–80", endgame: "終盤 81+" })[p] ?? p;
+const KIND_NAMES: Record<string, string> = { drop: "打 Drops", capture: "取る Captures", check: "王手 Checks", promotion: "成 Promotions", king: "玉 King", quiet: "他 Quiet" };
+// The kind with the highest 悪手+ rate, once it has enough moves to mean something.
+const worstKind = computed(() => {
+  const rows = (s.value?.moveKinds.rows ?? []).filter((r) => r.moves >= 10 && r.mistakeRate);
+  return rows.sort((a, b) => b.mistakeRate! - a.mistakeRate!)[0]?.kind ?? "";
+});
 const heatMax = computed(() => Math.max(1, ...(s.value?.mistakeMap.cells ?? [])));
 const KANJI = ["一", "二", "三", "四", "五", "六", "七", "八", "九"];
 const squareName = (i: number) => `${9 - (i % 9)}${KANJI[Math.floor(i / 9)]}`;
@@ -258,7 +288,7 @@ const cellTitle = (c?: Cell) => (c ? `${c.wins}勝 ${c.losses}敗` : "");
 const cellStyle = (c?: Cell) => {
   if (!c || c.winRate == null) return {};
   const a = Math.min(0.55, 0.12 + c.games * 0.05);
-  return { background: c.winRate >= 50 ? `rgba(95,149,208,${a})` : `rgba(217,119,61,${a})` };
+  return { background: c.winRate >= 50 ? `rgb(var(--win-rgb) / ${a})` : `rgb(var(--loss-rgb) / ${a})` };
 };
 
 const BarTable = defineComponent({
@@ -295,10 +325,10 @@ const BarTable = defineComponent({
   width: min(100%, 280px);
   aspect-ratio: 1;
   border: 1px solid var(--line-2);
-  background: #2b2118;
+  background: var(--panel-2);
 }
 .heat span {
-  border: 1px solid #3d2f21;
+  border: 1px solid var(--line);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -325,6 +355,10 @@ const BarTable = defineComponent({
 }
 .ranks a {
   text-decoration: none;
+}
+tr.worst td:first-child {
+  color: var(--loss);
+  font-weight: 600;
 }
 .rate {
   display: inline-block;

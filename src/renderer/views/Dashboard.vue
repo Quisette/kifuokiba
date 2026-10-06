@@ -155,6 +155,8 @@ type Today = {
   missedMates: number;
   weakOpenings: number;
   tsumeRetry: { collection: string; count: number } | null;
+  deck: { id: number; name: string; due: number } | null;
+  study: { id: number; title: string; side: string; due: number } | null;
 };
 const today = ref<Today | null>(null);
 const todayItems = computed(() => {
@@ -169,6 +171,13 @@ const todayItems = computed(() => {
       text: `Look back at the loss vs ${g.opponent || "?"} (${g.date.slice(5, 10)}${g.mistakes ? `, ${g.mistakes} 悪手` : ""}) and write a review note`,
       href: `#/game/${g.id}`,
     });
+  if (t.study)
+    items.push({
+      key: "study",
+      text: `Drill ${t.study.due} position${t.study.due === 1 ? "" : "s"} from your study ${t.study.title} (${t.study.side === "black" ? "☗" : "☖"})`,
+      href: `#/drill/${t.study.id}?side=${t.study.side}`,
+    });
+  if (t.deck) items.push({ key: "deck", text: `Work through your ${t.deck.name} deck: ${t.deck.due} due`, href: `#/review?deck=${t.deck.id}` });
   if (t.missedMates) items.push({ key: "mates", text: `Solve the ${t.missedMates} mate${t.missedMates === 1 ? "" : "s"} you missed in games`, href: "#/puzzles" });
   if (t.tsumeRetry)
     items.push({
@@ -225,10 +234,10 @@ async function stop() {
 
 <style scoped>
 .insights {
-  border-color: #8a6a3a;
+  border-color: var(--edge);
 }
 .today {
-  border-color: #8a6a3a;
+  border-color: var(--edge);
 }
 .todo {
   display: flex;
@@ -239,23 +248,23 @@ async function stop() {
   font-size: 13px;
   line-height: 1.5;
   padding: 6px 0;
-  border-top: 1px solid #2a2017;
+  border-top: 1px solid var(--line-soft);
 }
 .todo:first-of-type {
   border-top: 0;
 }
 .todo:hover {
-  color: var(--accent, #d9a441);
+  color: var(--gold);
 }
 .todo .dot {
   flex: none;
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  border: 2px solid var(--accent, #d9a441);
+  border: 2px solid var(--gold);
 }
 .todo .dot.done {
-  background: var(--accent, #d9a441);
+  background: var(--gold);
 }
 .streak {
   display: flex;
@@ -268,7 +277,7 @@ async function stop() {
 .streak b {
   font-family: var(--serif);
   font-size: 22px;
-  color: var(--accent, #d9a441);
+  color: var(--gold);
 }
 .cal {
   display: grid;
@@ -280,22 +289,22 @@ async function stop() {
 .day {
   aspect-ratio: 1;
   border-radius: 2px;
-  background: #2a2017;
+  background: var(--line-soft);
 }
 .day.pad {
   background: transparent;
 }
 .day.l1 {
-  background: #5a4320;
+  background: var(--heat-1);
 }
 .day.l2 {
-  background: #8a6a2e;
+  background: var(--heat-2);
 }
 .day.l3 {
-  background: #b98d3c;
+  background: var(--heat-3);
 }
 .day.l4 {
-  background: #e3b45a;
+  background: var(--heat-4);
 }
 .insight {
   display: block;
@@ -304,7 +313,7 @@ async function stop() {
   font-size: 13px;
   line-height: 1.55;
   padding: 6px 0;
-  border-top: 1px solid #2a2017;
+  border-top: 1px solid var(--line-soft);
 }
 .insight:first-of-type {
   border-top: 0;
@@ -339,7 +348,7 @@ async function stop() {
   text-decoration: none;
 }
 .tile.link:hover {
-  background: #1f1812;
+  background: var(--row-alt);
 }
 .small {
   font-size: 12px;
@@ -385,7 +394,7 @@ async function stop() {
   text-decoration: none;
 }
 .gc:hover {
-  border-color: #8a6a3a;
+  border-color: var(--edge);
 }
 .name {
   display: block;

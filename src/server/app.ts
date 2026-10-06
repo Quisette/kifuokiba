@@ -7,12 +7,16 @@ import os from "node:os";
 import path from "node:path";
 import { Db } from "./db.js";
 import { Library, GameFilter } from "./library.js";
-import { AnalysisQueue } from "./analysis.js";
-import { Cards } from "./cards.js";
+import { AnalysisQueue, toBlackView } from "./analysis.js";
+import { CardFilter, Cards } from "./cards.js";
 import { computeStats, playerProfile, similarGames } from "./stats.js";
 import { Pages } from "./pages.js";
+import { Studies, StudyInput } from "./studies.js";
+import { Drill, DrillSide } from "./drill.js";
 import { reviewNote } from "./review-note.js";
 import { weeklyNote } from "./weekly.js";
+import { prepNote } from "./prep.js";
+import { SecondOpinion } from "./compare.js";
 import { findPuzzles } from "./puzzles.js";
 import { repertoire } from "./repertoire.js";
 import { AutoBackup } from "./backup.js";
@@ -22,7 +26,7 @@ import { mergeBackup } from "./restore.js";
 import { positionSvg } from "../core/diagram.js";
 import { loadSettings, saveSettings, AppSettings } from "./settings.js";
 import { RecordFileFormat } from "../core/recordFile.js";
-import { UsiEngine } from "./engine/usi.js";
+import { SearchLine, UsiEngine } from "./engine/usi.js";
 import { InitialPositionSFEN, Position } from "tsshogi";
 import { explore } from "./explorer.js";
 import { syncLishogi } from "./fetchers/sync.js";
@@ -33,7 +37,12 @@ import { checkGuess, GuessError } from "./guess.js";
 import { LanServer } from "./lan.js";
 import { Tsume } from "./tsume.js";
 import { decodeText } from "../core/encode.js";
+import { parseTree, treeFromJson } from "../core/movetree.js";
+import { splitRecords } from "../core/split.js";
+import { passedPosition } from "../core/threat.js";
 import type { FetchLike } from "./fetchers/lishogi.js";
+import { moveText, pvText } from "../core/notation.js";
+import { branches, mergeVariations, exportGame } from "./records.js";
 
 export type AppOptions = {
   dbPath: string;
@@ -100,7 +109,10 @@ export function createApp(opts: AppOptions) {
   const analysis = new AnalysisQueue(lib);
   const cards = new Cards(lib, analysis);
   const tsume = new Tsume(lib);
+  const secondOpinion = new SecondOpinion(lib);
   const pages = new Pages(db);
+  const studies = new Studies(db);
+  const drill = new Drill(db, studies);
   const backups = new AutoBackup(db, opts.dbPath, () => lib.settings.autoBackupKeep);
   if (opts.autoBackup !== false) backups.start();
   const sseClients = new Set<http.ServerResponse>();
@@ -143,11 +155,16 @@ export function createApp(opts: AppOptions) {
     const b = body as { files?: { name: string; data: string }[]; text?: string };
     const results = [];
     for (const f of b.files ?? []) {
-      results.push(lib.importBuffer(Buffer.from(f.data, "base64"), f.name));
+      const data = Buffer.from(f.data, "base64");
+      // A file holding several games is imported game by game; one game keeps the by-extension path.
+      const parts = splitRecords(decodeText(data, { autoDetect: true, encoding: "SJIS" }));
+      if (parts.length > 1) parts.forEach((t, i) => results.push(lib.importText(t, i ? `${f.name} #${i + 1}` : f.name)));
+      else results.push(lib.importBuffer(data, f.name));
     }
     if (b.text) {
-      // Several games pasted at once are split on blank-line-separated headers is risky; keep one.
-      results.push(lib.importText(b.text));
+      const parts = splitRecords(b.text);
+      if (parts.length > 1) parts.forEach((t, i) => results.push(lib.importText(t, `pasted #${i + 1}`)));
+      else results.push(lib.importText(b.text));
     }
     const added = results.filter((r) => r.status === "added").map((r) => (r as { id: number }).id);
     if (added.length && lib.settings.autoAnalyze && lib.settings.engine.path) analysis.enqueue(added);
@@ -258,7 +275,28 @@ export function createApp(opts: AppOptions) {
     if (!pos) throw new HttpError(400, "bad sfen");
     const timeMs = Math.min(Math.max(b.timeMs ?? 5000, 100), 60_000);
     const r = await analysis.mateSearch(`sfen ${pos.sfen}`, timeMs);
-    return r.status === "mate" ? { ...r, text: Library.pvText(pos.sfen, r.moves.join(" ")) } : r;
+    return r.status === "mate" ? { ...r, text: pvText(pos.sfen, r.moves.join(" ")) } : r;
+  });
+  // The opponent's threat: what they would play if the side to move passed, and whether that is 詰めろ.
+  route("POST", "/api/threat", async (_r, _u, _p, body) => {
+    const b = body as { sfen: string; timeMs?: number };
+    if (!Position.newBySFEN(b.sfen)) throw new HttpError(400, "bad sfen");
+    const passed = passedPosition(b.sfen);
+    if (!passed) return { status: "check" };
+    const timeMs = Math.min(Math.max(b.timeMs ?? lib.settings.engine.movetimeMs, 100), 10_000);
+    const r = await analysis.searchPosition(`sfen ${passed}`, passed, { movetimeMs: timeMs });
+    const m = await analysis.mateSearch(`sfen ${passed}`, 2000);
+    return {
+      status: "ok",
+      move: r.best,
+      text: r.best ? moveText(passed, r.best) : "",
+      pv: r.pv,
+      pvText: r.pv ? pvText(passed, r.pv) : "",
+      score: r.score ?? null,
+      mateScore: r.mate ?? null,
+      mate: m.status === "mate" ? { moves: m.moves, text: pvText(passed, m.moves.join(" ")) } : null,
+      passedSfen: passed,
+    };
   });
   route("POST", "/api/analyze-position", async (_r, _u, _p, body) => {
     const b = body as { sfen: string; moves?: string[]; multipv?: number; movetimeMs?: number };
@@ -277,7 +315,7 @@ export function createApp(opts: AppOptions) {
         ...l,
         score: l.scoreCP !== undefined ? sign * l.scoreCP : undefined,
         mate: l.scoreMate !== undefined ? sign * l.scoreMate : undefined,
-        text: Library.pvText(pos.sfen, l.pv.join(" ")),
+        text: pvText(pos.sfen, l.pv.join(" ")),
       })),
     };
   });
@@ -287,7 +325,7 @@ export function createApp(opts: AppOptions) {
     const book = await loadBook();
     if (!book) return { configured: false, moves: [] };
     const sfen = url.searchParams.get("sfen") || InitialPositionSFEN.STANDARD;
-    return { configured: true, moves: book.moves(sfen).map((m) => ({ ...m, text: Library.moveText(sfen, m.usi) })) };
+    return { configured: true, moves: book.moves(sfen).map((m) => ({ ...m, text: moveText(sfen, m.usi) })) };
   });
   route("POST", "/api/games/:id/guess", async (_r, _u, p, body) => {
     const b = body as { ply: number; usi: string };
@@ -298,7 +336,26 @@ export function createApp(opts: AppOptions) {
       throw e;
     }
   });
-  route("GET", "/api/games/:id/branches", (_r, _u, p) => lib.branches(id(p)));
+  route("POST", "/api/games/:id/compare", (_r, _u, p) => {
+    if (!secondOpinion.configured) throw new HttpError(400, "No second engine set. Add one in Settings.");
+    if (!lib.db.get("SELECT 1 FROM games WHERE id = ?", id(p))) throw new HttpError(404, "game not found");
+    return secondOpinion.start(id(p));
+  });
+  route("GET", "/api/games/:id/compare", (_r, _u, p) => ({ ...secondOpinion.status(id(p)), configured: secondOpinion.configured }));
+  route("GET", "/api/games/:id/branches", (_r, _u, p) => branches(lib, id(p)));
+  route("POST", "/api/games/:id/variations", (_r, _u, p, body) => {
+    // The tree as text (moves only) or as JSON (with comments).
+    const raw = (body as { tree?: unknown }).tree;
+    let tree;
+    try {
+      tree = typeof raw === "object" && raw !== null ? treeFromJson(raw) : parseTree(String(raw ?? ""));
+    } catch (e) {
+      throw new HttpError(400, e instanceof Error ? e.message : String(e));
+    }
+    const n = mergeVariations(lib, id(p), tree);
+    if (n === null) throw new HttpError(404, "game not found");
+    return { branches: n };
+  });
   route("GET", "/api/games/:id/similar", (_r, _u, p) => similarGames(lib, id(p)));
   route("GET", "/api/games/:id/book", async (_r, _u, p) => {
     const book = await loadBook();
@@ -316,7 +373,7 @@ export function createApp(opts: AppOptions) {
         continue;
       }
       leftBookAt = k;
-      alternatives = moves.slice(0, 3).map((m) => ({ usi: m.usi, text: Library.moveText(before, m.usi), count: m.count }));
+      alternatives = moves.slice(0, 3).map((m) => ({ usi: m.usi, text: moveText(before, m.usi), count: m.count }));
       break;
     }
     return { configured: true, inBook, leftBookAt, alternatives };
@@ -331,7 +388,7 @@ export function createApp(opts: AppOptions) {
     for (const [i, g] of list.entries()) {
       // Let other requests (and the analysis queue) through on big exports.
       if (i % 100 === 99) await new Promise((r) => setImmediate(r));
-      const r = lib.exportGame(g.id, fmt, utf8);
+      const r = exportGame(lib, g.id, fmt, utf8);
       if (!r) continue;
       const name = `${g.date.slice(0, 10) || "nodate"}_${safe(g.black || "先手")}_vs_${safe(g.white || "後手")}_${g.id}${fmt}`;
       files.push({ name, data: r.data, date: g.date ? new Date(g.date.replace(" ", "T")) : undefined });
@@ -362,7 +419,7 @@ export function createApp(opts: AppOptions) {
     };
     const f = formats[fmt];
     if (!f) throw new HttpError(400, "unknown format");
-    const r = lib.exportGame(id(p), f, url.searchParams.get("utf8") === "1");
+    const r = exportGame(lib, id(p), f, url.searchParams.get("utf8") === "1");
     if (!r) throw new HttpError(404, "game not found");
     return { __raw: r.data, type: "application/octet-stream", name: `game-${p[0]}${f}` };
   });
@@ -380,6 +437,11 @@ export function createApp(opts: AppOptions) {
     return pages.create({ title: n.title, notebook: "Game reviews", body: n.body });
   });
 
+  route("POST", "/api/notes/prep", (_r, _u, _p, body) => {
+    const n = prepNote(lib, String((body as { opponent?: string }).opponent ?? ""));
+    if (!n) throw new HttpError(404, "no games against that opponent");
+    return pages.create({ title: n.title, notebook: "Opponents", body: n.body });
+  });
   route("POST", "/api/notes/weekly", () => {
     const n = weeklyNote(lib);
     return pages.create({ title: n.title, notebook: "Weekly", body: n.body });
@@ -395,20 +457,36 @@ export function createApp(opts: AppOptions) {
   });
 
   // ---- cards
-  route("GET", "/api/cards", (_r, url) =>
-    cards.list({
-      kind: url.searchParams.get("kind") ?? undefined,
-      phase: url.searchParams.get("phase") ?? undefined,
-      opening: url.searchParams.get("opening") ?? undefined,
-      due: url.searchParams.get("due") === "1",
-      leech: url.searchParams.get("leech") === "1",
-    }),
-  );
+  // A deck's filter from the query string; ?deck=<id> starts from a saved deck.
+  const cardFilter = (url: URL): CardFilter => {
+    const q = url.searchParams;
+    const deckId = Number(q.get("deck"));
+    const base = deckId ? (cards.decks().find((d) => d.id === deckId)?.filter ?? {}) : {};
+    const f: CardFilter = { ...base, due: q.get("due") === "1" };
+    for (const k of ["kind", "phase", "opening", "myOpening", "opponent", "tag", "moveKind", "side"] as const) {
+      const v = q.get(k);
+      if (v) f[k] = v;
+    }
+    if (q.get("leech") === "1") f.leech = true;
+    return f;
+  };
+  route("GET", "/api/cards", (_r, url) => cards.list(cardFilter(url)));
+  route("GET", "/api/cards/facets", () => cards.facets());
   route("GET", "/api/cards/export/anki", (_r, url) => ({
-    __raw: Buffer.from(cards.exportAnki({ kind: url.searchParams.get("kind") ?? undefined, phase: url.searchParams.get("phase") ?? undefined })),
+    __raw: Buffer.from(cards.exportAnki({ ...cardFilter(url), due: false })),
     type: "text/tab-separated-values; charset=utf-8",
     name: "kifu-study-cards.txt",
   }));
+  route("GET", "/api/decks", () => cards.decks());
+  route("POST", "/api/decks", (_r, _u, _p, body) => {
+    const b = body as { name?: string; filter?: CardFilter };
+    if (!b.name?.trim()) throw new HttpError(400, "a deck needs a name");
+    return cards.saveDeck(b.name, b.filter ?? {});
+  });
+  route("DELETE", "/api/decks/:id", (_r, _u, p) => {
+    cards.deleteDeck(id(p));
+    return { ok: true };
+  });
   route("GET", "/api/repertoire", async (_r, url) => {
     const side = url.searchParams.get("side") === "white" ? "white" : "black";
     // A broken book path shouldn't block the drill; it just judges without the book.
@@ -416,7 +494,7 @@ export function createApp(opts: AppOptions) {
     const maxPly = Number(url.searchParams.get("maxPly")) || 24;
     return lib.cached(`repertoire:${side}:${maxPly}:${book?.mtimeMs ?? ""}`, () => repertoire(lib, { side, maxPly, book }));
   });
-  route("GET", "/api/today", async () => todayPlan(lib, cards, await loadBook().catch(() => null)));
+  route("GET", "/api/today", async () => todayPlan(lib, cards, await loadBook().catch(() => null), Date.now(), drill));
   route("GET", "/api/puzzles", (_r, url) => {
     const mineOnly = url.searchParams.get("mine") !== "0";
     const all = lib.cached(mineOnly ? "puzzles:mine" : "puzzles:all", () => findPuzzles(lib, { mineOnly }));
@@ -425,7 +503,7 @@ export function createApp(opts: AppOptions) {
     return {
       total: all.length,
       missed: all.filter((p) => p.missed).length,
-      puzzles: all.slice(0, limit).map((p) => ({ ...p, bestText: Library.moveText(p.sfen, p.bestUsi) })),
+      puzzles: all.slice(0, limit).map((p) => ({ ...p, bestText: moveText(p.sfen, p.bestUsi) })),
     };
   });
   route("GET", "/api/cards/counts", () => cards.counts());
@@ -450,6 +528,40 @@ export function createApp(opts: AppOptions) {
   });
 
   // ---- notebooks
+  route("GET", "/api/studies", () => studies.list());
+  route("GET", "/api/studies/:id", (_r, _u, p) => studies.get(id(p)) ?? Promise.reject(new HttpError(404, "study not found")));
+  route("POST", "/api/studies", (_r, _u, _p, body) => {
+    try {
+      return studies.create(body as StudyInput);
+    } catch (e) {
+      throw new HttpError(400, e instanceof Error ? e.message : String(e));
+    }
+  });
+  route("PUT", "/api/studies/:id", (_r, _u, p, body) => {
+    let s;
+    try {
+      s = studies.update(id(p), body as StudyInput);
+    } catch (e) {
+      throw new HttpError(400, e instanceof Error ? e.message : String(e));
+    }
+    return s ?? Promise.reject(new HttpError(404, "study not found"));
+  });
+  route("DELETE", "/api/studies/:id", (_r, _u, p) => {
+    studies.delete(id(p));
+    return { ok: true };
+  });
+  const drillSide = (v: unknown): DrillSide => {
+    if (v !== "black" && v !== "white") throw new HttpError(400, "side must be black or white");
+    return v;
+  };
+  route("GET", "/api/studies/:id/drill", (_r, url, p) =>
+    drill.positions(id(p), drillSide(url.searchParams.get("side")), { all: url.searchParams.get("all") === "1" }) ?? Promise.reject(new HttpError(404, "study not found")),
+  );
+  route("POST", "/api/studies/:id/drill", (_r, _u, p, body) => {
+    const b = body as { side?: string; sfen?: string; usi?: string };
+    return drill.answer(id(p), drillSide(b.side), String(b.sfen ?? ""), String(b.usi ?? "")) ?? Promise.reject(new HttpError(404, "no such position in this study"));
+  });
+  route("GET", "/api/drill/due", () => drill.due());
   route("GET", "/api/pages", () => pages.list());
   route("GET", "/api/pages/:id", (_r, _u, p) => pages.get(id(p)) ?? Promise.reject(new HttpError(404, "page not found")));
   route("POST", "/api/pages", (_r, _u, _p, body) => pages.create(body as { title: string; notebook?: string; body?: string }));
@@ -544,6 +656,70 @@ export function createApp(opts: AppOptions) {
     req.on("close", () => sseClients.delete(res));
   };
 
+  // One streamed search: "lines" events while the engine thinks, then "done".
+  // Closing the stream stops the search.
+  const LIVE_MAX_MS = 5 * 60_000;
+  const handleLive = async (res: http.ServerResponse, url: URL) => {
+    const q = url.searchParams;
+    const pos = Position.newBySFEN(q.get("sfen") ?? "");
+    const moves = (q.get("moves") ?? "").split(/\s+/).filter(Boolean);
+    let ok = !!pos;
+    for (const u of moves) {
+      const m = ok ? pos!.createMoveByUSI(u) : null;
+      if (!m || !pos!.doMove(m)) ok = false;
+    }
+    if (!ok) throw new HttpError(400, "bad position");
+    const sign = pos!.color === "black" ? 1 : -1;
+    const sfenAfter = pos!.sfen;
+    const position = `sfen ${q.get("sfen")}` + (moves.length ? ` moves ${moves.join(" ")}` : "");
+    const view = (lines: SearchLine[]) =>
+      lines.map((l) => ({
+        multipv: l.multipv,
+        pv: l.pv,
+        depth: l.depth,
+        nodes: l.nodes,
+        scoreCP: l.scoreCP,
+        score: l.scoreCP !== undefined ? sign * l.scoreCP : undefined,
+        mate: l.scoreMate !== undefined ? sign * l.scoreMate : undefined,
+        text: pvText(sfenAfter, l.pv.join(" ")),
+      }));
+    const abort = new AbortController();
+    res.on("close", () => abort.abort());
+    res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
+    const send = (event: string, data: unknown) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    const t0 = Date.now();
+    // At most five updates a second; the last one is always sent with "done".
+    let last = 0;
+    let pending: SearchLine[] | null = null;
+    let flushTimer: ReturnType<typeof setTimeout> | undefined;
+    const flush = () => {
+      flushTimer = undefined;
+      if (!pending) return;
+      send("lines", { lines: view(pending), elapsedMs: Date.now() - t0 });
+      pending = null;
+      last = Date.now();
+    };
+    try {
+      const r = await analysis.liveSearch(position, {
+        multipv: Math.min(Math.max(Number(q.get("multipv")) || 1, 1), 5),
+        maxMs: Math.min(Math.max(Number(q.get("maxMs")) || 10_000, 100), LIVE_MAX_MS),
+        signal: abort.signal,
+        onLines: (lines) => {
+          pending = lines;
+          if (!flushTimer) flushTimer = setTimeout(flush, Math.max(0, 200 - (Date.now() - last)));
+        },
+      });
+      clearTimeout(flushTimer);
+      pending = null;
+      send("done", { ...toBlackView(sfenAfter, r), lines: view(r.lines), elapsedMs: Date.now() - t0 });
+    } catch (e) {
+      clearTimeout(flushTimer);
+      if (!abort.signal.aborted) send("failed", { error: e instanceof Error ? e.message : String(e) });
+    } finally {
+      res.end();
+    }
+  };
+
   const serveStatic = async (url: URL, res: http.ServerResponse) => {
     if (!opts.staticDir) {
       res.writeHead(404).end();
@@ -569,6 +745,7 @@ export function createApp(opts: AppOptions) {
     const url = new URL(req.url ?? "/", "http://localhost");
     try {
       if (url.pathname === "/api/events") return handleEvents(req, res);
+      if (url.pathname === "/api/live" && req.method === "GET") return await handleLive(res, url);
       if (!url.pathname.startsWith("/api/")) return await serveStatic(url, res);
       for (const [method, re, h] of routes) {
         const m = re.exec(url.pathname);
@@ -637,6 +814,7 @@ export function createApp(opts: AppOptions) {
       backups.stop();
       for (const r of sseClients) r.end();
       await analysis.shutdown();
+      await secondOpinion.shutdown();
       await lan.stop();
       await new Promise<void>((r) => server.close(() => r()));
       db.close();

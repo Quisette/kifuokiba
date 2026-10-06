@@ -222,3 +222,134 @@ describe("USI option lines", () => {
     expect(parseOptionLine("id name foo")).toBeNull();
   });
 });
+
+describe("move kinds", () => {
+  it("tells drops, captures, checks, promotions, king and quiet moves apart", async () => {
+    const { moveKinds } = await import("../src/core/movekind.js");
+    const start = "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1";
+    expect(moveKinds(start, "7g7f")).toEqual(["quiet"]);
+    expect(moveKinds(start, "5i5h")).toEqual(["king"]);
+    // After 7g7f 3c3d: ☗2二角成 takes the bishop and promotes.
+    const open = "lnsgkgsnl/1r5b1/pppppp1pp/6p2/9/2P6/PP1PPPPPP/1B5R1/LNSGKGSNL b - 3";
+    expect(moveKinds(open, "8h2b+")).toEqual(["capture", "promotion"]);
+    // A gold dropped right in front of a bare king gives check.
+    expect(moveKinds("4k4/9/9/9/9/9/9/9/4K4 b G 1", "G*5b")).toEqual(["drop", "check"]);
+    expect(moveKinds(start, "7g7e")).toBeNull();
+  });
+});
+
+describe("move tree", () => {
+  const START = "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1";
+  it("parses and formats PGN-style variations", async () => {
+    const { parseTree, formatTree, selectedLine, hasVariations } = await import("../src/core/movetree.js");
+    const text = "7g7f 3c3d (8c8d 2g2f (2h6h)) 2g2f 8c8d";
+    const t = parseTree(text);
+    expect(formatTree(t)).toBe(text);
+    expect(t.children[0].children.map((c) => c.usi)).toEqual(["3c3d", "8c8d"]);
+    expect(hasVariations(t)).toBe(true);
+    expect(selectedLine(t, []).map((x) => x.node.usi)).toEqual(["", "7g7f", "3c3d", "2g2f", "8c8d"]);
+    expect(selectedLine(t, [0, 1, 1]).map((x) => x.node.usi)).toEqual(["", "7g7f", "8c8d", "2h6h"]);
+    expect(formatTree(parseTree("7g7f, 3c3d"))).toBe("7g7f 3c3d");
+    expect(hasVariations(parseTree("7g7f 3c3d"))).toBe(false);
+    expect(() => parseTree("7g7f (3c3d")).toThrow();
+    expect(() => parseTree("(7g7f)")).toThrow();
+  });
+
+  it("round-trips through a record and KIF 変化", async () => {
+    const { parseTree, formatTree, treeToRecord, recordToTree, pruneIllegal } = await import("../src/core/movetree.js");
+    const { exportKIF, importKIF } = await import("tsshogi");
+    const text = "7g7f 3c3d (8c8d 2g2f) 2g2f";
+    const kif = exportKIF(treeToRecord(START, parseTree(text)));
+    expect(kif).toContain("変化：2手");
+    expect(formatTree(recordToTree(importKIF(kif) as Record))).toBe(text);
+    expect(formatTree(pruneIllegal(parseTree("7g7f 3c3d (1a2a 1c1d) 2g2f 1a1a"), START))).toBe("7g7f 3c3d 2g2f");
+  });
+
+  it("merges a tree into a record without changing its main line", async () => {
+    const { parseTree, formatTree, recordToTree, mergeTreeIntoRecord, lineTree, treeToRecord } = await import("../src/core/movetree.js");
+    const rec = treeToRecord(START, lineTree(["7g7f", "3c3d", "2g2f"]));
+    mergeTreeIntoRecord(rec, parseTree("7g7f 8c8d 2g2f (6i7h)"));
+    expect(formatTree(recordToTree(rec))).toBe("7g7f 3c3d (8c8d 2g2f (6i7h)) 2g2f");
+    expect(rec.moves.slice(1).map((n) => (n.move as { usi: string }).usi)).toEqual(["7g7f", "3c3d", "2g2f"]);
+  });
+});
+
+describe("position setup checks", () => {
+  it("accepts real positions and names what's wrong with others", async () => {
+    const { setupProblems } = await import("../src/core/setup.js");
+    expect(setupProblems("lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1")).toEqual([]);
+    expect(setupProblems("4k4/9/9/9/9/9/9/9/9 b 2r2b4g4s4n4l18p 1")).toEqual([]);
+    expect(setupProblems("9/9/9/9/9/9/9/9/9 b - 1")).toEqual(["There is no king on the board."]);
+    expect(setupProblems("4k4/9/9/9/9/9/9/9/3KK4 b - 1")).toContain("☗ has more than one king.");
+    expect(setupProblems("P3k4/9/9/9/9/9/9/9/4K4 b - 1")[0]).toMatch(/☗歩 on 91 can never move/);
+    expect(setupProblems("4k4/9/9/9/9/9/9/9/n3K4 w - 1")[0]).toMatch(/☖桂 on 99 can never move/);
+    expect(setupProblems("4k4/9/9/9/P8/P8/9/9/4K4 b - 1")).toEqual(["☗ has two pawns on file 9 (二歩)."]);
+    expect(setupProblems("4k4/9/9/9/9/9/9/9/4K4 b 3R 1")).toEqual(["There are 3 飛; a set has 2."]);
+    expect(setupProblems("4k4/9/9/9/9/9/9/+R8/4K4 b 2R 1")).toEqual(["There are 3 飛; a set has 2."]);
+    // ☖'s king on 5a is attacked by the ☗ rook on 5i… with ☗ to move, ☖ left it in check.
+    expect(setupProblems("4k4/9/9/9/9/9/9/9/K3R4 b - 1")).toEqual(["☖'s king is in check but it is ☗ to move."]);
+    expect(setupProblems("4k4/9/9/9/9/9/9/9/K3R4 w - 1")).toEqual([]);
+  });
+});
+
+describe("splitting pasted text into records", () => {
+  it("cuts KIF, CSA and USI lines into games and keeps 変化 with their game", async () => {
+    const { splitRecords } = await import("../src/core/split.js");
+    const kifA = makeKif({ moves: "7g7f 3c3d 2g2f", black: "a", white: "b", date: "2026/09/01" });
+    const kifB = makeKif({ moves: "2g2f 8c8d", black: "c", white: "d", date: "2026/09/02" });
+    const withBranch = ["手合割：平手", "先手：x", "後手：y", "手数----指手---------消費時間--", "   1 ７六歩(77)", "   2 ３四歩(33)", "", "変化：2手", "   2 ８四歩(83)", ""].join("\n");
+    const parts = splitRecords([kifA, withBranch, kifB].join("\n\n"));
+    expect(parts).toHaveLength(3);
+    expect(parts[1]).toContain("変化：2手");
+    for (const p of parts) expect(importRecordFromText(p)).toBeInstanceOf(Record);
+    expect(splitRecords(kifA)).toHaveLength(1);
+
+    const csa = "V2.2\nN+a\nN-b\nPI\n+\n+7776FU\n-3334FU\n%TORYO\n/\nV2.2\nN+c\nN-d\nPI\n+\n+2726FU\n%TORYO\n";
+    const csaParts = splitRecords(csa);
+    expect(csaParts).toHaveLength(2);
+    expect(csaParts[1]).toContain("N+c");
+
+    expect(splitRecords("position startpos moves 7g7f\n\nsfen lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1 moves 2g2f\n")).toHaveLength(2);
+    expect(splitRecords("position startpos moves 7g7f 3c3d")).toHaveLength(1);
+    expect(splitRecords("  \n")).toEqual([]);
+  });
+});
+
+describe("move tree comments", () => {
+  const START = "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1";
+  it("carries comments through a record and KIF, and never overwrites a game's own", async () => {
+    const { parseTree, treeToRecord, recordToTree, mergeTreeIntoRecord, lineTree } = await import("../src/core/movetree.js");
+    const { exportKIF, importKIF } = await import("tsshogi");
+    const t = parseTree("7g7f 3c3d (8c8d) 2g2f");
+    t.comment = "start note";
+    t.children[0].comment = "角道を開ける";
+    t.children[0].children[1].comment = "居飛車にする";
+    const kif = exportKIF(treeToRecord(START, t));
+    expect(kif).toContain("*角道を開ける");
+    expect(kif).toContain("*居飛車にする");
+    const back = recordToTree(importKIF(kif) as Record);
+    expect(back.comment).toBe("start note");
+    expect(back.children[0].comment).toBe("角道を開ける");
+    expect(back.children[0].children[1]).toMatchObject({ usi: "8c8d", comment: "居飛車にする" });
+    expect(back.children[0].children[0].comment).toBeUndefined();
+
+    // Merging into a game: a move that has a comment keeps it; a bare one gets the study's.
+    const game = treeToRecord(START, lineTree(["7g7f", "3c3d"]));
+    game.goto(1);
+    game.current.comment = "mine";
+    mergeTreeIntoRecord(game, t);
+    const merged = recordToTree(game);
+    expect(merged.children[0].comment).toBe("mine");
+    expect(merged.children[0].children[1].comment).toBe("居飛車にする");
+  });
+});
+
+describe("passing the move for threats", () => {
+  it("flips the side to move, except when the side to move is in check", async () => {
+    const { passedPosition } = await import("../src/core/threat.js");
+    expect(passedPosition("lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1")).toBe("lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL w - 1");
+    // ☗ to move and in check from the ☖ rook on 5a: it can't pass.
+    expect(passedPosition("4r4/9/9/9/9/9/9/9/4K4 b - 1")).toBeNull();
+    expect(passedPosition("nonsense")).toBeNull();
+  });
+});

@@ -3,6 +3,7 @@
 import { Library } from "./library.js";
 import { sfenKey } from "./db.js";
 import type { GameListItem } from "./library.js";
+import { moveText } from "../core/notation.js";
 
 export type ExplorerFilter = { side?: "black" | "white" | ""; source?: string; opponent?: string };
 
@@ -58,13 +59,13 @@ export function explore(lib: Library, sfen: string, filter: ExplorerFilter = {})
     result.games++;
     tally(result, g.myResult);
     if (!result.engine && (h.best_usi || h.score !== null || h.mate !== null)) {
-      result.engine = { score: h.score, mate: h.mate, bestUsi: h.best_usi, bestText: h.best_usi ? Library.moveText(h.sfen, h.best_usi) : "" };
+      result.engine = { score: h.score, mate: h.mate, bestUsi: h.best_usi, bestText: h.best_usi ? moveText(h.sfen, h.best_usi) : "" };
     }
     const n = lib.db.get<{ usi: string; loss: number | null }>("SELECT usi, loss FROM plies WHERE game_id = ? AND ply = ?", gameId, h.ply + 1);
     if (!n?.usi) continue;
     let m = byMove.get(n.usi);
     if (!m) {
-      m = { usi: n.usi, text: Library.moveText(h.sfen, n.usi), games: 0, wins: 0, losses: 0, draws: 0, mine: 0, myAvgLoss: null, lastDate: "", gameIds: [], lossSum: 0, lossN: 0 };
+      m = { usi: n.usi, text: moveText(h.sfen, n.usi), games: 0, wins: 0, losses: 0, draws: 0, mine: 0, myAvgLoss: null, lastDate: "", gameIds: [], lossSum: 0, lossN: 0 };
       byMove.set(n.usi, m);
     }
     m.games++;

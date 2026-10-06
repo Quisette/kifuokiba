@@ -33,6 +33,8 @@ export type AppSettings = {
   bookPath: string;
   /** Daily backups to keep next to the library file; 0 turns them off. */
   autoBackupKeep: number;
+  /** A second engine to compare a game's analysis with (empty path = none). */
+  engine2: { path: string; options: Record<string, string | number>; movetimeMs: number };
 };
 
 export const defaultSettings: AppSettings = {
@@ -55,6 +57,7 @@ export const defaultSettings: AppSettings = {
   desiredRetention: 0.9,
   bookPath: "",
   autoBackupKeep: 7,
+  engine2: { path: "", options: {}, movetimeMs: 1000 },
 };
 
 export function loadSettings(db: Db): AppSettings {
@@ -65,6 +68,7 @@ export function loadSettings(db: Db): AppSettings {
     engine: { ...defaultSettings.engine, ...(saved.engine ?? {}) },
     grading: { ...defaultSettings.grading, ...(saved.grading ?? {}) },
     accounts: { ...defaultSettings.accounts, ...(saved.accounts ?? {}) },
+    engine2: { ...defaultSettings.engine2, ...(saved.engine2 ?? {}) },
   };
 }
 

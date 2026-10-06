@@ -7,7 +7,7 @@ Everything stays on your machine, in one SQLite file.
 ## What it does
 
 - **Today.** The dashboard lists what to do now: due cards, recent losses that have no review note yet, mates you missed, and opening positions where your usual move is weak.
-- **Library.** Import KIF, KIFU, KI2, CSA, JKF, SFEN or USI by drag-drop, file picker or paste; Ctrl/⌘+V on any page imports a copied kifu and opens it. Shift_JIS and UTF-8 are detected automatically, and duplicates are skipped.
+- **Library.** Import KIF, KIFU, KI2, CSA, JKF, SFEN or USI by drag-drop, file picker or paste; Ctrl/⌘+V on any page imports a copied kifu and opens it. Several games pasted at once, or in one file (KIF/KI2 one after another, CSA separated by `/`, one SFEN/USI per line), are imported one by one. Shift_JIS and UTF-8 are detected automatically, and duplicates are skipped.
   - **Lishogi:** set your username in Settings and press "Fetch from Lishogi". Later fetches only ask for new games.
   - **Watched folders:** kifu saved by ShogiGUI, Kifu for Windows or a Wars downloader into a watched folder are imported while the app runs.
   - Each game gets its 戦型, the castles on both sides over time, and its tactics (149 rules converted from HiraganaSuisho and sylwi-kifu-vue).
@@ -15,21 +15,27 @@ Everything stays on your machine, in one SQLite file.
 - **Analysis.** A background queue runs your USI engine (YaneuraOu, 水匠 etc.) over every position. Evaluations are cached per position.
   - Moves are graded 緩手 / 疑問手 / 悪手 / 大悪手 with ShogiHome's win-rate thresholds, plus missed mates and missed wins.
   - Each flagged move is then checked again with a longer search (4× by default), so a short search's horizon doesn't produce false mistakes. Unreviewed cards for moves that no longer count are removed.
+  - **Second opinion.** Set a second engine in Settings (or the same one with other options) and "Compare" in the game view lists the moves the two grade differently or where they disagree on the winning chances by 15 points or more, with the agreement rate. Its evals are cached too.
   - Each game gets accuracy, a turning point, and an eval graph with a think-time strip underneath. Missed mates and thrown-away wins are marked separately.
-- **Game view.** ShogiHome's board, keyboard navigation (← → Home End, `[` `]` to jump between mistakes, `f` to flip), and engine candidate moves.
+- **Game view.** ShogiHome's board, keyboard navigation (← → Home End, `[` `]` to jump between mistakes, `f` to flip), and engine candidate moves that deepen live until you stop them.
   - "Diagram" downloads the current position as an SVG image.
   - Variations stored in the file (変化) are marked in the move list; clicking one plays it out on the board with its comment and the engine's view.
   - Mark moves yourself with !!, !, !?, ?!, ? or ??. They show in the move list, survive backups and restores, and a move you mark ? or ?? goes into the review note even if the engine missed it.
+  - Every 悪手 or worse is also checked for a **missed threat**: if the opponent was already threatening a move and the engine's best reply to yours is exactly that move, the move gets a 狙 tag, its card says which threat you ignored, and Stats counts how often it happens.
+  - "狙い Threat?" shows what the opponent would play if it were their move (the null-move threat), and whether that is 詰めろ, with the move as an arrow. The study board has it too.
   - You can try your own move and get an engine verdict, edit comments, search for the same position across games, and export KIF/CSA with the evals written as ShogiHome-style comments.
+- **Study board (検討盤).** A free board for any position: the initial position, a pasted SFEN, USI or kifu, or a game's line ("Study board" in the game view). Play both sides and the engine thinks about each position live, up to a time you pick, showing its top three lines and depth with arrows on the board; click a line to play it. Playing a different move starts a variation (変) instead of overwriting the line; any line can be made the main line or deleted. Variations stored in a kifu come along, and a board opened from a game can save its variations back into that game. Everything stays in the URL, so a bookmark or a link reopens it. Each move can carry a comment. "Save study" gives the board a title and its own address (`#/board/<id>`); after that it saves as you go, saved studies are listed under the board, and `:::shogi-study{id=…}` embeds one in a notebook page with its variations and comments. Comments go out with KIF and into a game (never over the game's own). "Edit position" sets up any position by hand (from even, tsume or handicap templates, dragging pieces between board and stands) and checks it for two kings, 二歩, stuck pieces and the like. From there you can save the lines as a game (KIF with 変化), add the position to a notebook, play it out, download a diagram or copy the position.
+- **Study drill.** "Drill this study" asks every position in a saved study where your side is to move: play the study's move (variations you wrote count too). Each position is scheduled with SM-2, a miss comes back before the session ends, and Today lists the study with the most positions due.
 - **Mistake cards.** Your 悪手 and worse become cards automatically. You can also make one from any position.
   - In review you play your answer on the board. The best move, or any move the engine says is within the tolerance, counts as correct. You can replay the engine line.
   - Scheduling is SM-2, or FSRS v4.5 if you pick it in Settings. A card missed four times becomes a leech, and the review screen then asks you to write down the idea or study the game.
-  - "Export to Anki" writes a tab-separated file Anki imports directly, with each position drawn as a board diagram.
+  - Decks: besides the built-in ones (by phase, missed mates, leeches…), build your own from the opening, opponent, tag, kind of move and side, and save it. Today suggests the saved deck with the most due cards.
+  - "Export to Anki" writes the chosen deck as a tab-separated file Anki imports directly, with each position drawn as a board diagram.
 - **Play it out.** From any game position or card, play on against the engine at a strength you pick. For the won games you let slip, Stats has a "Win it again" button that starts from the position before the slip and warns as soon as your winning chances fall below 70%.
 - **Tsume collections.** Import mate problems from tsume KIF/KI2/CSA files, SFEN lines (`<sfen> moves G*1b`) or JSON/NDJSON (as shogimap-crawler writes them) and solve them against the engine; failed ones come back first.
 - **Guess the moves.** Replay any game, your own or a pro's, and guess each move for one side. Every guess is graded by the engine against the move actually played, with a running score of matches and average loss. A bad guess can become a review card.
 - **Mates from my games.** Every analysed position where the side to move had a forced mate becomes a puzzle, with the ones you missed listed first. You solve it on the board while the engine defends, and it tells you the moment a move lets the king escape.
-- **Stats.** Win rate by side, opening, opponent's opening, castle, matchup, time control and opponent, plus a monthly trend, where in the game you lose points, whether fast moves go wrong more often, and how often you convert clearly won positions (with the games you let slip).
+- **Stats.** Win rate by side, opening, opponent's opening, castle, matchup, time control and opponent, plus a monthly trend, where in the game you lose points, whether fast moves go wrong more often, which kinds of move go wrong (drops, captures, checks, promotions, king moves, quiet moves), and how often you convert clearly won positions (with the games you let slip).
 - **Opening book.** Point Settings at a YaneuraOu-format book (.db) and games show which moves were book moves and where you left the book, with the book's choices there.
 - **Explorer.** Walk the opening tree of your own games: each next move with how often you played it, your score after it, your average loss, and the engine's best move. From a player's profile, "Openings against them" narrows the tree to your games with that opponent, to prepare for the next one.
 - **Opening drill.** The opening positions you reach most often with you to move, as a quiz. A move counts as correct if it's a book move, the engine's choice, or one you play there without losing points. It can filter to the positions where your usual move is weak.
@@ -48,6 +54,8 @@ Everything stays on your machine, in one SQLite file.
 
   "This week's report" writes a 週報 page: the last seven days' games and results, accuracy against the week before, where the points went, the costliest moves as boards, and the practice done.
 
+  "Write prep sheet" on a player's profile writes a 対策 page before the next game against them: your record, their openings and castles by side with your score against each, the positions you keep reaching against them with your usual move and the engine's, your costliest moves against them, and a link to drill those cards.
+
   "Write review note" on a game makes a page with the summary and each big mistake as a board with the engine's line, ready to annotate. The ".mdx" button downloads the same note with the moves written out, so it renders in personal-shogi-note as is.
 
 ## Run it
@@ -60,6 +68,8 @@ npm start          # build and open the Electron app
 npm run serve      # or: build and serve at http://127.0.0.1:3210 in a browser
 npm run dev        # Vite with hot reload on :5173, API on :3210
 ```
+
+Settings → Appearance switches between the dark 漆 theme and a light 和紙 one, or follows the system. The choice is kept per device.
 
 Settings can download a backup and restore one. Restoring merges the backup into the current library: games, analysis, cards with their review history, tags, notes and notebook pages are added and nothing is deleted, so it also works for combining two computers' libraries.
 
@@ -96,12 +106,14 @@ The mock engine only counts material and looks one capture ahead. It proves the 
 ## Layout
 
 ```
-src/core/       record import/export, summaries, grading, SM-2, classifier (shared, no I/O)
+src/core/       record import/export, notation, move trees, summaries, grading, SM-2/FSRS, classifier (shared, no I/O)
 src/server/     SQLite store, library, analysis queue, USI engine client, cards, stats, HTTP API
 src/electron/   Electron shell: starts the server and opens a window
 src/renderer/   Vue 3 UI; vendor/shogihome holds the board component
 tools/          build, mock engine, classifier rule converter, self-play generator
 ```
+
+For the architecture and the roadmap, see [docs/DESIGN.md](docs/DESIGN.md).
 
 ## Licenses
 

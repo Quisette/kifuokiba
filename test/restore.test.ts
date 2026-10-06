@@ -76,3 +76,39 @@ it("merges a backup into another library, keeping analysis, cards, history and n
   const bad = await fetch(`${b.base}/api/restore`, { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: Buffer.alloc(500, 1) });
   expect(bad.status).toBe(400);
 }, 30000);
+
+it("merges variations from the backup's copy of a game into the one here", async () => {
+  const kif = makeKif({ moves: "7g7f 3c3d 2g2f 8c8d", black: "me", white: "v", date: "2026/09/08" });
+  const a = await start();
+  const ga = (await a.api("POST", "/api/import", { text: kif })).results[0].id;
+  await a.api("POST", `/api/games/${ga}/variations`, { tree: "7g7f 3c3d (8c8d)" });
+  const backup = Buffer.from(await (await fetch(`${a.base}/api/backup`)).arrayBuffer());
+
+  const b = await start();
+  const gb = (await b.api("POST", "/api/import", { text: kif })).results[0].id;
+  await b.api("POST", `/api/games/${gb}/variations`, { tree: "7g7f 3c3d 2g2f (5g5f)" });
+  const r = await fetch(`${b.base}/api/restore`, { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: backup });
+  expect(r.ok).toBe(true);
+  const branches = await b.api("GET", `/api/games/${gb}/branches`);
+  expect(branches.map((x: { usis: string[] }) => x.usis[0]).sort()).toEqual(["5g5f", "8c8d"]);
+}, 30000);
+
+it("restores studies and re-points notebook pages that embed them", async () => {
+  const START = "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1";
+  const a = await start();
+  const st = await a.api("POST", "/api/studies", { title: "研究", start_sfen: START, tree: { usi: "", children: [{ usi: "7g7f", comment: "note", children: [] }] } });
+  await a.api("POST", "/api/pages", { title: "With study", body: `:::shogi-study{id=${st.id}}\n:::` });
+  const backup = Buffer.from(await (await fetch(`${a.base}/api/backup`)).arrayBuffer());
+
+  const b = await start();
+  // An unrelated study here first, so the restored one gets another id.
+  await b.api("POST", "/api/studies", { title: "other", start_sfen: START });
+  const restore = async () => (await fetch(`${b.base}/api/restore`, { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: backup })).json();
+  expect(await restore()).toMatchObject({ studies: 1, pages: 1 });
+  const restored = (await b.api("GET", "/api/studies")).find((x: { title: string }) => x.title === "研究");
+  expect(restored.id).not.toBe(st.id);
+  expect((await b.api("GET", `/api/studies/${restored.id}`)).tree.children[0].comment).toBe("note");
+  const pages = await b.api("GET", "/api/pages");
+  expect((await b.api("GET", `/api/pages/${pages[0].id}`)).body).toContain(`shogi-study{id=${restored.id}}`);
+  expect(await restore()).toMatchObject({ studies: 0, pages: 0 });
+}, 30000);

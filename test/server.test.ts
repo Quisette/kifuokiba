@@ -186,6 +186,20 @@ describe("library API", () => {
     // ▲3三角成 lands on 3三: row 3, column for file 3.
     expect(s.mistakeMap.cells[(3 - 1) * 9 + (9 - 3)]).toBeGreaterThanOrEqual(1);
     expect(s.mistakeMap.byPiece.find((p: { piece: string }) => p.piece === "角")?.n).toBeGreaterThanOrEqual(1);
+    // The blunder ▲3三角成 promotes on an empty square (△同桂 then takes it).
+    const kind = (k: string) => s.moveKinds.rows.find((r: { kind: string }) => r.kind === k);
+    expect(s.moveKinds.total).toBeGreaterThan(0);
+    expect(kind("promotion").mistakes).toBeGreaterThanOrEqual(1);
+    expect(kind("promotion").mistakeRate).toBeGreaterThan(kind("quiet").mistakeRate);
+    expect(kind("quiet").moves).toBeGreaterThan(0);
+  });
+
+  it("works out move kinds for plies imported before they were stored", async () => {
+    const before = (await api("GET", "/api/stats")).moveKinds;
+    app.db.run("UPDATE plies SET move_kind = NULL");
+    const after = (await api("GET", "/api/stats")).moveKinds;
+    expect(after).toEqual(before);
+    expect(app.db.get<{ n: number }>("SELECT count(*) n FROM plies WHERE ply > 0 AND move_kind IS NULL")!.n).toBe(0);
   });
 
   it("stores notebook pages and position search", async () => {
@@ -514,5 +528,351 @@ describe("derived-result cache", () => {
     count();
     expect(runs).toBe(3);
     db.close();
+  });
+});
+
+describe("streamed analysis", () => {
+  // Reads SSE events from /api/live until `until` says stop (then aborts) or the stream ends.
+  const stream = async (q: string, until?: (event: string, data: any) => boolean) => {
+    const ctl = new AbortController();
+    const r = await fetch(`${base}/api/live?${q}`, { signal: ctl.signal });
+    expect(r.headers.get("content-type")).toContain("text/event-stream");
+    const events: { event: string; data: any }[] = [];
+    const reader = r.body!.getReader();
+    let buf = "";
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += new TextDecoder().decode(value);
+        let i;
+        while ((i = buf.indexOf("\n\n")) >= 0) {
+          const chunk = buf.slice(0, i);
+          buf = buf.slice(i + 2);
+          const event = /^event: (.*)$/m.exec(chunk)?.[1] ?? "";
+          const data = JSON.parse(/^data: (.*)$/m.exec(chunk)?.[1] ?? "null");
+          events.push({ event, data });
+          if (until?.(event, data)) {
+            ctl.abort();
+            return events;
+          }
+        }
+      }
+    } catch (e) {
+      if (!ctl.signal.aborted) throw e;
+    }
+    return events;
+  };
+  const START = encodeURIComponent("lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1");
+
+  it("streams deepening lines and finishes at the time limit", async () => {
+    const ev = await stream(`sfen=${START}&moves=7g7f&multipv=2&maxMs=600`);
+    const lines = ev.filter((e) => e.event === "lines");
+    expect(lines.length).toBeGreaterThanOrEqual(2);
+    const depths = lines.map((e) => e.data.lines[0].depth);
+    expect(depths.at(-1)).toBeGreaterThan(depths[0]);
+    expect(lines[0].data.lines).toHaveLength(2);
+    expect(lines[0].data.lines[0].text).toMatch(/^△/);
+    const done = ev.at(-1)!;
+    expect(done.event).toBe("done");
+    expect(done.data.best).toMatch(/^[1-9][a-i]/);
+    expect(done.data.elapsedMs).toBeGreaterThanOrEqual(500);
+  });
+
+  it("stops the engine when the stream is closed", async () => {
+    const t0 = Date.now();
+    await stream(`sfen=${START}&maxMs=60000`, (event, data) => event === "lines" && data.lines[0].depth >= 3);
+    // The engine is free again: a normal search answers long before the 60 s limit.
+    const r = await api("POST", "/api/analyze-position", { sfen: decodeURIComponent(START), movetimeMs: 50 });
+    expect(r.best).toBeTruthy();
+    expect(Date.now() - t0).toBeLessThan(10_000);
+  });
+
+  it("rejects a bad position", async () => {
+    const r = await fetch(`${base}/api/live?sfen=nonsense`);
+    expect(r.status).toBe(400);
+  });
+});
+
+describe("variations saved into a game", () => {
+  it("adds board lines to a game as branches without touching its main line", async () => {
+    const kif = makeKif({ moves: "7g7f 3c3d 2g2f 8c8d", black: "me", white: "branchy", date: "2026/09/07" });
+    const id = (await api("POST", "/api/import", { text: kif })).results[0].id;
+    const before = (await api("GET", `/api/games/${id}`)).plies.map((p: { usi: string }) => p.usi);
+    const r = await api("POST", `/api/games/${id}/variations`, { tree: "7g7f 3c3d (8c8d 2g2f) 2g2f 8c8d (4a3b)" });
+    expect(r.branches).toBe(2);
+    const branches = await api("GET", `/api/games/${id}/branches`);
+    expect(branches.map((b: { ply: number; usis: string[] }) => [b.ply, b.usis])).toEqual([
+      [2, ["8c8d", "2g2f"]],
+      [4, ["4a3b"]],
+    ]);
+    expect((await api("GET", `/api/games/${id}`)).plies.map((p: { usi: string }) => p.usi)).toEqual(before);
+    // Merging the same lines again adds nothing; the KIF export carries them.
+    expect((await api("POST", `/api/games/${id}/variations`, { tree: "7g7f 8c8d" })).branches).toBe(2);
+    const exported = new TextDecoder("shift_jis").decode(await (await fetch(`${base}/api/games/${id}/export?format=kif`)).arrayBuffer());
+    expect(exported).toContain("変化：2手");
+    await expect(api("POST", `/api/games/${id}/variations`, { tree: "7g7f (" })).rejects.toThrow(/400|variation/);
+    await api("DELETE", `/api/games/${id}`);
+  });
+});
+
+describe("custom review decks", () => {
+  it("filters cards by opponent, tag, kind of move and side, and saves decks", async () => {
+    // ☗ "me" hangs the bishop with ▲3三角成 (a promotion) against "deckfoe".
+    const kif = makeKif({ moves: "7g7f 3c3d 8h3c+ 2a3c 2g2f", black: "me", white: "deckfoe", date: "2026/09/09" });
+    const gid = (await api("POST", "/api/import", { text: kif })).results[0].id;
+    await api("PATCH", `/api/games/${gid}`, { tags: ["deckdemo"] });
+    await api("POST", "/api/analysis", { ids: [gid] });
+    await waitIdle();
+    const mine = await api("GET", "/api/cards?opponent=deckfoe");
+    expect(mine.length).toBeGreaterThanOrEqual(1);
+    expect(mine.every((c: { game_id: number }) => c.game_id === gid)).toBe(true);
+    expect(mine[0]).toMatchObject({ opponent: "deckfoe", tags: ["deckdemo"], side: "black" });
+    expect(mine[0].moveKinds).toContain("promotion");
+    expect(await api("GET", "/api/cards?tag=deckdemo")).toHaveLength(mine.length);
+    expect((await api("GET", "/api/cards?opponent=deckfoe&moveKind=drop")).length).toBe(0);
+    expect((await api("GET", "/api/cards?opponent=deckfoe&side=white")).length).toBe(0);
+
+    const facets = await api("GET", "/api/cards/facets");
+    expect(facets.opponent.find((f: { value: string }) => f.value === "deckfoe").total).toBe(mine.length);
+    expect(facets.tag.map((f: { value: string }) => f.value)).toContain("deckdemo");
+
+    const deck = await api("POST", "/api/decks", { name: "vs deckfoe", filter: { opponent: "deckfoe", due: true, bogus: 1 } });
+    expect(deck.filter).toEqual({ opponent: "deckfoe" });
+    const decks = await api("GET", "/api/decks");
+    expect(decks.find((d: { id: number }) => d.id === deck.id)).toMatchObject({ name: "vs deckfoe", total: mine.length });
+    expect(await api("GET", `/api/cards?deck=${deck.id}`)).toHaveLength(mine.length);
+    const plan = await api("GET", "/api/today");
+    expect(plan.deck).toMatchObject({ id: deck.id, name: "vs deckfoe" });
+    await expect(api("POST", "/api/decks", { name: " " })).rejects.toThrow(/name/);
+    await api("DELETE", `/api/decks/${deck.id}`);
+    expect((await api("GET", "/api/decks")).some((d: { id: number }) => d.id === deck.id)).toBe(false);
+    await api("DELETE", `/api/games/${gid}`);
+  });
+});
+
+describe("opponent prep sheet", () => {
+  it("writes a notebook page about one opponent", async () => {
+    const moves = SHIKEN_VS_FUNA.split(" ");
+    const ids: number[] = [];
+    for (const [usi, date] of [
+      [SHIKEN_VS_FUNA, "2026/09/10"],
+      [moves.slice(0, 12).join(" "), "2026/09/11"],
+      ["7g7f 3c3d 8h3c+ 2a3c 2g2f", "2026/09/12"],
+    ]) {
+      ids.push((await api("POST", "/api/import", { text: makeKif({ moves: usi, black: "me", white: "prepfoe", date }) })).results[0].id);
+    }
+    await api("POST", "/api/analysis", { ids });
+    await waitIdle();
+    const page = await api("POST", "/api/notes/prep", { opponent: "prepfoe" });
+    expect(page.notebook).toBe("Opponents");
+    expect(page.title).toBe("対策 vs prepfoe");
+    const body: string = page.body;
+    expect(body).toMatch(/3 games · \d勝 \d敗/);
+    expect(body).toContain("| ☗ | 四間飛車 |");
+    expect(body).toContain("Positions I keep reaching");
+    expect(body).toMatch(/reached in 2 games\n\n:::shogi-view\{game=\d+ ply=\d+\}/);
+    expect(body).toContain("My costliest moves against them");
+    expect(body).toContain("#/review?opponent=prepfoe");
+    expect(body).toContain(`](#/game/${ids[2]})`);
+    await expect(api("POST", "/api/notes/prep", { opponent: "nobody-at-all" })).rejects.toThrow(/404|no games/);
+    for (const id of ids) await api("DELETE", `/api/games/${id}`);
+    await api("DELETE", `/api/pages/${page.id}`);
+  });
+});
+
+describe("importing several games at once", () => {
+  it("splits pasted text and multi-game files into games", async () => {
+    const kifs = ["7g7f 3c3d 2g2f", "2g2f 8c8d 2f2e", "5g5f 5c5d 2h5h"].map((m, i) => makeKif({ moves: m, black: "me", white: `multi${i}`, date: `2026/09/2${i}` }));
+    const r = await api("POST", "/api/import", { text: kifs.join("\n") });
+    expect(r.results.map((x: { status: string }) => x.status)).toEqual(["added", "added", "added"]);
+    // The same games in one Shift_JIS file: all already there.
+    const file = { name: "three.kif", data: Buffer.from(sjis(kifs.join("\r\n"))).toString("base64") };
+    const again = await api("POST", "/api/import", { files: [file] });
+    expect(again.results.map((x: { status: string; name: string }) => [x.status, x.name])).toEqual([
+      ["duplicate", "three.kif"],
+      ["duplicate", "three.kif #2"],
+      ["duplicate", "three.kif #3"],
+    ]);
+    for (const x of r.results) await api("DELETE", `/api/games/${x.id}`);
+  });
+});
+
+describe("second opinion", () => {
+  it("compares a game's analysis with a second engine and caches its evals", async () => {
+    // ▲3三角成 takes a pawn and △同角 takes the bishop back.
+    const kif = makeKif({ moves: "7g7f 8c8d 8h3c+ 2b3c 2g2f 4a3b", black: "me", white: "second", date: "2026/09/30" });
+    const gid = (await api("POST", "/api/import", { text: kif })).results[0].id;
+    await api("POST", "/api/analysis", { ids: [gid] });
+    await waitIdle();
+    expect((await api("GET", `/api/games/${gid}/compare`)).configured).toBe(false);
+    await expect(api("POST", `/api/games/${gid}/compare`)).rejects.toThrow(/second engine/);
+
+    await api("PUT", "/api/settings", { engine2: { path: MOCK, options: { Style: "naive" }, movetimeMs: 30 } });
+    const run = async () => {
+      const started = await api("POST", `/api/games/${gid}/compare`);
+      expect(started.total).toBe(7);
+      for (let i = 0; i < 200; i++) {
+        const s = await api("GET", `/api/games/${gid}/compare`);
+        if (!s.running) return s;
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      throw new Error("comparison did not finish");
+    };
+    const t0 = Date.now();
+    const s = await run();
+    const firstMs = Date.now() - t0;
+    expect(s.error).toBe("");
+    expect(s.done).toBe(7);
+    expect(s.engine).toBe("MockEngine 1.0");
+    // The naive engine values a bishop like a pawn, so it sees that trade as even: the engines disagree on it.
+    const r = s.result;
+    expect(r.moves).toBe(6);
+    expect(r.agreement).toBeLessThan(100);
+    const d = r.disagreements.find((x: { ply: number }) => x.ply === 3);
+    expect(d).toBeTruthy();
+    expect(d.main.level).toBeGreaterThanOrEqual(3);
+    expect(d.second.level).toBeLessThan(3);
+    expect(d.text).toContain("角");
+    // Again: every position comes from the cache, kept apart from the main engine's.
+    const t1 = Date.now();
+    expect((await run()).result).toEqual(r);
+    expect(Date.now() - t1).toBeLessThan(Math.max(firstMs, 200));
+    expect(app.db.get<{ n: number }>("SELECT COUNT(*) n FROM evals WHERE limit_key = 'movetime:30|Style=naive'")!.n).toBeGreaterThanOrEqual(7);
+    await api("PUT", "/api/settings", { engine2: { path: "", options: {}, movetimeMs: 1000 } });
+    await api("DELETE", `/api/games/${gid}`);
+  });
+});
+
+describe("saved studies", () => {
+  it("creates, updates, lists and deletes studies, keeping only legal moves", async () => {
+    const START = "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1";
+    const tree = { usi: "", comment: "start", children: [{ usi: "7g7f", comment: "角道", children: [{ usi: "3c3d", children: [] }, { usi: "1a1a", children: [] }] }] };
+    const s = await api("POST", "/api/studies", { title: " 角換わり研究 ", start_sfen: START, tree, game_id: 999999 });
+    expect(s).toMatchObject({ title: "角換わり研究", start_sfen: START, game_id: null });
+    expect(s.tree).toEqual({ usi: "", comment: "start", children: [{ usi: "7g7f", comment: "角道", children: [{ usi: "3c3d", children: [] }] }] });
+
+    s.tree.children[0].children[0].comment = "受ける";
+    const u = await api("PUT", `/api/studies/${s.id}`, { tree: s.tree });
+    expect(u.tree.children[0].children[0].comment).toBe("受ける");
+    expect(u.title).toBe("角換わり研究");
+    expect((await api("PUT", `/api/studies/${s.id}`, { title: "renamed" })).tree).toEqual(u.tree);
+
+    const list = await api("GET", "/api/studies");
+    expect(list[0]).toMatchObject({ id: s.id, title: "renamed", moves: 2 });
+    expect(list[0].tree).toBeUndefined();
+    await expect(api("POST", "/api/studies", { start_sfen: "nonsense" })).rejects.toThrow(/400|bad start/);
+    await expect(api("PUT", "/api/studies/999999", { title: "x" })).rejects.toThrow(/not found/);
+    await api("DELETE", `/api/studies/${s.id}`);
+    await expect(api("GET", `/api/studies/${s.id}`)).rejects.toThrow(/not found/);
+  });
+});
+
+describe("comments saved into a game", () => {
+  it("adds a study's comments where the game has none and keeps the game's own", async () => {
+    const kif = makeKif({ moves: "7g7f 3c3d 2g2f", black: "me", white: "commenter", date: "2026/10/01" });
+    const id = (await api("POST", "/api/import", { text: kif })).results[0].id;
+    await api("PUT", `/api/games/${id}/comments/1`, { comment: "my own note" });
+    const tree = { usi: "", children: [{ usi: "7g7f", comment: "study note", children: [{ usi: "3c3d", comment: "受け", children: [] }, { usi: "8c8d", comment: "居飛車", children: [] }] }] };
+    expect((await api("POST", `/api/games/${id}/variations`, { tree })).branches).toBe(1);
+    const g = await api("GET", `/api/games/${id}`);
+    expect(g.plies[1].comment).toBe("my own note");
+    expect((await api("GET", `/api/games/${id}/branches`))[0]).toMatchObject({ usis: ["8c8d"], comment: "居飛車" });
+    const kifOut = new TextDecoder("shift_jis").decode(await (await fetch(`${base}/api/games/${id}/export?format=kif`)).arrayBuffer());
+    expect(kifOut).toContain("*受け");
+    await api("DELETE", `/api/games/${id}`);
+  });
+});
+
+describe("drilling a study", () => {
+  it("asks the drilled side's positions, accepts variations and schedules answers", async () => {
+    const START = "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1";
+    // ☗7六歩 △3四歩 ☗2六歩 (or ☗6六歩) △8四歩, with a comment on the main ☗2六歩.
+    const tree = {
+      usi: "",
+      children: [{ usi: "7g7f", children: [{ usi: "3c3d", children: [
+        { usi: "2g2f", comment: "居飛車", children: [{ usi: "8c8d", children: [] }] },
+        { usi: "6g6f", children: [] },
+      ] }] }],
+    };
+    const st = await api("POST", "/api/studies", { title: "drill me", start_sfen: START, tree });
+    const black = await api("GET", `/api/studies/${st.id}/drill?side=black`);
+    expect(black).toMatchObject({ title: "drill me", total: 2, due: 2 });
+    expect(black.positions.map((p: { depth: number }) => p.depth)).toEqual([0, 2]);
+    const second = black.positions[1];
+    expect(second.accepted.map((a: { usi: string; main: boolean }) => [a.usi, a.main])).toEqual([["2g2f", true], ["6g6f", false]]);
+    expect(second.comment).toBe("居飛車");
+    expect(second.lastMove.usi).toBe("3c3d");
+    expect(second.path).toEqual([0, 0]);
+    // ☖ answers △3四歩 and △8四歩; after ☗6六歩 the study has no ☖ move, so nothing is asked there.
+    expect((await api("GET", `/api/studies/${st.id}/drill?side=white`)).total).toBe(2);
+
+    // A variation counts as right and pushes the position back; a wrong move keeps one due.
+    const ok = await api("POST", `/api/studies/${st.id}/drill`, { side: "black", sfen: second.sfen, usi: "6g6f" });
+    expect(ok).toMatchObject({ correct: true, main: false });
+    expect(ok.dueAt).toBeGreaterThan(Date.now() + 12 * 3600 * 1000);
+    const bad = await api("POST", `/api/studies/${st.id}/drill`, { side: "black", sfen: black.positions[0].sfen, usi: "2g2f" });
+    expect(bad.correct).toBe(false);
+    expect(bad.dueAt).toBeLessThan(Date.now() + 3600 * 1000);
+    // The missed one comes back in ten minutes (SM-2 relearning), so nothing is due this second.
+    const after = await api("GET", `/api/studies/${st.id}/drill?side=black`);
+    expect(after.due).toBe(0);
+    expect((await api("GET", `/api/studies/${st.id}/drill?side=black&all=1`)).positions).toHaveLength(2);
+    expect((await api("GET", "/api/drill/due")).find((d: { id: number }) => d.id === st.id)).toMatchObject({ side: "black", total: 2 });
+
+    // Editing the study keeps the history of positions that are still in it.
+    tree.children[0].children[0].children.push({ usi: "5g5f", children: [] });
+    await api("PUT", `/api/studies/${st.id}`, { tree });
+    const edited = await api("GET", `/api/studies/${st.id}/drill?side=black&all=1`);
+    expect(edited.positions.find((p: { depth: number }) => p.depth === 2).isNew).toBe(false);
+
+    await expect(api("GET", `/api/studies/${st.id}/drill?side=red`)).rejects.toThrow(/side/);
+    await expect(api("POST", `/api/studies/${st.id}/drill`, { side: "black", sfen: START.replace(" b ", " w "), usi: "3c3d" })).rejects.toThrow(/no such position/);
+    await api("DELETE", `/api/studies/${st.id}`);
+    expect((await api("GET", "/api/drill/due")).some((d: { id: number }) => d.id === st.id)).toBe(false);
+  });
+});
+
+describe("threats", () => {
+  it("shows what the opponent would play if the side to move passed, and a mate threat", async () => {
+    // ☗ king on 5九, a ☖ pawn on 5七 and a gold in ☖'s hand: if ☗ passes, △5八金打 is mate.
+    const sfen = "4k4/9/9/9/9/9/4p4/9/4K4 b g 1";
+    const r = await api("POST", "/api/threat", { sfen, timeMs: 50 });
+    expect(r.status).toBe("ok");
+    expect(r.passedSfen.split(" ")[1]).toBe("w");
+    expect(r.mate).toMatchObject({ moves: ["G*5h"] });
+    expect(r.mate.text).toContain("５八金");
+    expect(r.move).toBeTruthy();
+    // In check: nothing to pass.
+    expect(await api("POST", "/api/threat", { sfen: "4k4/9/9/9/9/9/9/4r4/4K4 b - 1" })).toEqual({ status: "check" });
+    await expect(api("POST", "/api/threat", { sfen: "nonsense" })).rejects.toThrow(/bad sfen/);
+  });
+});
+
+describe("missed threats", () => {
+  it("marks a mistake that ignored the opponent's threat", async () => {
+    // The ☖ bishop on 6四 eyes the bare ☗ rook on 2八; ☗9六歩 ignores it and △2八角成 takes it.
+    const { Record: Rec, RecordMetadataKey, exportKIF } = await import("tsshogi");
+    const rec = Rec.newByUSI("position sfen 4k4/9/9/3b5/9/9/P8/7R1/4K4 b - 1 moves 9g9f 6d2h+") as InstanceType<typeof Rec>;
+    rec.metadata.setStandardMetadata(RecordMetadataKey.BLACK_NAME, "me");
+    rec.metadata.setStandardMetadata(RecordMetadataKey.WHITE_NAME, "threatener");
+    rec.metadata.setStandardMetadata(RecordMetadataKey.START_DATETIME, "2026/10/02");
+    const id = (await api("POST", "/api/import", { text: exportKIF(rec) })).results[0].id;
+    await api("POST", "/api/analysis", { ids: [id] });
+    await waitIdle();
+    const g = await api("GET", `/api/games/${id}`);
+    const p1 = g.plies[1];
+    expect(p1.level).toBeGreaterThanOrEqual(3);
+    expect(p1.threat_usi).toBe("6d2h+");
+    expect(p1.missedThreat).toBe(true);
+    expect(p1.threatText).toContain("２八角成");
+    // Only flagged moves get a threat.
+    expect(g.plies[2].threat_usi).toBe("");
+    const card = (await api("GET", "/api/cards?opponent=threatener"))[0];
+    expect(card.threatText).toContain("２八角成");
+    const s = await api("GET", "/api/stats");
+    expect(s.threats.missed).toBeGreaterThanOrEqual(1);
+    expect(s.threats.mistakes).toBeGreaterThanOrEqual(s.threats.missed);
+    await api("DELETE", `/api/games/${id}`);
   });
 });

@@ -134,8 +134,8 @@ function next() {
   gap: 4px;
 }
 .seg .on {
-  border-color: var(--accent, #d9a441);
-  color: var(--accent, #d9a441);
+  border-color: var(--gold);
+  color: var(--gold);
 }
 .layout {
   display: grid;

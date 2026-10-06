@@ -15,14 +15,16 @@ export type LanInfo = { enabled: boolean; running: boolean; port: number; urls: 
 const COOKIE = "kifu_lan";
 const DEFAULT_PORT = 3211;
 
-/** Writes allowed from the network: answering and rating cards, guessing moves, playing positions out. */
+/** Writes allowed from the network: answering and rating cards, guessing moves, playing positions out, drilling studies. */
 const WRITES: [string, RegExp][] = [
   ["POST", /^\/api\/cards\/\d+\/(answer|rate)$/],
   ["PATCH", /^\/api\/cards\/\d+$/],
   ["POST", /^\/api\/cards$/],
   ["POST", /^\/api\/games\/\d+\/guess$/],
   ["POST", /^\/api\/analyze-position$/],
+  ["POST", /^\/api\/threat$/],
   ["POST", /^\/api\/tsume\/\d+\/result$/],
+  ["POST", /^\/api\/studies\/\d+\/drill$/],
 ];
 /** Reads that stay local: the token itself and the whole-library backup. */
 const LOCAL_READS = [/^\/api\/lan(\/|$)/, /^\/api\/backups?(\/|$)/];

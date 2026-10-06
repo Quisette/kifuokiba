@@ -4,6 +4,7 @@
 import { gradeMoves, winRate, type Eval } from "../core/grading.js";
 import type { AnalysisQueue } from "./analysis.js";
 import { Library } from "./library.js";
+import { moveText } from "../core/notation.js";
 
 export type GuessMove = { usi: string; text: string; loss: number | null; level: number };
 export type GuessResult = {
@@ -47,8 +48,8 @@ export async function checkGuess(lib: Library, analysis: AnalysisQueue, gameId: 
   return {
     ply,
     match,
-    guess: { usi, text: Library.moveText(before.sfen, usi), ...grade(evalGuess), score: evalGuess.score ?? null, mate: evalGuess.mate ?? null },
-    played: { usi: after.usi, text: Library.moveText(before.sfen, after.usi), ...grade(evalPlayed) },
-    best: bestUsi ? { usi: bestUsi, text: Library.moveText(before.sfen, bestUsi), pv: bestPv } : null,
+    guess: { usi, text: moveText(before.sfen, usi), ...grade(evalGuess), score: evalGuess.score ?? null, mate: evalGuess.mate ?? null },
+    played: { usi: after.usi, text: moveText(before.sfen, after.usi), ...grade(evalPlayed) },
+    best: bestUsi ? { usi: bestUsi, text: moveText(before.sfen, bestUsi), pv: bestPv } : null,
   };
 }

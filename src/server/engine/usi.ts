@@ -27,6 +27,8 @@ export type SearchLimit = {
   movetimeMs?: number;
   nodes?: number;
   depth?: number;
+  /** "go infinite": runs until stop() or the signal aborts it. */
+  infinite?: boolean;
 };
 
 export type SearchLine = {
@@ -158,21 +160,30 @@ export class UsiEngine {
   search(
     position: string,
     limit: SearchLimit,
-    opts: { multipv?: number; onInfo?: (info: USIInfoCommand) => void } = {},
+    opts: { multipv?: number; onInfo?: (info: USIInfoCommand) => void; onLines?: (lines: SearchLine[]) => void; onStart?: () => void; signal?: AbortSignal } = {},
   ): Promise<SearchResult> {
     const run = async () => {
+      // Cancelled while waiting for the engine: never sent.
+      if (opts.signal?.aborted) throw new Error("search cancelled");
       if (!this.running) throw new Error("engine is not running");
       const multipv = opts.multipv ?? 1;
       if (this.hasOption("MultiPV")) this.send(`setoption name MultiPV value ${multipv}`);
       const lines = new Map<number, SearchLine>();
       this.send(`position ${position}`);
-      const go = limit.nodes
-        ? `go nodes ${limit.nodes}`
-        : limit.depth
-          ? `go depth ${limit.depth}`
-          : `go movetime ${limit.movetimeMs ?? 1000}`;
+      const go = limit.infinite
+        ? "go infinite"
+        : limit.nodes
+          ? `go nodes ${limit.nodes}`
+          : limit.depth
+            ? `go depth ${limit.depth}`
+            : `go movetime ${limit.movetimeMs ?? 1000}`;
       this.send(go);
-      const budget = (limit.movetimeMs ?? 0) + 60_000;
+      opts.onStart?.();
+      // A running search that is aborted is stopped; its bestmove still arrives and ends it.
+      const onAbort = () => this.send("stop");
+      opts.signal?.addEventListener("abort", onAbort);
+      const budget = limit.infinite ? 0 : (limit.movetimeMs ?? 0) + 60_000;
+      const sortedLines = () => [...lines.values()].sort((a, b) => a.multipv - b.multipv);
       const best = await this.waitFor(
         (l) => l.startsWith("bestmove"),
         budget,
@@ -191,10 +202,11 @@ export class UsiEngine {
             depth: info.depth,
             nodes: info.nodes,
           });
+          opts.onLines?.(sortedLines());
         },
-      );
+      ).finally(() => opts.signal?.removeEventListener("abort", onAbort));
       const bestmove = best.split(" ")[1] ?? "resign";
-      const sorted = [...lines.values()].sort((a, b) => a.multipv - b.multipv);
+      const sorted = sortedLines();
       if (sorted.length && bestmove !== "resign" && bestmove !== "win" && sorted[0].pv[0] !== bestmove) {
         sorted[0].pv = [bestmove];
       }

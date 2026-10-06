@@ -21,10 +21,10 @@
       </div>
     </div>
     <div v-if="showPaste" class="paste">
-      <label for="paste-box" class="cap">Paste a kifu (KIF, KI2, CSA, USI…)</label>
+      <label for="paste-box" class="cap">Paste kifu (KIF, KI2, CSA, USI…), one game or several</label>
       <textarea id="paste-box" v-model="pasteText" rows="6" placeholder="手合割：平手&#10;１ ７六歩(77)&#10;…"></textarea>
       <div class="row">
-        <button type="button" class="btn primary" :disabled="!pasteText.trim() || busy" @click="importPaste">Import pasted kifu</button>
+        <button type="button" class="btn primary" :disabled="!pasteText.trim() || busy" @click="importPaste">Import pasted text</button>
         <button type="button" class="btn" @click="readClipboard">From clipboard</button>
       </div>
     </div>

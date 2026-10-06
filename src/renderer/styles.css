@@ -16,6 +16,30 @@
   --loss: #d9773d;
   --draw: #9a8c74;
   --good: #6fae6a;
+  --danger: #e0503a;
+  --win-rgb: 95 149 208;
+  --loss-rgb: 217 119 61;
+  /* Text on gold, win, loss and draw fills. */
+  --on-accent: #17120d;
+  --link: #e2b45e;
+  --link-hover: #f3cf86;
+  /* Hover borders, faint rules, table hover rows, chart grid and axis. */
+  --edge: #8a6a3a;
+  --line-soft: #2a2017;
+  --row-alt: #1f1812;
+  --grid: #2c2219;
+  --axis: #5a4630;
+  --side-white: #8a7a5c;
+  --l1: #a08f6c;
+  /* Review calendar, from one review a day to many. */
+  --heat-1: #5a4320;
+  --heat-2: #8a6a2e;
+  --heat-3: #b98d3c;
+  --heat-4: #e3b45a;
+  /* Opening-book marks. */
+  --info-edge: #6a8fb8;
+  --info-text: #9cc0e8;
+  --info-bg: #2a3a4d;
   --serif: "Zen Old Mincho", "Hiragino Mincho ProN", "Yu Mincho", serif;
   --sans: "IBM Plex Sans JP", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
 
@@ -34,6 +58,49 @@
   color-scheme: dark;
 }
 
+/* "Washi" light theme: the same warm tones on paper. renderer/theme.ts sets
+   data-theme from the per-device choice (or the system setting). */
+:root[data-theme="light"] {
+  --bg: #f6f0e4;
+  --bg-deep: #ebe2d0;
+  --panel: #fffaf0;
+  --panel-2: #f3ead9;
+  --input: #ffffff;
+  --line: #e2d5bd;
+  --line-2: #cbb894;
+  --text: #2a2016;
+  --muted: #6b5a40;
+  --gold: #8a5d0e;
+  --gold-soft: #6e4a0b;
+  --gold-bg: #f5e6c4;
+  --win: #2f62a0;
+  --loss: #a8461a;
+  --draw: #6f6350;
+  --good: #3d7d38;
+  --danger: #b8321f;
+  --win-rgb: 47 98 160;
+  --loss-rgb: 168 70 26;
+  --on-accent: #fffaf0;
+  --link: #8a5d0e;
+  --link-hover: #5c3d07;
+  --edge: #a8875a;
+  --line-soft: #ece2cf;
+  --row-alt: #f5ecdc;
+  --grid: #e8dcc6;
+  --axis: #b9a37d;
+  --side-white: #8f7f63;
+  --l1: #7d6d4f;
+  --heat-1: #ecd9ae;
+  --heat-2: #d9b56a;
+  --heat-3: #b98d3c;
+  --heat-4: #8a5d0e;
+  --info-edge: #6a8fb8;
+  --info-text: #2f5785;
+  --info-bg: #e3edf8;
+  --shadow-color: rgba(60, 40, 10, 0.25);
+  color-scheme: light;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -46,10 +113,10 @@ body {
   font-size: 14px;
 }
 a {
-  color: #e2b45e;
+  color: var(--link);
 }
 a:hover {
-  color: #f3cf86;
+  color: var(--link-hover);
 }
 h1,
 h2,
@@ -94,7 +161,7 @@ h3 {
   white-space: nowrap;
 }
 .btn:hover {
-  border-color: #8a6a3a;
+  border-color: var(--edge);
 }
 .btn:disabled {
   opacity: 0.5;
@@ -102,7 +169,7 @@ h3 {
 }
 .btn.primary {
   background: var(--gold);
-  color: var(--bg);
+  color: var(--on-accent);
   border-color: var(--gold);
   font-weight: 600;
 }
@@ -183,11 +250,11 @@ label.field {
   font-weight: 600;
   padding: 1px 6px;
   border-radius: 3px;
-  color: var(--bg);
+  color: var(--on-accent);
   white-space: nowrap;
 }
 .mark.l1 {
-  background: #a08f6c;
+  background: var(--l1);
 }
 .mark.l2 {
   background: var(--gold);
@@ -208,7 +275,7 @@ label.field {
   justify-content: center;
   font-family: var(--serif);
   font-weight: 900;
-  color: var(--bg);
+  color: var(--on-accent);
   flex: none;
 }
 .res.win {
@@ -243,11 +310,11 @@ table.grid th button {
 }
 table.grid td {
   padding: 8px 10px;
-  border-bottom: 1px solid #2a2017;
+  border-bottom: 1px solid var(--line-soft);
   white-space: nowrap;
 }
 table.grid tr.row:hover td {
-  background: #1f1812;
+  background: var(--row-alt);
   cursor: pointer;
 }
 .scroll-x {

@@ -4,6 +4,7 @@ import { RecordFileFormat } from "../src/core/recordFile.js";
 import { Db } from "../src/server/db.js";
 import { Library } from "../src/server/library.js";
 import { makeKif, sjis, SHIKEN_VS_FUNA } from "./fixtures.js";
+import { exportGame } from "../src/server/records.js";
 
 let seed = 7;
 const rand = (n: number) => ((seed = (Math.imul(seed, 1103515245) + 12345) & 0x7fffffff) % n);
@@ -57,7 +58,7 @@ describe("import fuzzing", () => {
     // Everything that was added can be opened and exported.
     for (const g of lib.listGames()) {
       expect(lib.getGame(g.id)).toBeTruthy();
-      expect(lib.exportGame(g.id, RecordFileFormat.KIF)).toBeTruthy();
+      expect(exportGame(lib, g.id, RecordFileFormat.KIF)).toBeTruthy();
     }
   });
 });

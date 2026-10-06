@@ -25,6 +25,8 @@
     <Review v-else-if="route.name === 'review'" />
     <Stats v-else-if="route.name === 'stats'" />
     <Explorer v-else-if="route.name === 'explorer'" />
+    <Board v-else-if="route.name === 'board'" :key="route.params[0] ?? ''" />
+    <StudyDrill v-else-if="route.name === 'drill'" :key="route.params[0]" />
     <RecordGame v-else-if="route.name === 'record'" />
     <Player v-else-if="route.name === 'player'" />
     <Repertoire v-else-if="route.name === 'repertoire'" />
@@ -56,6 +58,8 @@ import Game from "./views/Game.vue";
 import Review from "./views/Review.vue";
 import Stats from "./views/Stats.vue";
 import Explorer from "./views/Explorer.vue";
+import Board from "./views/Board.vue";
+import StudyDrill from "./views/StudyDrill.vue";
 import RecordGame from "./views/RecordGame.vue";
 import Player from "./views/Player.vue";
 import Notebooks from "./views/Notebooks.vue";
@@ -73,10 +77,11 @@ const nav = [
   { name: "review", label: "復習 Review" },
   { name: "stats", label: "統計 Stats" },
   { name: "explorer", label: "定跡 Explorer" },
+  { name: "board", label: "検討 Board" },
   { name: "notes", label: "研究 Notes" },
   { name: "settings", label: "設定 Settings" },
 ].filter((n) => !remote || (n.name !== "notes" && n.name !== "settings"));
-const active = (name: string) => route.name === name || (name === "library" && (route.name === "game" || route.name === "record" || route.name === "guess")) || (name === "stats" && route.name === "player") || (name === "review" && (route.name === "puzzles" || route.name === "practice")) || (name === "explorer" && route.name === "repertoire");
+const active = (name: string) => route.name === name || (name === "library" && (route.name === "game" || route.name === "record" || route.name === "guess")) || (name === "stats" && route.name === "player") || (name === "review" && (route.name === "puzzles" || route.name === "practice")) || (name === "explorer" && route.name === "repertoire") || (name === "board" && route.name === "drill");
 
 const due = ref(0);
 async function refreshDue() {
@@ -100,6 +105,7 @@ const shortcuts = [
       ["f", "Flip the board"],
     ],
   },
+  { title: "Study board", keys: [["← →", "Previous / next move"], ["Home End", "Start / end of the line"], ["f", "Flip the board"]] },
   { title: "Review", keys: [["1 2 3 4", "Again / Hard / Good / Easy"], ["Space Enter", "The suggested grade"]] },
   { title: "Guess the move", keys: [["→ Enter", "Next move"], ["s", "Skip this move"], ["Backspace", "Take the last guess back"]] },
 ];
@@ -128,9 +134,19 @@ async function onGlobalPaste(e: ClipboardEvent) {
   e.preventDefault();
   try {
     const r = await api.post<{ results: { status: string; id: number }[] }>("/api/import", { text });
-    const first = r.results.find((x) => x.status !== "error");
+    const ok = r.results.filter((x) => x.status !== "error");
+    const first = ok[0];
     if (!first) return toast("That doesn't look like a kifu.");
     live.libraryVersion++;
+    if (r.results.length > 1) {
+      // Several games: show them in the library rather than opening one.
+      const added = ok.filter((x) => x.status === "added").length;
+      const dups = ok.length - added;
+      const failed = r.results.length - ok.length;
+      toast(`Imported ${added} game${added === 1 ? "" : "s"}${dups ? `, ${dups} already there` : ""}${failed ? `, ${failed} unreadable` : ""}.`);
+      location.hash = "#/library";
+      return;
+    }
     toast(first.status === "added" ? "Imported the kifu from the clipboard." : "Already in the library; opening it.");
     location.hash = `#/game/${first.id}`;
   } catch (err) {
@@ -151,8 +167,8 @@ watch(() => [live.libraryVersion, route.name], refreshDue);
 <style scoped>
 .help {
   color: var(--text);
-  background: var(--panel, #1e1610);
-  border: 1px solid #8a6a3a;
+  background: var(--panel);
+  border: 1px solid var(--edge);
   border-radius: 10px;
   padding: 20px 24px;
   min-width: min(420px, 90vw);
@@ -176,7 +192,7 @@ watch(() => [live.libraryVersion, route.name], refreshDue);
 kbd {
   font-family: var(--mono, monospace);
   font-size: 12px;
-  border: 1px solid var(--line-2, #4a3a28);
+  border: 1px solid var(--line-2);
   border-radius: 4px;
   padding: 1px 6px;
   justify-self: start;
@@ -213,7 +229,7 @@ kbd {
   padding-top: 4px;
   font-family: var(--serif);
   font-weight: 900;
-  color: var(--bg);
+  color: var(--on-accent);
   font-size: 16px;
 }
 nav {

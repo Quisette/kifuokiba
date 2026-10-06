@@ -137,6 +137,27 @@ CREATE TABLE IF NOT EXISTS tsume (
   created_at INTEGER NOT NULL,
   UNIQUE (collection, sfen)
 );
+CREATE TABLE IF NOT EXISTS studies (
+  id INTEGER PRIMARY KEY,
+  title TEXT NOT NULL,
+  start_sfen TEXT NOT NULL,
+  tree TEXT NOT NULL DEFAULT '{"usi":"","children":[]}',
+  game_id INTEGER REFERENCES games(id) ON DELETE SET NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS study_drill (
+  study_id INTEGER NOT NULL REFERENCES studies(id) ON DELETE CASCADE,
+  side TEXT NOT NULL,
+  sfen_key TEXT NOT NULL,
+  repetitions INTEGER NOT NULL DEFAULT 0,
+  interval_days REAL NOT NULL DEFAULT 0,
+  ease REAL NOT NULL DEFAULT 2.5,
+  due_at INTEGER NOT NULL,
+  lapses INTEGER NOT NULL DEFAULT 0,
+  last_review_at INTEGER,
+  PRIMARY KEY (study_id, side, sfen_key)
+);
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -163,6 +184,10 @@ export class Db {
     // My own annotation symbol on a move: !, ?, !!, ??, !? or ?!.
     this.ensureColumn("plies", "user_mark", "TEXT NOT NULL DEFAULT ''");
     this.ensureColumn("games", "clear_white_ply", "INTEGER");
+    // Comma-separated kinds of the move (see core/movekind.ts); NULL until worked out.
+    this.ensureColumn("plies", "move_kind", "TEXT");
+    // For flagged moves: the threat (null-move best reply) in the position before the move.
+    this.ensureColumn("plies", "threat_usi", "TEXT NOT NULL DEFAULT ''");
   }
 
   private ensureColumn(table: string, column: string, decl: string) {

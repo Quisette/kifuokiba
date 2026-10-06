@@ -4,6 +4,7 @@
 import { Library } from "./library.js";
 import { sfenKey } from "./db.js";
 import type { OpeningBook } from "./book.js";
+import { moveText } from "../core/notation.js";
 
 export type RepertoireMove = { usi: string; text: string; count: number; avgLoss: number | null; good: boolean; book: boolean; engine: boolean };
 export type RepertoirePosition = {
@@ -34,7 +35,7 @@ export function repertoire(
       .map((g) => g.id),
   );
   // Move names cost a position parse each; counts-only callers skip them.
-  const text = opts.withText === false ? () => "" : (sfen: string, usi: string) => Library.moveText(sfen, usi);
+  const text = opts.withText === false ? () => "" : (sfen: string, usi: string) => moveText(sfen, usi);
   if (!mine.size) return [];
 
   // My moves in the opening: the position before (prev) and the move played (cur).

@@ -10,8 +10,8 @@
       @mousemove="onHover"
       @mouseleave="hover = null"
     >
-      <rect x="0" y="0" :width="W" :height="H / 2" fill="rgba(95,149,208,0.04)" />
-      <line x1="0" :y1="H / 2" :x2="W" :y2="H / 2" stroke="#5a4630" stroke-width="1" vector-effect="non-scaling-stroke" />
+      <rect x="0" y="0" :width="W" :height="H / 2" style="fill: rgb(var(--win-rgb) / 0.04)" />
+      <line x1="0" :y1="H / 2" :x2="W" :y2="H / 2" style="stroke: var(--axis)" stroke-width="1" vector-effect="non-scaling-stroke" />
       <line
         v-for="g in gridLines"
         :key="g"
@@ -19,17 +19,17 @@
         :y1="g"
         :x2="W"
         :y2="g"
-        stroke="#2c2219"
+        style="stroke: var(--grid)"
         stroke-width="1"
         vector-effect="non-scaling-stroke"
       />
-      <polygon v-if="areaPts" :points="areaPts" fill="#5f95d0" fill-opacity="0.2" />
+      <polygon v-if="areaPts" :points="areaPts" style="fill: var(--win)" fill-opacity="0.2" />
       <polyline
         v-for="(seg, i) in segments"
         :key="i"
         :points="seg"
         fill="none"
-        stroke="#5f95d0"
+        style="stroke: var(--win)"
         stroke-width="2"
         vector-effect="non-scaling-stroke"
         stroke-linejoin="round"
@@ -39,7 +39,7 @@
         y1="0"
         :x2="x(current)"
         :y2="H"
-        stroke="#d4a24c"
+        style="stroke: var(--gold)"
         stroke-width="1.5"
         stroke-dasharray="4 3"
         vector-effect="non-scaling-stroke"
@@ -50,7 +50,7 @@
         y1="0"
         :x2="x(hover)"
         :y2="H"
-        stroke="#b7a68a"
+        style="stroke: var(--muted)"
         stroke-width="1"
         vector-effect="non-scaling-stroke"
       />
@@ -80,7 +80,7 @@
         :height="b.h"
         :fill="b.color"
       />
-      <line :x1="x(current)" y1="0" :x2="x(current)" :y2="TH" stroke="#d4a24c" stroke-width="1.5" stroke-dasharray="4 3" vector-effect="non-scaling-stroke" />
+      <line :x1="x(current)" y1="0" :x2="x(current)" :y2="TH" style="stroke: var(--gold)" stroke-width="1.5" stroke-dasharray="4 3" vector-effect="non-scaling-stroke" />
     </svg>
     <div class="axis">
       <span>0</span>
@@ -156,7 +156,7 @@ const times = computed(() => {
         .map((p) => ({
           ply: p.ply,
           h: Math.max(1.5, Math.sqrt(p.elapsed_ms / max) * TH),
-          color: p.level >= 3 ? "#d9773d" : p.side === "white" ? "#8a7a5c" : "#d4a24c",
+          color: p.level >= 3 ? "var(--loss)" : p.side === "white" ? "var(--side-white)" : "var(--gold)",
         }))
     : [];
   return { max, bars };
@@ -202,7 +202,7 @@ svg {
 svg.time {
   height: 34px;
   margin-top: 4px;
-  border-top: 1px solid #2c2219;
+  border-top: 1px solid var(--grid);
 }
 .markers {
   position: absolute;
@@ -218,7 +218,7 @@ svg.time {
   height: 11px;
   border-radius: 50%;
   transform: translate(-50%, -50%);
-  border: 1.5px solid #17120d;
+  border: 1.5px solid var(--bg);
   padding: 0;
   pointer-events: auto;
   cursor: pointer;
@@ -230,7 +230,7 @@ svg.time {
   background: var(--loss);
 }
 .marker.l4 {
-  background: #e0503a;
+  background: var(--danger);
   width: 13px;
   height: 13px;
 }

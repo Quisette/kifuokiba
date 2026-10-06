@@ -13,6 +13,19 @@
       </section>
 
       <section class="panel box">
+        <h3>表示 Appearance</h3>
+        <label class="field">
+          Theme
+          <select v-model="theme">
+            <option value="system">Follow the system</option>
+            <option value="dark">漆 Dark</option>
+            <option value="light">和紙 Light</option>
+          </select>
+        </label>
+        <div class="muted small">Saved on this device only, and applied straight away.</div>
+      </section>
+
+      <section class="panel box">
         <h3>対局サイト Online accounts</h3>
         <label class="field">
           Lishogi username
@@ -89,6 +102,29 @@
           A real engine is needed for meaningful analysis, for example YaneuraOu with a 水匠 NNUE eval. For testing, the bundled
           <code>tools/mock-usi-engine.mjs</code> speaks USI but only counts material.
         </div>
+      </section>
+
+      <section class="panel box">
+        <h3>セカンドオピニオン Second engine</h3>
+        <div class="muted small">Optional. A second USI engine (or the same one with other options) to compare a game's analysis with, from the game view.</div>
+        <label class="field">
+          USI engine executable (full path)
+          <input v-model="s.engine2.path" placeholder="/path/to/another/engine" />
+        </label>
+        <div class="row">
+          <button type="button" class="btn" :disabled="!s.engine2.path || testing2" @click="test2">{{ testing2 ? "Testing…" : "Test engine" }}</button>
+          <span v-if="testResult2" :style="{ color: testResult2.ok ? 'var(--good)' : 'var(--loss)' }">
+            {{ testResult2.ok ? `OK: ${testResult2.name} (best ${testResult2.bestmove})` : testResult2.error }}
+          </span>
+        </div>
+        <label class="field">
+          Time per move (ms)
+          <input v-model.number="s.engine2.movetimeMs" type="number" min="50" step="50" />
+        </label>
+        <label class="field">
+          Engine options (one per line, Name=Value)
+          <textarea v-model="options2" rows="3" placeholder="Threads=2&#10;EvalDir=eval2"></textarea>
+        </label>
       </section>
 
       <section class="panel box">
@@ -195,6 +231,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { api, live, Settings, toast } from "../api";
+import { theme } from "../theme";
 
 const s = ref<Settings | null>(null);
 const names = ref("");
@@ -235,11 +272,14 @@ onMounted(async () => {
   options.value = Object.entries(s.value.engine.options)
     .map(([k, v]) => `${k}=${v}`)
     .join("\n");
+  options2.value = Object.entries(s.value.engine2.options)
+    .map(([k, v]) => `${k}=${v}`)
+    .join("\n");
 });
 
-function parseOptions(): Record<string, string | number> {
+function parseOptions(text = options.value): Record<string, string | number> {
   const out: Record<string, string | number> = {};
-  for (const line of options.value.split("\n")) {
+  for (const line of text.split("\n")) {
     const m = /^\s*([^=]+?)\s*=\s*(.*?)\s*$/.exec(line);
     if (m) out[m[1]] = /^-?\d+$/.test(m[2]) ? Number(m[2]) : m[2];
   }
@@ -250,6 +290,7 @@ async function save() {
   if (!s.value) return;
   s.value.myNames = names.value.split("\n").map((x) => x.trim()).filter(Boolean);
   s.value.engine.options = parseOptions();
+  s.value.engine2.options = parseOptions(options2.value);
   s.value.watchFolders = folders.value.split("\n").map((x) => x.trim()).filter(Boolean);
   s.value = await api.put<Settings>("/api/settings", s.value);
   toast("Settings saved");
@@ -306,6 +347,18 @@ async function restore(e: Event) {
     restoring.value = false;
   }
 }
+const options2 = ref("");
+const testing2 = ref(false);
+const testResult2 = ref<{ ok: boolean; name?: string; bestmove?: string; error?: string } | null>(null);
+async function test2() {
+  testing2.value = true;
+  testResult2.value = null;
+  try {
+    testResult2.value = await api.post("/api/engine/test", { path: s.value!.engine2.path });
+  } finally {
+    testing2.value = false;
+  }
+}
 async function test() {
   testing.value = true;
   testResult.value = null;
@@ -334,7 +387,7 @@ async function test() {
   text-align: left;
   background: none;
   border: 0;
-  border-top: 1px solid #2a2017;
+  border-top: 1px solid var(--line-soft);
   color: var(--text);
   padding: 5px 2px;
   cursor: pointer;
@@ -345,7 +398,7 @@ async function test() {
   cursor: default;
 }
 .opt:hover:not(:disabled) code {
-  color: var(--accent, #d9a441);
+  color: var(--gold);
 }
 .cols {
   display: grid;

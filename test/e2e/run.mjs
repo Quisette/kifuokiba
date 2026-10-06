@@ -88,7 +88,8 @@ try {
   console.log(`  ${cards.length} cards, mistakes per game: ${games.map((g) => g.mistakes).join(",")}`);
 
   browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || (existsSync("/opt/pw-browsers/chromium") ? "/opt/pw-browsers/chromium" : undefined) });
-  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  // Dark by default (the app follows the system); the light theme gets its own pass at the end.
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, colorScheme: "dark" });
   const errors = [];
   page.on("pageerror", (e) => errors.push(String(e)));
   // Web fonts come from Google Fonts; a sandbox without them is not an app error.
@@ -134,6 +135,13 @@ try {
   await page.waitForTimeout(300);
   await page.click("text=詰みチェック");
   await page.waitForSelector(".mate-result", { timeout: 20000 });
+  await page.click("button:has-text('狙い Threat?')");
+  await page.waitForSelector(".threat-result", { timeout: 20000 });
+  check(/passes:|no passing/.test(await page.textContent(".threat-result")), "the threat check says what the opponent would play");
+  await page.click("button:has-text('Candidate moves')");
+  await page.waitForFunction(() => /depth [2-9]/.test(document.querySelector(".mdepth")?.textContent ?? ""), null, { timeout: 20000 });
+  check((await page.$$(".multipv .mrow")).length >= 1, "candidate moves stream with a rising depth");
+  await page.click("button:has-text('Stop')");
   check(/手詰|No forced mate|no mate search|without an answer/.test(await page.textContent(".mate-result")), "mate check answers");
   await shot("03-game");
   check((await page.textContent(".here")).includes("手目"), "keyboard jumps to a mistake");
@@ -157,6 +165,35 @@ try {
   check((await page.textContent(".branch-note")).includes("居飛車にする手"), "stored variations open from the move list");
   await shot("03c-branch");
 
+  // Second opinion: the mock engine with naive piece values grades the bishop sacrifice differently.
+  await api("PUT", "/api/settings", { engine2: { path: engine, options: { Style: "naive" }, movetimeMs: 60 } });
+  await page.goto(base + `/#/game/${worst.id}`);
+  await page.waitForSelector(".second button");
+  await page.click(".second button:has-text('Compare')");
+  await page.waitForSelector(".second .dis li, .second :text('agree on every move')", { timeout: 30000 });
+  check(/Agreement \d+%/.test(await page.textContent(".second")), "the second engine's comparison shows an agreement rate");
+  await shot("03d-second-opinion");
+  await api("PUT", "/api/settings", { engine2: { path: "", options: {}, movetimeMs: 1000 } });
+
+  // A mistake that ignored a threat gets 狙 in the move list.
+  const { Record: Rec2, RecordMetadataKey: Key2 } = await import("tsshogi");
+  const threatRec = Rec2.newByUSI("position sfen 4k4/9/9/3b5/9/9/P8/7R1/4K4 b - 1 moves 9g9f 6d2h+");
+  threatRec.metadata.setStandardMetadata(Key2.BLACK_NAME, "Q");
+  threatRec.metadata.setStandardMetadata(Key2.WHITE_NAME, "threat demo");
+  const threatId = (await api("POST", "/api/import", { text: exportKIF(threatRec) })).results[0].id;
+  await api("POST", "/api/analysis", { ids: [threatId] });
+  for (let i = 0; i < 100 && (await api("GET", "/api/analysis")).running; i++) await new Promise((r) => setTimeout(r, 200));
+  await page.goto(base + `/#/game/${threatId}`);
+  await page.waitForSelector(".moves .mark.threat", { timeout: 20000 });
+  check((await page.getAttribute(".moves .mark.threat", "title")).includes("２八角成"), "a mistake that ignored a threat is tagged 狙 in the move list");
+  await page.click('.moves li[data-ply="0"]');
+  await page.waitForSelector(".missed-threat");
+  await shot("03e-missed-threat");
+  // Leave the game page before deleting it, or its live refresh asks for the deleted game.
+  await page.goto(base + "/#/");
+  await page.waitForSelector(".tiles");
+  await api("DELETE", `/api/games/${threatId}`);
+
   await page.goto(base + "/#/review");
   await api("DELETE", `/api/games/${branchId}`);
   await page.waitForTimeout(800);
@@ -179,16 +216,40 @@ try {
     await shot("04b-dashboard-streak");
   }
 
+  if (cards.length) {
+    // Build a deck from the cards against one opponent and save it.
+    await page.goto(base + "/#/review");
+    await page.waitForSelector(".head select");
+    await page.selectOption(".head select >> nth=0", "custom");
+    await page.waitForSelector(".builder");
+    const oppOption = await page.$eval(".builder select >> nth=1", (el) => [...el.options].find((o) => o.value)?.value ?? "");
+    check(!!oppOption, "the deck builder offers the opponents that have cards");
+    await page.selectOption(".builder select >> nth=1", oppOption);
+    await page.fill(".builder input", "e2e deck");
+    await page.click("button:has-text('Save as deck')");
+    await page.waitForSelector("button:has-text('Delete deck')");
+    check((await page.$$eval(".head select >> nth=0 >> option", (os) => os.map((o) => o.textContent))).some((t) => t?.startsWith("e2e deck")), "a saved deck appears in the deck menu");
+    await shot("04c-review-deck");
+  }
+
   await page.goto(base + "/#/stats");
   await page.waitForSelector(".tiles");
   await page.waitForTimeout(300);
   await shot("06-stats");
+  check((await page.textContent("body")).includes("Mistakes by kind of move"), "stats shows mistakes by kind of move");
   const opp = games.find((g) => g.opponent)?.opponent;
   if (opp) {
     await page.goto(base + `/#/player/${encodeURIComponent(opp)}`);
     await page.waitForSelector(".game");
     check((await page.$$(".game")).length === games.filter((g) => g.opponent === opp).length, "player profile lists games vs that opponent");
     await shot("06c-player");
+    await page.click("button:has-text('Write prep sheet')");
+    await page.waitForURL(/#\/notes\/\d+/);
+    await page.waitForFunction(() => document.body.textContent?.includes("対策 vs") && document.body.textContent?.includes("作戦 Plan"));
+    check((await page.textContent("body")).includes("Their openings"), "a prep sheet for the opponent is written into the notebook");
+    await shot("06f-prep");
+    await page.goto(base + `/#/player/${encodeURIComponent(opp)}`);
+    await page.waitForSelector(".game");
     await page.click("text=Openings against them");
     await page.waitForSelector(".chip.opp");
     await page.waitForTimeout(300);
@@ -207,6 +268,53 @@ try {
   await page.waitForTimeout(400);
   check((await page.$$(".crumbs a")).length === 2, "clicking a move walks the tree");
   await shot("06b-explorer");
+
+  // Study board: open the worst game's line from the game view, let the engine look, play its move.
+  await page.goto(base + `/#/game/${worst.id}`);
+  await page.waitForSelector(".moves li");
+  await page.click("a:has-text('Study board')");
+  await page.waitForURL(/#\/board\?/);
+  await page.waitForSelector(".moves li");
+  check((await page.$$(".moves li")).length === worst.move_count + 1, "study board opens with the game's line");
+  await page.click(".moves li[data-index=\"2\"]");
+  await page.waitForSelector(".lrow", { timeout: 20000 });
+  check((await page.$$(".lrow")).length >= 1, "study board shows engine lines");
+  await page.waitForFunction(() => /depth [2-9]/.test(document.querySelector(".depth")?.textContent ?? ""), null, { timeout: 20000 });
+  check(true, "study board streams a deepening search");
+  await page.click(".depth button:has-text('Stop')");
+  await page.waitForSelector(".depth button:has-text('Think again')");
+  check(true, "stopping the search keeps its lines");
+  await page.click(".lrow >> nth=0");
+  await page.waitForFunction(() => document.querySelector(".moves li.on")?.getAttribute("data-index") === "3");
+  check(/[?&]moves=/.test(await page.evaluate(() => location.hash)), "playing on the study board keeps the line in the URL");
+  const boardMoves = (await page.$$(".moves li")).length;
+  await page.reload();
+  await page.waitForSelector(".moves li.on[data-index=\"3\"]");
+  check((await page.$$(".moves li")).length === boardMoves, "the study board line survives a reload");
+  // The engine's move differs from the game's ☗5五角, so the game line is kept as a variation.
+  check((await page.$$(".alt-mark")).length === 1, "a different move starts a variation and keeps the old line");
+  await page.click("button:has-text('Save into the game')");
+  await page.waitForFunction(() => document.querySelector(".toast")?.textContent?.includes("variation"));
+  const savedBranches = await api("GET", `/api/games/${worst.id}/branches`);
+  check(savedBranches.length >= 1, "study board variations save into the game");
+  await page.click(".alt-mark");
+  await page.waitForFunction(() => document.querySelectorAll(".alt-mark").length === 1 && document.querySelector(".moves li.on")?.getAttribute("data-index") === "3");
+  check((await page.$$(".moves li")).length === worst.move_count + 1, "the 変 chip switches back to the game line");
+  await shot("06d-board");
+  await page.fill("#board-input", "lnsgkgsnl/1r5b1/ppppppppp/9/9/2P6/PP1PPPPPP/1B5R1/LNSGKGSNL w - 2");
+  await page.click("button:has-text('Set up')");
+  await page.waitForFunction(() => document.querySelectorAll(".moves li").length === 1);
+  check((await page.textContent(".sfen")).includes("2P6"), "the study board sets up a pasted SFEN");
+  await page.click(".lrow >> nth=0", { timeout: 20000 });
+  await page.waitForFunction(() => document.querySelectorAll(".moves li").length === 2);
+  await page.click("button:has-text('Save as game')");
+  await page.waitForFunction(() => location.hash.startsWith("#/game/"));
+  const savedId = Number((await page.evaluate(() => location.hash)).split("/")[2]);
+  check((await api("GET", `/api/games/${savedId}`)).plies.length === 2, "a study board line saves as a game");
+  // Leave the game page first, or its live refresh asks for the deleted game.
+  await page.goto(base + "/#/");
+  await page.waitForSelector(".tiles");
+  await api("DELETE", `/api/games/${savedId}`);
 
   const p = await api("POST", "/api/pages", {
     notebook: "四間飛車",
@@ -256,6 +364,87 @@ try {
   await page.click(".umarks .chip[title=Dubious]");
   await page.waitForSelector(".moves .umark");
   check((await api("GET", `/api/games/${recordedId}`)).plies[1].user_mark === "?!", "marking a move with ?! saves it");
+
+  // Set up a position by hand on the study board: tsume template, a piece from ☖'s stand to ☗'s, then onto 1九.
+  await page.goto(base + "/#/board");
+  await page.waitForSelector(".moves li");
+  await page.click("button:has-text('Edit position')");
+  await page.waitForSelector(".edit");
+  await page.selectOption(".edit select", { label: "詰将棋 Tsume (one king)" });
+  await page.waitForTimeout(300);
+  const handPointers = (i) => page.$$(`.hand.operation >> nth=${i} >> div`);
+  // The stand's touch area sits over its pieces for hit tests, so click the piece element itself.
+  await (await handPointers(1))[1].dispatchEvent("click");
+  await (await handPointers(0))[0].dispatchEvent("click");
+  await page.waitForTimeout(200);
+  await (await handPointers(0))[1].dispatchEvent("click");
+  await clickSquare(1, 9);
+  check((await page.$$(".problems li")).length === 0, "a hand-made position with one king passes the checks");
+  await shot("06e-board-edit");
+  await page.click(".edit button:has-text('Done')");
+  await page.waitForSelector(".lrow", { timeout: 20000 });
+  const editedSfen = new URLSearchParams((await page.evaluate(() => location.hash)).split("?")[1]).get("sfen") ?? "";
+  check(/^4k4\/9\/9\/9\/9\/9\/9\/9\/[A-Z]{1}8 b /.test(editedSfen) || /^4k4\/9\/9\/9\/9\/9\/9\/9\/8[A-Z] b /.test(editedSfen), `the edited position becomes the board's start (${editedSfen})`);
+
+  // Saved study: comment a move, save, reopen by id, then embed it in a notebook page.
+  await page.goto(base + "/#/board");
+  await page.waitForSelector(".lrow", { timeout: 20000 });
+  await page.click(".lrow >> nth=0");
+  await page.waitForFunction(() => document.querySelectorAll(".moves li").length === 2);
+  await page.fill("#board-comment", "e2e: the engine's first choice");
+  await page.fill("#new-study-title", "e2e study");
+  await page.click("button:has-text('Save study')");
+  await page.waitForFunction(() => /^#\/board\/\d+/.test(location.hash));
+  const studyHash = await page.evaluate(() => location.hash);
+  const studyIdE2e = Number(studyHash.split("/")[2].split("?")[0]);
+  // A later edit saves itself.
+  await page.click(".moves li[data-index=\"0\"]");
+  await page.fill("#board-comment", "e2e: start position note");
+  await page.waitForFunction(() => document.querySelector(".study-title [role=status]")?.textContent === "Saved", null, { timeout: 10000 });
+  await page.reload();
+  await page.waitForSelector(".moves li[data-index=\"1\"]");
+  await page.click(".moves li[data-index=\"1\"]");
+  check((await page.inputValue("#board-comment")) === "e2e: the engine's first choice", "a saved study keeps its move comments after a reload");
+  check((await page.inputValue("#study-title")) === "e2e study" && (await page.textContent(".studies")).includes("e2e study"), "the saved study is listed by title");
+  await shot("06g-study");
+  await page.click("button:has-text('Add to notebook')");
+  await page.waitForSelector("dialog[open]");
+  await page.fill("dialog[open] input[required]", "e2e study page");
+  await page.click("dialog[open] button:has-text('Add')");
+  await page.waitForFunction(() => !document.querySelector("dialog[open]"));
+  const studyPage = (await api("GET", "/api/pages")).find((x) => x.title === "e2e study page");
+  check((await api("GET", `/api/pages/${studyPage.id}`)).body.includes(`:::shogi-study{id=${studyIdE2e}}`), "Add to notebook embeds the saved study");
+  await page.goto(base + `/#/notes/${studyPage.id}`);
+  await page.waitForSelector(".study-block .comment");
+  await page.click(".study-block button[aria-label='Next move']");
+  await page.waitForFunction(() => document.querySelector(".study-block .comment")?.textContent?.includes("first choice"));
+  check(true, "the embedded study steps through its moves with their comments");
+
+  // Drill a study: ☗7六歩 right, then a wrong move where the study plays ☗2六歩, which comes back at the end.
+  const drillStudy = await api("POST", "/api/studies", {
+    title: "e2e drill",
+    start_sfen: "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1",
+    tree: { usi: "", children: [{ usi: "7g7f", children: [{ usi: "3c3d", children: [{ usi: "2g2f", comment: "居飛車で", children: [] }] }] }] },
+  });
+  await page.goto(base + `/#/drill/${drillStudy.id}?side=black`);
+  await page.waitForSelector(".prompt");
+  await page.waitForTimeout(300);
+  check((await page.textContent(".spread")).includes("1 / 2"), "the drill asks each ☗ position of the study");
+  await clickSquare(7, 7);
+  await clickSquare(7, 6);
+  await page.waitForSelector(".verdict.good");
+  await page.click("button:has-text('Next')");
+  await page.waitForSelector(".prompt");
+  await page.waitForTimeout(300);
+  await clickSquare(5, 7);
+  await clickSquare(5, 6);
+  await page.waitForSelector(".verdict.bad");
+  check((await page.textContent(".box")).includes("居飛車で"), "a missed drill position shows the study's move and comment");
+  await shot("06h-drill");
+  await page.click("button:has-text('Next')");
+  await page.waitForFunction(() => document.querySelector(".spread")?.textContent?.includes("3 / 3"));
+  check(true, "a missed position is asked again before the session ends");
+  await api("DELETE", `/api/studies/${drillStudy.id}`);
 
   // Guess the moves of the game just recorded: ☗7六歩 is what was played.
   await page.goto(base + `/#/guess?game=${recordedId}&side=black`);
@@ -379,6 +568,14 @@ try {
   });
   await page.waitForFunction(() => location.hash.startsWith("#/game/"));
   check((await api("GET", "/api/games")).length === before + 1, "pasting a kifu imports and opens it");
+  // Several games in one paste land in the library with a count.
+  await page.evaluate(() => {
+    const dt = new DataTransfer();
+    dt.setData("text/plain", "position startpos moves 7g7f 3c3d 2g2f 4c4d\nposition startpos moves 5g5f 5c5d 2h5h 8b5b\nposition startpos moves 2g2f 8c8d 2f2e 8d8e 6i7h");
+    document.body.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true }));
+  });
+  await page.waitForFunction(() => location.hash.startsWith("#/library") && document.querySelector(".toast")?.textContent?.includes("Imported 2 games, 1 already there"));
+  check((await api("GET", "/api/games")).length === before + 3, "pasting several games imports each of them");
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(base + `/#/game/${worst.id}`);
@@ -399,6 +596,27 @@ try {
     await shot("09b-phone-review");
   }
   await api("PUT", "/api/lan", { enabled: false });
+
+  // Light theme: chosen in Settings, kept per device, and scanned for contrast like every other screenshot.
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(base + "/#/settings");
+  await page.waitForSelector("select");
+  await page.selectOption("section:has-text('Appearance') select", "light");
+  await page.waitForFunction(() => document.documentElement.dataset.theme === "light");
+  check((await page.evaluate(() => localStorage.getItem("kifu.theme"))) === "light", "the light theme is chosen and saved on this device");
+  for (const [hash, ready, name] of [
+    ["/#/", ".tiles", "10-light-dashboard"],
+    [`/#/game/${worst.id}`, ".moves li", "10-light-game"],
+    ["/#/stats", ".tiles", "10-light-stats"],
+    ["/#/review", ".head select", "10-light-review"],
+  ]) {
+    await page.goto(base + hash);
+    await page.waitForSelector(ready);
+    await page.waitForTimeout(400);
+    await shot(name);
+  }
+  check((await page.evaluate(() => getComputedStyle(document.body).backgroundColor)) === "rgb(246, 240, 228)", "the light theme survives a reload");
+  await page.evaluate(() => localStorage.removeItem("kifu.theme"));
 
   for (const [id, e] of a11y) console.log(`a11y ${e.impact} ${id}: ${e.help} [${[...e.pages].join(", ")}] e.g. ${[...e.targets].slice(0, 3).join(" | ")}`);
   const blocking = [...a11y].filter(([, e]) => e.impact === "critical" || e.impact === "serious");

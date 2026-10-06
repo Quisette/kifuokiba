@@ -7,11 +7,14 @@
 //   position startpos moves 7g7f 3c3d ...
 //   :::
 //   :kifu[game:12]{start=1 stop=28}        move excerpt with a synced board
+//   :::shogi-study{id=3}                   a saved study board, variations and comments
+//   :::
 import { Marked } from "marked";
 
 export type Block =
   | { type: "md"; html: string }
   | { type: "board"; attrs: Record<string, string>; body: string }
+  | { type: "study"; id: number }
   | { type: "kifu"; ref: string; attrs: Record<string, string> };
 
 export function parseAttrs(s: string | undefined): Record<string, string> {
@@ -43,13 +46,14 @@ export function parseNotebook(src: string): Block[] {
   };
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    const open = /^:::\s*(shogi-view|shogi-move|shogi-move-view|shogi)\s*(\{.*\})?\s*$/.exec(line);
+    const open = /^:::\s*(shogi-view|shogi-move|shogi-move-view|shogi-study|shogi)\s*(\{.*\})?\s*$/.exec(line);
     if (open) {
       const body: string[] = [];
       i++;
       while (i < lines.length && !/^:::\s*$/.test(lines[i])) body.push(lines[i++]);
       flush();
-      blocks.push({ type: "board", attrs: parseAttrs(open[2]), body: body.join("\n").trim() });
+      if (open[1] === "shogi-study") blocks.push({ type: "study", id: Number(parseAttrs(open[2]).id) || 0 });
+      else blocks.push({ type: "board", attrs: parseAttrs(open[2]), body: body.join("\n").trim() });
       continue;
     }
     const leaf = /^:kifu\[([^\]]+)\]\s*(\{.*\})?\s*$/.exec(line);

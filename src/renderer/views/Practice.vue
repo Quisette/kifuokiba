@@ -249,7 +249,7 @@ function resign() {
 .bar span {
   display: block;
   height: 100%;
-  background: var(--accent, var(--win));
+  background: var(--win);
   transition: width 0.3s;
 }
 .row {

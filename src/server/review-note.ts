@@ -5,6 +5,7 @@
 // Portable notes carry the moves themselves (:::shogi-view{move=40} + a USI
 // body), so the .mdx works in personal-shogi-note without the app.
 import { Library } from "./library.js";
+import { moveText } from "../core/notation.js";
 
 export type ReviewNoteOptions = { portable?: boolean; maxMistakes?: number };
 
@@ -78,7 +79,7 @@ export function reviewNote(lib: Library, id: number, opts: ReviewNoteOptions = {
     lines.push(`### ${p.ply}手目 ${p.text}${p.user_mark}（${what || "my mark"}${p.loss ? `, −${Math.round(p.loss)}%` : ""}）`, "");
     lines.push(board(p.ply - 1), "");
     if (prev.best_usi) {
-      const best = Library.moveText(prev.sfen, prev.best_usi);
+      const best = moveText(prev.sfen, prev.best_usi);
       lines.push(`${PHASE(p.ply)}. Played **${p.text}**; the engine prefers **${best}**.`);
       if (prev.pvText) lines.push("", `Line: ${prev.pvText}`);
     } else {

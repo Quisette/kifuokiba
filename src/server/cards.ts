@@ -5,6 +5,9 @@ import { AnalysisQueue } from "./analysis.js";
 import { Rating, ratingFromLoss } from "../core/sm2.js";
 import { scheduleCard } from "../core/scheduler.js";
 import { winRate } from "../core/grading.js";
+import { normalizePlayerName } from "../core/summarize.js";
+import { passedPosition } from "../core/threat.js";
+import { moveText, pvText } from "../core/notation.js";
 
 export type CardRow = {
   id: number;
@@ -33,7 +36,39 @@ export type CardRow = {
   created_at: number;
 };
 
-export type CardFilter = { kind?: string; phase?: string; opening?: string; due?: boolean; leech?: boolean };
+export type CardFilter = {
+  kind?: string;
+  phase?: string;
+  /** Substring of the game's 戦型 label. */
+  opening?: string;
+  /** The opening of the side the card is for. */
+  myOpening?: string;
+  opponent?: string;
+  tag?: string;
+  /** A kind of the move played (see core/movekind.ts). */
+  moveKind?: string;
+  side?: string;
+  due?: boolean;
+  leech?: boolean;
+};
+/** The filter fields a saved deck can hold. */
+export const DECK_KEYS = ["kind", "phase", "myOpening", "opponent", "tag", "moveKind", "side", "leech"] as const;
+export type Deck = { id: number; name: string; filter: CardFilter };
+
+type ListRow = CardRow & {
+  black: string;
+  white: string;
+  date: string;
+  strategy: string;
+  black_opening: string;
+  white_opening: string;
+  black_style: string;
+  white_style: string;
+  move_kind: string | null;
+  threat_usi: string | null;
+  reply_usi: string | null;
+  tag_list: string | null;
+};
 
 /** Lapses after which a card counts as a leech (Anki's default is 8; mistakes from your own games deserve attention sooner). */
 export const LEECH_LAPSES = 4;
@@ -45,17 +80,92 @@ export class Cards {
   ) {}
 
   list(filter: CardFilter = {}, now = Date.now()) {
-    const rows = this.lib.db.all<CardRow & { black: string; white: string; date: string; strategy: string }>(
-      `SELECT c.*, g.black, g.white, g.date, g.strategy FROM cards c JOIN games g ON g.id = c.game_id
+    const rows = this.lib.db.all<ListRow>(
+      `SELECT c.*, g.black, g.white, g.date, g.strategy, g.black_opening, g.white_opening, g.black_style, g.white_style,
+              p.move_kind, p.threat_usi, p.best_usi reply_usi, (SELECT group_concat(tag, char(31)) FROM tags t WHERE t.game_id = c.game_id) tag_list
+       FROM cards c JOIN games g ON g.id = c.game_id
+       LEFT JOIN plies p ON p.game_id = c.game_id AND p.ply = c.ply
        ORDER BY c.due_at, c.id`,
     );
     return rows
+      .map((c) => this.describe(c))
       .filter((c) => !filter.kind || c.kind === filter.kind)
       .filter((c) => !filter.phase || c.phase === filter.phase)
       .filter((c) => !filter.opening || c.strategy.includes(filter.opening))
+      .filter((c) => !filter.myOpening || c.opening === filter.myOpening)
+      .filter((c) => !filter.opponent || c.opponent === filter.opponent)
+      .filter((c) => !filter.tag || c.tags.includes(filter.tag))
+      .filter((c) => !filter.moveKind || c.moveKinds.includes(filter.moveKind))
+      .filter((c) => !filter.side || c.side === filter.side)
       .filter((c) => !filter.due || (c.due_at <= now && !c.suspended))
       .filter((c) => !filter.leech || c.lapses >= LEECH_LAPSES)
       .map((c) => this.present(c));
+  }
+
+  /** Where a card comes from, seen from the side it is for. */
+  private describe(c: ListRow) {
+    const mine = c.side === "white" ? "white" : "black";
+    const { black_opening, white_opening, black_style, white_style, move_kind, tag_list, threat_usi, reply_usi, ...rest } = c;
+    // A threat the played move ignored (the best reply carries it out), in the passed position.
+    const passed = threat_usi && threat_usi === reply_usi ? passedPosition(c.sfen) : null;
+    const opening = mine === "black" ? black_opening || black_style : white_opening || white_style;
+    return {
+      ...rest,
+      opening,
+      opponent: normalizePlayerName(mine === "black" ? c.white : c.black),
+      tags: tag_list ? tag_list.split("\x1f") : [],
+      moveKinds: move_kind ? move_kind.split(",") : [],
+      threatText: passed ? moveText(passed, threat_usi!) : "",
+    };
+  }
+
+  /** The values the deck filters can take among the cards, with total and due counts. */
+  facets(now = Date.now()) {
+    const all = this.list({}, now);
+    const tally = (values: (c: (typeof all)[number]) => string[]) => {
+      const m = new Map<string, { total: number; due: number }>();
+      for (const c of all) {
+        for (const v of new Set(values(c))) {
+          if (!v) continue;
+          const e = m.get(v) ?? { total: 0, due: 0 };
+          e.total++;
+          if (c.due_at <= now && !c.suspended) e.due++;
+          m.set(v, e);
+        }
+      }
+      return [...m.entries()].map(([value, n]) => ({ value, ...n })).sort((a, b) => b.total - a.total || a.value.localeCompare(b.value));
+    };
+    return {
+      myOpening: tally((c) => [c.opening]),
+      opponent: tally((c) => [c.opponent]),
+      tag: tally((c) => c.tags),
+      moveKind: tally((c) => c.moveKinds),
+      side: tally((c) => [c.side]),
+    };
+  }
+
+  // ---- saved decks (the cardDecks setting)
+  decks(now = Date.now()): (Deck & { total: number; due: number })[] {
+    return this.lib.db.getSetting<Deck[]>("cardDecks", []).map((d) => {
+      const cards = this.list(d.filter, now);
+      return { ...d, total: cards.length, due: cards.filter((c) => c.due_at <= now && !c.suspended).length };
+    });
+  }
+
+  saveDeck(name: string, filter: CardFilter): Deck {
+    const clean: CardFilter = {};
+    for (const k of DECK_KEYS) {
+      const v = filter[k];
+      if (v !== undefined && v !== "" && v !== false) (clean as Record<string, unknown>)[k] = v;
+    }
+    const decks = this.lib.db.getSetting<Deck[]>("cardDecks", []);
+    const deck = { id: Math.max(0, ...decks.map((d) => d.id)) + 1, name: name.trim() || "Deck", filter: clean };
+    this.lib.db.setSetting("cardDecks", [...decks, deck]);
+    return deck;
+  }
+
+  deleteDeck(id: number) {
+    this.lib.db.setSetting("cardDecks", this.lib.db.getSetting<Deck[]>("cardDecks", []).filter((d) => d.id !== id));
   }
 
   counts(now = Date.now()) {
@@ -86,9 +196,9 @@ export class Cards {
   private present<T extends CardRow>(c: T) {
     return {
       ...c,
-      bestText: Library.moveText(c.sfen, c.best_usi),
-      playedText: Library.moveText(c.sfen, c.played_usi),
-      pvText: Library.pvText(c.sfen, c.pv),
+      bestText: moveText(c.sfen, c.best_usi),
+      playedText: moveText(c.sfen, c.played_usi),
+      pvText: pvText(c.sfen, c.pv),
       leech: c.lapses >= LEECH_LAPSES,
     };
   }
@@ -108,7 +218,7 @@ export class Cards {
       return { legal: false as const };
     }
     const okLoss = this.lib.settings.cardOkLoss;
-    const answerText = Library.moveText(card.sfen, answerUsi);
+    const answerText = moveText(card.sfen, answerUsi);
     const base = {
       legal: true as const,
       answerText,
@@ -238,7 +348,7 @@ export class Cards {
     const [prev, cur] = plies;
     if (guess) {
       const best = guess.best || prev.best_usi;
-      Object.assign(cur, { usi: guess.usi, text: Library.moveText(prev.sfen, guess.usi), loss: guess.loss, level: guess.level });
+      Object.assign(cur, { usi: guess.usi, text: moveText(prev.sfen, guess.usi), loss: guess.loss, level: guess.level });
       if (best) Object.assign(prev, { best_usi: best, pv: guess.best ? guess.pv || best : prev.pv });
     }
     const side = prev.sfen.split(" ")[1] === "w" ? "white" : "black";
