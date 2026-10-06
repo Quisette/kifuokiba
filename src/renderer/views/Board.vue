@@ -2,7 +2,7 @@
   <div class="page">
     <div class="head">
       <h1>検討盤 Study board</h1>
-      <span class="muted">Play both sides from any position. The engine looks at each new position.</span>
+      <span class="muted">Play both sides from any position. A different move starts a variation; the engine looks at each new position.</span>
       <a v-if="backHref" class="btn small" :href="backHref">← Back to the game</a>
     </div>
 
@@ -44,13 +44,25 @@
       <section class="panel moves-col">
         <div class="cap" style="padding: 12px 14px 6px">棋譜 Moves</div>
         <ol class="moves" aria-label="棋譜 Moves">
-          <li v-for="(p, i) in line" :key="i" :class="{ on: i === cursor }" :data-index="i" @click="cursor = i">
+          <li v-for="(p, i) in line" :key="i" :class="{ on: i === cursor, side: p.index > 0 }" :data-index="i" @click="cursor = i">
             <span class="n">{{ i ? p.ply : "" }}</span>
             <span class="m serif">{{ i ? p.text : "開始局面" }}</span>
+            <button
+              v-for="a in p.alts"
+              :key="a.index"
+              type="button"
+              class="alt-mark"
+              :title="`Switch to the variation ${a.text}`"
+              @click.stop="switchTo(i, a.index)"
+            >
+              変 {{ a.text }}
+            </button>
             <span class="ev">{{ i && evalOf(p.sfen) ? evalText(evalOf(p.sfen)!.score ?? null, evalOf(p.sfen)!.mate ?? null) : "" }}</span>
           </li>
         </ol>
         <div class="row pad">
+          <button type="button" class="btn small" :disabled="onMainLine" title="Make the line up to here the main line" @click="makeMain">Make main line</button>
+          <button type="button" class="btn small" :disabled="cursor === 0" title="Delete this move and everything after it" @click="deleteVariation">Delete variation</button>
           <button type="button" class="btn small" :disabled="cursor >= line.length - 1" title="Delete the moves after this one" @click="cutHere">Delete after here</button>
         </div>
       </section>
@@ -103,6 +115,16 @@
           <div class="cap">この局面 This position</div>
           <div class="row">
             <button type="button" class="btn" :disabled="line.length < 2 || saving" @click="saveAsGame">Save as game</button>
+            <button
+              v-if="gameId"
+              type="button"
+              class="btn"
+              :disabled="!hasAlts || saving"
+              title="Add this board's variations to the game it came from"
+              @click="saveIntoGame"
+            >
+              Save into the game
+            </button>
             <button type="button" class="btn" @click="notebookOpen = true">Add to notebook</button>
             <a class="btn" :href="practiceHref" title="Play this position out against the engine">Play it out</a>
             <a class="btn" :href="diagramHref" download>Diagram (.svg)</a>
@@ -121,66 +143,107 @@
 // A free board for studying any position: not tied to a saved game. The line
 // (start position + moves + cursor) lives in the URL so it can be linked.
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import { InitialPositionSFEN, Position, Record as KRecord, RecordFormatType, detectRecordFormat, formatMove, importCSA, importJKFString, importKI2, importKIF } from "tsshogi";
+import { InitialPositionSFEN, Position, Record as KRecord, RecordFormatType, detectRecordFormat, exportKIF, formatMove, importCSA, importJKFString, importKI2, importKIF } from "tsshogi";
 import { api, evalText, live, toast, winRate } from "../api";
 import { route } from "../router";
 import ShogiBoard from "../components/ShogiBoard.vue";
 import AddToNotebook from "../components/AddToNotebook.vue";
 import { liveSearch, LiveResult } from "../live";
+import { MoveTree, emptyTree, formatTree, hasVariations, parseTree, pruneIllegal, recordToTree, selectedLine, treeToRecord } from "../../core/movetree";
 
-type Step = { sfen: string; usi: string; text: string; ply: number; prevSfen: string };
+type Alt = { index: number; text: string };
+type Step = { sfen: string; usi: string; text: string; ply: number; prevSfen: string; node: MoveTree; index: number; alts: Alt[] };
 
 const STANDARD = InitialPositionSFEN.STANDARD;
 
+function treeFromQuery(text: string, sfen: string): MoveTree {
+  try {
+    return pruneIllegal(parseTree(text), sfen);
+  } catch {
+    return emptyTree();
+  }
+}
 const start = ref(Position.newBySFEN(route.query.get("sfen") ?? "")?.sfen ?? STANDARD);
-const moves = ref<string[]>((route.query.get("moves") ?? "").split(/[\s,]+/).filter(Boolean));
+const tree = ref<MoveTree>(treeFromQuery(route.query.get("moves") ?? "", start.value));
+// Child index chosen at each depth; past its end the line follows main moves.
+const path = ref<number[]>((route.query.get("path") ?? "").split(".").filter(Boolean).map(Number));
 const cursor = ref(0);
 const flip = ref(route.query.get("flip") === "1");
 const backHref = route.query.get("back") ? "#/" + route.query.get("back") : "";
+// The game this board was opened from, which its variations can be saved into.
+const gameId = ref(Number(route.query.get("game")) || 0);
 
 const line = computed<Step[]>(() => {
+  const nodes = selectedLine(tree.value, path.value);
   const pos = Position.newBySFEN(start.value)!;
   const firstPly = Number(start.value.split(" ")[3] ?? 1) - 1;
-  const out: Step[] = [{ sfen: pos.sfen, usi: "", text: "", ply: firstPly, prevSfen: "" }];
-  for (const usi of moves.value) {
-    const m = pos.createMoveByUSI(usi);
-    if (!m || !pos.isValidMove(m)) break;
+  const out: Step[] = [{ sfen: pos.sfen, usi: "", text: "", ply: firstPly, prevSfen: "", node: tree.value, index: 0, alts: [] }];
+  for (let d = 1; d < nodes.length; d++) {
+    const { node, index } = nodes[d];
+    const parent = nodes[d - 1].node;
     const prevSfen = pos.sfen;
+    const alts = parent.children.flatMap((c, i) => {
+      if (i === index) return [];
+      const m = pos.createMoveByUSI(c.usi);
+      return m ? [{ index: i, text: formatMove(pos, m) }] : [];
+    });
+    const m = pos.createMoveByUSI(node.usi)!;
     const text = formatMove(pos, m);
     pos.doMove(m);
-    out.push({ sfen: pos.sfen, usi, text, ply: out[out.length - 1].ply + 1, prevSfen });
+    out.push({ sfen: pos.sfen, usi: node.usi, text, ply: out[d - 1].ply + 1, prevSfen, node, index, alts });
   }
   return out;
 });
-// Moves in the URL that don't apply are dropped rather than shown.
-watch(line, (l) => {
-  if (l.length - 1 < moves.value.length) moves.value = moves.value.slice(0, l.length - 1);
-}, { immediate: true });
-cursor.value = Math.min(Math.max(Number(route.query.get("ply") ?? moves.value.length) || 0, 0), line.value.length - 1);
+const moves = computed(() => line.value.slice(1).map((s) => s.usi));
+cursor.value = Math.min(Math.max(Number(route.query.get("ply") ?? line.value.length - 1) || 0, 0), line.value.length - 1);
 
 const shown = computed(() => line.value[cursor.value]);
 const lastMove = computed(() => (cursor.value ? { prevSfen: shown.value.prevSfen, usi: shown.value.usi } : null));
 const sideToMove = computed(() => (shown.value.sfen.split(" ")[1] === "w" ? "white" : "black"));
+const pathTo = (depth: number) => line.value.slice(1, depth + 1).map((s) => s.index);
 
 function play(usi: string) {
-  if (moves.value[cursor.value] === usi) {
-    cursor.value++;
-    return;
-  }
-  // A new move from the middle of the line replaces everything after it.
-  moves.value = [...moves.value.slice(0, cursor.value), usi];
-  cursor.value = moves.value.length;
+  // A move that isn't the next one becomes a variation; the old line stays.
+  const node = shown.value.node;
+  let i = node.children.findIndex((c) => c.usi === usi);
+  if (i < 0) i = node.children.push({ usi, children: [] }) - 1;
+  path.value = [...pathTo(cursor.value), i];
+  cursor.value++;
+}
+function switchTo(depth: number, index: number) {
+  path.value = [...pathTo(depth - 1), index];
+  cursor.value = depth;
 }
 function step(d: number) {
   cursor.value = Math.min(Math.max(cursor.value + d, 0), line.value.length - 1);
 }
 function cutHere() {
-  moves.value = moves.value.slice(0, cursor.value);
+  shown.value.node.children = [];
 }
+// The current line becomes the main line at every branch point on the way here.
+function makeMain() {
+  for (let d = 1; d <= cursor.value; d++) {
+    const parent = line.value[d - 1].node;
+    const i = line.value[d].index;
+    if (i) parent.children.unshift(...parent.children.splice(i, 1));
+  }
+  path.value = [];
+}
+function deleteVariation() {
+  const d = cursor.value;
+  if (!d) return;
+  line.value[d - 1].node.children.splice(line.value[d].index, 1);
+  path.value = pathTo(d - 1);
+  cursor.value = d - 1;
+}
+const onMainLine = computed(() => line.value.slice(1, cursor.value + 1).every((s) => s.index === 0));
+const hasAlts = computed(() => hasVariations(tree.value));
 function reset() {
   start.value = STANDARD;
-  moves.value = [];
+  tree.value = emptyTree();
+  path.value = [];
   cursor.value = 0;
+  gameId.value = 0;
   input.value = "";
   inputError.value = "";
 }
@@ -217,8 +280,10 @@ function loadInput() {
   }
   inputError.value = "";
   start.value = rec.initialPosition.sfen;
-  moves.value = rec.moves.slice(1).flatMap((n) => ("usi" in n.move ? [n.move.usi] : []));
-  cursor.value = moves.value.length;
+  tree.value = recordToTree(rec);
+  path.value = [];
+  gameId.value = 0;
+  cursor.value = line.value.length - 1;
   input.value = "";
 }
 
@@ -227,16 +292,18 @@ const usiString = computed(() => {
   const base = start.value === STANDARD ? "position startpos" : `position sfen ${start.value}`;
   return moves.value.length ? `${base} moves ${moves.value.join(" ")}` : base;
 });
-watch([start, moves, cursor, flip], () => {
+watch([start, tree, path, cursor, flip, gameId], () => {
   const q = new URLSearchParams();
   if (start.value !== STANDARD) q.set("sfen", start.value);
-  if (moves.value.length) q.set("moves", moves.value.join(" "));
+  if (tree.value.children.length) q.set("moves", formatTree(tree.value));
+  if (path.value.some((i) => i)) q.set("path", path.value.join("."));
   if (cursor.value !== moves.value.length) q.set("ply", String(cursor.value));
   if (flip.value) q.set("flip", "1");
+  if (gameId.value) q.set("game", String(gameId.value));
   if (backHref) q.set("back", backHref.slice(2));
   const s = q.toString();
   history.replaceState(null, "", "#/board" + (s ? "?" + s : ""));
-});
+}, { deep: true });
 
 // ---- engine: one streamed search at a time; finished (or stopped) results are kept per position
 const engineSet = ref(true);
@@ -323,12 +390,25 @@ const saving = ref(false);
 async function saveAsGame() {
   saving.value = true;
   try {
-    const r = await api.post<{ results: { status: string; id: number; error?: string }[] }>("/api/import", { text: usiString.value });
+    // KIF keeps the variations as 変化.
+    const text = exportKIF(treeToRecord(start.value, tree.value));
+    const r = await api.post<{ results: { status: string; id: number; error?: string }[] }>("/api/import", { text });
     const first = r.results[0];
     if (!first || first.status === "error") throw new Error(first?.error ?? "import failed");
     live.libraryVersion++;
     toast(first.status === "added" ? "Saved to the library." : "This line is already in the library; opening it.");
     location.hash = `#/game/${first.id}`;
+  } catch (e) {
+    toast(String(e instanceof Error ? e.message : e));
+  } finally {
+    saving.value = false;
+  }
+}
+async function saveIntoGame() {
+  saving.value = true;
+  try {
+    const r = await api.post<{ branches: number }>(`/api/games/${gameId.value}/variations`, { tree: formatTree(tree.value) });
+    toast(`Saved. The game now has ${r.branches} variation${r.branches === 1 ? "" : "s"}.`);
   } catch (e) {
     toast(String(e instanceof Error ? e.message : e));
   } finally {
@@ -474,6 +554,24 @@ watch(cursor, (i) => {
 }
 .moves li.on {
   background: var(--gold-bg);
+}
+.moves li.side .m {
+  color: var(--gold-soft);
+}
+.alt-mark {
+  font: inherit;
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--panel-2);
+  border: 1px solid var(--line-2);
+  border-radius: 4px;
+  padding: 0 5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.alt-mark:hover {
+  border-color: var(--gold);
+  color: var(--text);
 }
 .moves .n {
   width: 2em;

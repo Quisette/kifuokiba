@@ -237,3 +237,39 @@ describe("move kinds", () => {
     expect(moveKinds(start, "7g7e")).toBeNull();
   });
 });
+
+describe("move tree", () => {
+  const START = "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1";
+  it("parses and formats PGN-style variations", async () => {
+    const { parseTree, formatTree, selectedLine, hasVariations } = await import("../src/core/movetree.js");
+    const text = "7g7f 3c3d (8c8d 2g2f (2h6h)) 2g2f 8c8d";
+    const t = parseTree(text);
+    expect(formatTree(t)).toBe(text);
+    expect(t.children[0].children.map((c) => c.usi)).toEqual(["3c3d", "8c8d"]);
+    expect(hasVariations(t)).toBe(true);
+    expect(selectedLine(t, []).map((x) => x.node.usi)).toEqual(["", "7g7f", "3c3d", "2g2f", "8c8d"]);
+    expect(selectedLine(t, [0, 1, 1]).map((x) => x.node.usi)).toEqual(["", "7g7f", "8c8d", "2h6h"]);
+    expect(formatTree(parseTree("7g7f, 3c3d"))).toBe("7g7f 3c3d");
+    expect(hasVariations(parseTree("7g7f 3c3d"))).toBe(false);
+    expect(() => parseTree("7g7f (3c3d")).toThrow();
+    expect(() => parseTree("(7g7f)")).toThrow();
+  });
+
+  it("round-trips through a record and KIF 変化", async () => {
+    const { parseTree, formatTree, treeToRecord, recordToTree, pruneIllegal } = await import("../src/core/movetree.js");
+    const { exportKIF, importKIF } = await import("tsshogi");
+    const text = "7g7f 3c3d (8c8d 2g2f) 2g2f";
+    const kif = exportKIF(treeToRecord(START, parseTree(text)));
+    expect(kif).toContain("変化：2手");
+    expect(formatTree(recordToTree(importKIF(kif) as Record))).toBe(text);
+    expect(formatTree(pruneIllegal(parseTree("7g7f 3c3d (1a2a 1c1d) 2g2f 1a1a"), START))).toBe("7g7f 3c3d 2g2f");
+  });
+
+  it("merges a tree into a record without changing its main line", async () => {
+    const { parseTree, formatTree, recordToTree, mergeTreeIntoRecord, lineTree, treeToRecord } = await import("../src/core/movetree.js");
+    const rec = treeToRecord(START, lineTree(["7g7f", "3c3d", "2g2f"]));
+    mergeTreeIntoRecord(rec, parseTree("7g7f 8c8d 2g2f (6i7h)"));
+    expect(formatTree(recordToTree(rec))).toBe("7g7f 3c3d (8c8d 2g2f (6i7h)) 2g2f");
+    expect(rec.moves.slice(1).map((n) => (n.move as { usi: string }).usi)).toEqual(["7g7f", "3c3d", "2g2f"]);
+  });
+});

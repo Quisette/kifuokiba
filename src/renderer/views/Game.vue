@@ -275,6 +275,7 @@ import ShogiBoard from "../components/ShogiBoard.vue";
 import EvalGraph from "../components/EvalGraph.vue";
 import AddToNotebook from "../components/AddToNotebook.vue";
 import { liveSearch } from "../live";
+import { addLine, emptyTree, formatTree } from "../../core/movetree";
 
 const props = defineProps<{ id: number }>();
 const game = ref<GameDetail | null>(null);
@@ -616,14 +617,17 @@ async function writeReview() {
   }
 }
 // The game's line up to here (plus any variation being tried), on the free study board.
+// The game with its stored variations (and any line being tried here), on the free study board.
 const boardHref = computed(() => {
   const g = game.value!;
-  // Without a variation the whole game comes along, with the board at the current move.
-  const usis = variation.value.length
-    ? [...g.plies.slice(1, cursor.value + 1).map((p) => p.usi), ...variation.value]
-    : g.plies.slice(1).map((p) => p.usi);
-  const ply = variation.value.length ? usis.length : cursor.value;
-  const q = new URLSearchParams({ sfen: g.plies[0].sfen, moves: usis.join(" "), ply: String(ply), back: `game/${props.id}` });
+  const main = g.plies.slice(1).map((p) => p.usi);
+  const tree = emptyTree();
+  addLine(tree, main);
+  for (const b of branches.value) addLine(tree, [...main.slice(0, b.ply - 1), ...b.usis]);
+  const path = variation.value.length ? addLine(tree, [...main.slice(0, cursor.value), ...variation.value]) : [];
+  const ply = variation.value.length ? path.length : cursor.value;
+  const q = new URLSearchParams({ sfen: g.plies[0].sfen, moves: formatTree(tree), ply: String(ply), game: String(props.id), back: `game/${props.id}` });
+  if (path.some((i) => i)) q.set("path", path.join("."));
   return "#/board?" + q.toString();
 });
 const diagramHref = computed(() => {

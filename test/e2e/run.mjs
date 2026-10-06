@@ -235,6 +235,15 @@ try {
   await page.reload();
   await page.waitForSelector(".moves li.on[data-index=\"3\"]");
   check((await page.$$(".moves li")).length === boardMoves, "the study board line survives a reload");
+  // The engine's move differs from the game's ☗5五角, so the game line is kept as a variation.
+  check((await page.$$(".alt-mark")).length === 1, "a different move starts a variation and keeps the old line");
+  await page.click("button:has-text('Save into the game')");
+  await page.waitForFunction(() => document.querySelector(".toast")?.textContent?.includes("variation"));
+  const savedBranches = await api("GET", `/api/games/${worst.id}/branches`);
+  check(savedBranches.length >= 1, "study board variations save into the game");
+  await page.click(".alt-mark");
+  await page.waitForFunction(() => document.querySelectorAll(".alt-mark").length === 1 && document.querySelector(".moves li.on")?.getAttribute("data-index") === "3");
+  check((await page.$$(".moves li")).length === worst.move_count + 1, "the 変 chip switches back to the game line");
   await shot("06d-board");
   await page.fill("#board-input", "lnsgkgsnl/1r5b1/ppppppppp/9/9/2P6/PP1PPPPPP/1B5R1/LNSGKGSNL w - 2");
   await page.click("button:has-text('Set up')");

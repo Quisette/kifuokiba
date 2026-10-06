@@ -5,6 +5,8 @@
 // opened with the same migrations.
 import { Db } from "./db.js";
 import { Library } from "./library.js";
+import { importRecordFromText } from "../core/recordFile.js";
+import { hasVariations, recordToTree } from "../core/movetree.js";
 
 export type RestoreResult = { games: number; added: number; cards: number; reviews: number; pages: number };
 
@@ -24,6 +26,12 @@ export function mergeBackup(lib: Library, backupPath: string): RestoreResult {
       const r = lib.importText(g.original_text, g.file_name || "backup");
       if (r.status === "error") continue;
       if (r.status === "added") result.added++;
+      // Variations added in the backup's copy join the ones here.
+      else {
+        const rec = importRecordFromText(g.original_text);
+        const tree = rec instanceof Error ? null : recordToTree(rec);
+        if (tree && hasVariations(tree)) lib.mergeVariations(r.id, tree);
+      }
       gameMap.set(g.id, r.id);
       db.tx(() => {
         if (g.notes) db.run("UPDATE games SET notes = CASE WHEN notes = '' THEN ? ELSE notes END WHERE id = ?", g.notes, r.id);

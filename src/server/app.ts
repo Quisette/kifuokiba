@@ -33,6 +33,7 @@ import { checkGuess, GuessError } from "./guess.js";
 import { LanServer } from "./lan.js";
 import { Tsume } from "./tsume.js";
 import { decodeText } from "../core/encode.js";
+import { parseTree } from "../core/movetree.js";
 import type { FetchLike } from "./fetchers/lishogi.js";
 
 export type AppOptions = {
@@ -299,6 +300,17 @@ export function createApp(opts: AppOptions) {
     }
   });
   route("GET", "/api/games/:id/branches", (_r, _u, p) => lib.branches(id(p)));
+  route("POST", "/api/games/:id/variations", (_r, _u, p, body) => {
+    let tree;
+    try {
+      tree = parseTree(String((body as { tree?: string }).tree ?? ""));
+    } catch (e) {
+      throw new HttpError(400, e instanceof Error ? e.message : String(e));
+    }
+    const n = lib.mergeVariations(id(p), tree);
+    if (n === null) throw new HttpError(404, "game not found");
+    return { branches: n };
+  });
   route("GET", "/api/games/:id/similar", (_r, _u, p) => similarGames(lib, id(p)));
   route("GET", "/api/games/:id/book", async (_r, _u, p) => {
     const book = await loadBook();

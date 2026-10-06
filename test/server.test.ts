@@ -593,3 +593,25 @@ describe("streamed analysis", () => {
     expect(r.status).toBe(400);
   });
 });
+
+describe("variations saved into a game", () => {
+  it("adds board lines to a game as branches without touching its main line", async () => {
+    const kif = makeKif({ moves: "7g7f 3c3d 2g2f 8c8d", black: "me", white: "branchy", date: "2026/09/07" });
+    const id = (await api("POST", "/api/import", { text: kif })).results[0].id;
+    const before = (await api("GET", `/api/games/${id}`)).plies.map((p: { usi: string }) => p.usi);
+    const r = await api("POST", `/api/games/${id}/variations`, { tree: "7g7f 3c3d (8c8d 2g2f) 2g2f 8c8d (4a3b)" });
+    expect(r.branches).toBe(2);
+    const branches = await api("GET", `/api/games/${id}/branches`);
+    expect(branches.map((b: { ply: number; usis: string[] }) => [b.ply, b.usis])).toEqual([
+      [2, ["8c8d", "2g2f"]],
+      [4, ["4a3b"]],
+    ]);
+    expect((await api("GET", `/api/games/${id}`)).plies.map((p: { usi: string }) => p.usi)).toEqual(before);
+    // Merging the same lines again adds nothing; the KIF export carries them.
+    expect((await api("POST", `/api/games/${id}/variations`, { tree: "7g7f 8c8d" })).branches).toBe(2);
+    const exported = new TextDecoder("shift_jis").decode(await (await fetch(`${base}/api/games/${id}/export?format=kif`)).arrayBuffer());
+    expect(exported).toContain("変化：2手");
+    await expect(api("POST", `/api/games/${id}/variations`, { tree: "7g7f (" })).rejects.toThrow(/400|variation/);
+    await api("DELETE", `/api/games/${id}`);
+  });
+});

@@ -10,6 +10,7 @@ import { newSm2State } from "../core/sm2.js";
 import { getSituationText } from "../core/score.js";
 import { SCORE_MATE_INFINITE } from "../core/usi.js";
 import { moveKinds } from "../core/movekind.js";
+import { MoveTree, mergeTreeIntoRecord } from "../core/movetree.js";
 
 export type ImportResult =
   | { status: "added"; id: number; name: string }
@@ -575,6 +576,22 @@ export class Library {
       }
     }
     return out;
+  }
+
+  /**
+   * Adds the lines of a move tree (from the game's start position) to the game's
+   * stored record as 変化. The main line, plies, analysis and hash don't change.
+   * Returns how many branches the game has afterwards, or null for no such game.
+   */
+  mergeVariations(id: number, tree: MoveTree): number | null {
+    const row = this.db.get<{ original_text: string }>("SELECT original_text FROM games WHERE id = ?", id);
+    if (!row) return null;
+    const record = importRecordFromText(row.original_text);
+    if (record instanceof Error) throw record;
+    mergeTreeIntoRecord(record, tree);
+    const kif = exportRecordAsBuffer(record, RecordFileFormat.KIF, { utf8: true, returnCode: "\n" }).text;
+    this.db.run("UPDATE games SET original_text = ?, updated_at = ? WHERE id = ?", kif, Date.now(), id);
+    return this.branches(id).length;
   }
 
   // ---------------------------------------------------------------- export
