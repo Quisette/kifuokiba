@@ -175,6 +175,25 @@ try {
   await shot("03d-second-opinion");
   await api("PUT", "/api/settings", { engine2: { path: "", options: {}, movetimeMs: 1000 } });
 
+  // A mistake that ignored a threat gets 狙 in the move list.
+  const { Record: Rec2, RecordMetadataKey: Key2 } = await import("tsshogi");
+  const threatRec = Rec2.newByUSI("position sfen 4k4/9/9/3b5/9/9/P8/7R1/4K4 b - 1 moves 9g9f 6d2h+");
+  threatRec.metadata.setStandardMetadata(Key2.BLACK_NAME, "Q");
+  threatRec.metadata.setStandardMetadata(Key2.WHITE_NAME, "threat demo");
+  const threatId = (await api("POST", "/api/import", { text: exportKIF(threatRec) })).results[0].id;
+  await api("POST", "/api/analysis", { ids: [threatId] });
+  for (let i = 0; i < 100 && (await api("GET", "/api/analysis")).running; i++) await new Promise((r) => setTimeout(r, 200));
+  await page.goto(base + `/#/game/${threatId}`);
+  await page.waitForSelector(".moves .mark.threat", { timeout: 20000 });
+  check((await page.getAttribute(".moves .mark.threat", "title")).includes("２八角成"), "a mistake that ignored a threat is tagged 狙 in the move list");
+  await page.click('.moves li[data-ply="0"]');
+  await page.waitForSelector(".missed-threat");
+  await shot("03e-missed-threat");
+  // Leave the game page before deleting it, or its live refresh asks for the deleted game.
+  await page.goto(base + "/#/");
+  await page.waitForSelector(".tiles");
+  await api("DELETE", `/api/games/${threatId}`);
+
   await page.goto(base + "/#/review");
   await api("DELETE", `/api/games/${branchId}`);
   await page.waitForTimeout(800);

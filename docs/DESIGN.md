@@ -188,6 +188,17 @@ Each feature gets a short plan here before it is built. The plan stays afterward
 - **UI.** The game view's engine panel and the study board get "狙い Threat?". The answer reads "If ☗ passes: △5五角 (−820)" plus "詰めろ: 3手詰 △…" when there's a mate. The threat move shows as an arrow from the opponent's side, using the board's arrows in a passed position. The panel clears it when the position changes.
 - **Tests.** Unit tests for `passedPosition` (normal, and in check where passing is impossible). An API test with a position where ☖ threatens mate in one if ☗ passes, using the mock engine's mate-in-one search. The e2e test asks for a threat in the game view.
 
+### Missed threats on mistakes
+
+- **What.** For every move graded 悪手 or worse, the analysis also asks for the threat in the position before it: what the opponent would play if the mover passed (`core/threat.ts`). The mistake is a **missed threat** when that threat is exactly the engine's best reply to the move played: the move ignored something the opponent was already threatening, and the opponent can now carry it out.
+- **Storage.** `plies.threat_usi` holds the threat in the position before that ply's move, set only for flagged moves (`''` when there's none or it wasn't asked). The search goes through the eval cache under the passed position, so re-analysis is cheap. Restore copies it with the rest of the analysis.
+- **Where it shows.**
+  - The game's move list tags such moves 狙 ("missed the threat △8八角成").
+  - The engine panel's "Next" row names the threat.
+  - Cards carry `threatText`, and the review screen shows it after you answer.
+  - Stats counts how many of my mistakes were missed threats, next to the kinds of move.
+- **Tests.** An API test analyses a game where ☗ ignores the ☖ bishop's threat on 8八 (1六歩?? △8八角成). It checks the stored threat, the missed-threat tag in the game detail, the card's threat text and the stats count.
+
 ### Tech debt
 
 - ✅ `views/Game.vue`: the engine panel (`components/EnginePanel.vue`) and the second opinion (`components/SecondOpinion.vue`) are components now, and the file is down to ~850 lines. The move list and the variation handling could follow.

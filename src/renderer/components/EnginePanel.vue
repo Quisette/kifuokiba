@@ -12,6 +12,7 @@
         <span v-if="next.missed" class="mark l4">{{ next.missed === "mate" ? "詰み逃し" : "勝ち逃し" }}</span>
         <span class="muted">−{{ next.loss?.toFixed(1) }} pts</span>
       </div>
+      <div v-if="next?.missedThreat" class="missed-threat">Ignores the threat <b class="serif">{{ next.threatText }}</b>, which is the best reply.</div>
       <div v-if="ply.pvText" class="pv">最善 {{ ply.pvText }}</div>
     </template>
     <div v-else class="muted" style="margin-top: 6px">No evaluation for this position yet.</div>
@@ -148,6 +149,10 @@ onUnmounted(stopCandidates);
   gap: 6px;
   align-items: center;
   flex-wrap: wrap;
+}
+.missed-threat {
+  font-size: 13px;
+  color: var(--loss);
 }
 .pv {
   font-size: 13px;

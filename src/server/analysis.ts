@@ -6,6 +6,7 @@ import { Position } from "tsshogi";
 import { Library } from "./library.js";
 import { UsiEngine, SearchLimit, SearchLine, SearchResult } from "./engine/usi.js";
 import { EngineSettings } from "./settings.js";
+import { passedPosition } from "../core/threat.js";
 
 export type AnalysisStatus = {
   running: boolean;
@@ -251,9 +252,41 @@ export class AnalysisQueue extends EventEmitter {
         return;
       }
     }
+    await this.findThreats(id, engine, limit, lk);
+    if (this.stopRequested) {
+      this.lib.db.run("UPDATE games SET analysis_status = 'none' WHERE id = ? AND analysis_status = 'queued'", id);
+      return;
+    }
     this.lib.db.run("UPDATE games SET analysis_status = 'done', analysis_engine = ? WHERE id = ?", engine.name, id);
     this.lib.regrade(id);
     this.emit("gameDone", id);
+  }
+
+  /**
+   * The threat before each 悪手 or worse: the opponent's best move if the mover had
+   * passed. A move whose best reply is that threat ignored it ("missed threat").
+   */
+  private async findThreats(id: number, engine: UsiEngine, limit: SearchLimit, key: string) {
+    const rows = this.lib.db.all<{ ply: number; prev_sfen: string }>(
+      `SELECT p.ply, q.sfen prev_sfen FROM plies p JOIN plies q ON q.game_id = p.game_id AND q.ply = p.ply - 1
+       WHERE p.game_id = ? AND p.ply > 0 AND p.level >= 3 ORDER BY p.ply`,
+      id,
+    );
+    for (const r of rows) {
+      if (this.stopRequested) return;
+      const passed = passedPosition(r.prev_sfen);
+      let threat = "";
+      if (passed) {
+        const cached = this.lib.cachedEval(passed, engine.name, key);
+        if (cached) threat = cached.best_usi;
+        else {
+          const e = toBlackView(passed, await engine.search(`sfen ${passed}`, limit));
+          this.lib.storeEval(passed, e, engine.name, key);
+          threat = e.best;
+        }
+      }
+      this.lib.db.run("UPDATE plies SET threat_usi = ? WHERE game_id = ? AND ply = ?", threat, id, r.ply);
+    }
   }
 
   async shutdown() {

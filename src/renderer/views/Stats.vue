@@ -151,6 +151,9 @@
             </tbody>
           </table>
           <div class="muted small">A move counts under every kind it is, so a capture that gives check is in both rows.<template v-if="worstKind"> Your costliest kind: <b>{{ KIND_NAMES[worstKind] }}</b>.</template></div>
+          <div v-if="s.threats.mistakes" class="small">
+            狙いの見落とし · <b>{{ s.threats.missed }}</b> of your {{ s.threats.mistakes }} 悪手+ ignored a threat the opponent then had as the best reply.
+          </div>
         </section>
 
         <section v-if="s.thinkTime.length" class="panel box">
@@ -233,6 +236,7 @@ type StatsT = {
   meanMistakes: number | null;
   phaseProfile: { phase: string; avgLoss: number | null; moves: number; mistakes: number; avgSeconds: number | null }[];
   thinkTime: { label: string; moves: number; avgLoss: number | null; mistakes: number; mistakeRate: number | null }[];
+  threats: { mistakes: number; missed: number };
   moveKinds: { total: number; rows: { kind: string; moves: number; share: number; avgLoss: number | null; mistakes: number; mistakeRate: number | null }[] };
   matchupGrid: { mine: string; cells: Cell[] }[];
 };

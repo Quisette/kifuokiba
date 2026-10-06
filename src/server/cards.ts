@@ -6,6 +6,7 @@ import { Rating, ratingFromLoss } from "../core/sm2.js";
 import { scheduleCard } from "../core/scheduler.js";
 import { winRate } from "../core/grading.js";
 import { normalizePlayerName } from "../core/summarize.js";
+import { passedPosition } from "../core/threat.js";
 import { moveText, pvText } from "../core/notation.js";
 
 export type CardRow = {
@@ -64,6 +65,8 @@ type ListRow = CardRow & {
   black_style: string;
   white_style: string;
   move_kind: string | null;
+  threat_usi: string | null;
+  reply_usi: string | null;
   tag_list: string | null;
 };
 
@@ -79,7 +82,7 @@ export class Cards {
   list(filter: CardFilter = {}, now = Date.now()) {
     const rows = this.lib.db.all<ListRow>(
       `SELECT c.*, g.black, g.white, g.date, g.strategy, g.black_opening, g.white_opening, g.black_style, g.white_style,
-              p.move_kind, (SELECT group_concat(tag, char(31)) FROM tags t WHERE t.game_id = c.game_id) tag_list
+              p.move_kind, p.threat_usi, p.best_usi reply_usi, (SELECT group_concat(tag, char(31)) FROM tags t WHERE t.game_id = c.game_id) tag_list
        FROM cards c JOIN games g ON g.id = c.game_id
        LEFT JOIN plies p ON p.game_id = c.game_id AND p.ply = c.ply
        ORDER BY c.due_at, c.id`,
@@ -102,7 +105,9 @@ export class Cards {
   /** Where a card comes from, seen from the side it is for. */
   private describe(c: ListRow) {
     const mine = c.side === "white" ? "white" : "black";
-    const { black_opening, white_opening, black_style, white_style, move_kind, tag_list, ...rest } = c;
+    const { black_opening, white_opening, black_style, white_style, move_kind, tag_list, threat_usi, reply_usi, ...rest } = c;
+    // A threat the played move ignored (the best reply carries it out), in the passed position.
+    const passed = threat_usi && threat_usi === reply_usi ? passedPosition(c.sfen) : null;
     const opening = mine === "black" ? black_opening || black_style : white_opening || white_style;
     return {
       ...rest,
@@ -110,6 +115,7 @@ export class Cards {
       opponent: normalizePlayerName(mine === "black" ? c.white : c.black),
       tags: tag_list ? tag_list.split("\x1f") : [],
       moveKinds: move_kind ? move_kind.split(",") : [],
+      threatText: passed ? moveText(passed, threat_usi!) : "",
     };
   }
 

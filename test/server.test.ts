@@ -848,3 +848,31 @@ describe("threats", () => {
     await expect(api("POST", "/api/threat", { sfen: "nonsense" })).rejects.toThrow(/bad sfen/);
   });
 });
+
+describe("missed threats", () => {
+  it("marks a mistake that ignored the opponent's threat", async () => {
+    // The ☖ bishop on 6四 eyes the bare ☗ rook on 2八; ☗9六歩 ignores it and △2八角成 takes it.
+    const { Record: Rec, RecordMetadataKey, exportKIF } = await import("tsshogi");
+    const rec = Rec.newByUSI("position sfen 4k4/9/9/3b5/9/9/P8/7R1/4K4 b - 1 moves 9g9f 6d2h+") as InstanceType<typeof Rec>;
+    rec.metadata.setStandardMetadata(RecordMetadataKey.BLACK_NAME, "me");
+    rec.metadata.setStandardMetadata(RecordMetadataKey.WHITE_NAME, "threatener");
+    rec.metadata.setStandardMetadata(RecordMetadataKey.START_DATETIME, "2026/10/02");
+    const id = (await api("POST", "/api/import", { text: exportKIF(rec) })).results[0].id;
+    await api("POST", "/api/analysis", { ids: [id] });
+    await waitIdle();
+    const g = await api("GET", `/api/games/${id}`);
+    const p1 = g.plies[1];
+    expect(p1.level).toBeGreaterThanOrEqual(3);
+    expect(p1.threat_usi).toBe("6d2h+");
+    expect(p1.missedThreat).toBe(true);
+    expect(p1.threatText).toContain("２八角成");
+    // Only flagged moves get a threat.
+    expect(g.plies[2].threat_usi).toBe("");
+    const card = (await api("GET", "/api/cards?opponent=threatener"))[0];
+    expect(card.threatText).toContain("２八角成");
+    const s = await api("GET", "/api/stats");
+    expect(s.threats.missed).toBeGreaterThanOrEqual(1);
+    expect(s.threats.mistakes).toBeGreaterThanOrEqual(s.threats.missed);
+    await api("DELETE", `/api/games/${id}`);
+  });
+});

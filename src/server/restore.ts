@@ -39,14 +39,14 @@ export function mergeBackup(lib: Library, backupPath: string): RestoreResult {
         for (const t of src.all<{ tag: string }>("SELECT tag FROM tags WHERE game_id = ?", g.id)) db.run("INSERT OR IGNORE INTO tags (game_id, tag) VALUES (?, ?)", r.id, t.tag);
         // Engine analysis and comments, where the current copy has none.
         if (g.analysis_status === "done") {
-          for (const p of src.all<{ ply: number; score: number | null; mate: number | null; best_usi: string; pv: string; eval_source: string; comment: string }>(
-            "SELECT ply, score, mate, best_usi, pv, eval_source, comment FROM plies WHERE game_id = ?",
+          for (const p of src.all<{ ply: number; score: number | null; mate: number | null; best_usi: string; pv: string; eval_source: string; comment: string; threat_usi: string }>(
+            "SELECT ply, score, mate, best_usi, pv, eval_source, comment, threat_usi FROM plies WHERE game_id = ?",
             g.id,
           )) {
             db.run(
-              `UPDATE plies SET score = ?, mate = ?, best_usi = ?, pv = ?, eval_source = ?
+              `UPDATE plies SET score = ?, mate = ?, best_usi = ?, pv = ?, eval_source = ?, threat_usi = ?
                WHERE game_id = ? AND ply = ? AND eval_source != 'engine'`,
-              p.score, p.mate, p.best_usi, p.pv, p.eval_source, r.id, p.ply,
+              p.score, p.mate, p.best_usi, p.pv, p.eval_source, p.threat_usi, r.id, p.ply,
             );
           }
           db.run(

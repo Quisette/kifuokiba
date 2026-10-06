@@ -120,6 +120,7 @@
             >
               変{{ (branchPlies.get(p.ply)?.length ?? 0) > 1 ? bi + 1 : "" }}
             </button>
+            <span v-if="p.missedThreat" class="mark threat" :title="`Missed the threat ${p.threatText}`">狙</span>
             <span v-if="p.missed" class="mark l4" :title="p.missed === 'mate' ? 'Missed a forced mate' : 'Threw away a won position'">{{ missedLabel(p.missed) }}</span>
             <span class="ev">{{ p.ply ? evalText(p.score, p.mate) : "" }}</span>
           </li>
@@ -751,6 +752,11 @@ async function findPosition() {
 }
 .moves li:hover {
   background: var(--line-soft);
+}
+.mark.threat {
+  background: transparent;
+  border: 1px solid var(--loss);
+  color: var(--loss);
 }
 .moves li.on {
   background: var(--gold-bg);

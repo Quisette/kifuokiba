@@ -186,6 +186,8 @@ export class Db {
     this.ensureColumn("games", "clear_white_ply", "INTEGER");
     // Comma-separated kinds of the move (see core/movekind.ts); NULL until worked out.
     this.ensureColumn("plies", "move_kind", "TEXT");
+    // For flagged moves: the threat (null-move best reply) in the position before the move.
+    this.ensureColumn("plies", "threat_usi", "TEXT NOT NULL DEFAULT ''");
   }
 
   private ensureColumn(table: string, column: string, decl: string) {

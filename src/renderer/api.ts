@@ -85,6 +85,9 @@ export type Ply = {
   situation: string;
   side: "black" | "white" | "";
   cardId: number | null;
+  /** For 悪手+: the opponent's threat before this move, and whether the move ignored it. */
+  threatText: string;
+  missedThreat: boolean;
 };
 
 export type Labelled = { name: string; ply: number };
@@ -134,6 +137,8 @@ export type Card = {
   bestText: string;
   playedText: string;
   pvText: string;
+  /** The threat the game move ignored, when it did. */
+  threatText?: string;
   /** Failed often enough that drilling alone isn't working. */
   leech: boolean;
 };

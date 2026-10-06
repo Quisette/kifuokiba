@@ -9,6 +9,8 @@ import { gradeMoves, accuracy, turningPoint, clearPlies, Eval, mistakeLabels } f
 import { newSm2State } from "../core/sm2.js";
 import { getSituationText } from "../core/score.js";
 import { moveKinds } from "../core/movekind.js";
+import { moveText } from "../core/notation.js";
+import { passedPosition } from "../core/threat.js";
 
 export type ImportResult =
   | { status: "added"; id: number; name: string }
@@ -356,8 +358,13 @@ export class Library {
     const plies = this.db.all<{
       ply: number; usi: string; text: string; sfen: string; comment: string; elapsed_ms: number;
       score: number | null; mate: number | null; best_usi: string; pv: string; eval_source: string;
-      loss: number | null; level: number; missed: "" | "mate" | "win"; user_mark: string;
+      loss: number | null; level: number; missed: "" | "mate" | "win"; user_mark: string; threat_usi: string;
     }>("SELECT * FROM plies WHERE game_id = ? ORDER BY ply", id);
+    // The threat is a move in the position before this ply's move, with the mover passing.
+    const threatText = (ply: number, usi: string) => {
+      const passed = usi && ply > 0 ? passedPosition(plies[ply - 1].sfen) : null;
+      return passed ? moveText(passed, usi) : "";
+    };
     const tags = this.db.all<{ tag: string }>("SELECT tag FROM tags WHERE game_id = ? ORDER BY tag", id).map((t) => t.tag);
     const cards = this.db.all<{ id: number; ply: number }>("SELECT id, ply FROM cards WHERE game_id = ?", id);
     const pvText = (ply: number, pv: string) => {
@@ -387,6 +394,9 @@ export class Library {
         label: mistakeLabels[p.level as 0 | 1 | 2 | 3 | 4] ?? "",
         side: p.ply === 0 ? "" : sideOfMove(row.initial_sfen, p.ply),
         cardId: cards.find((c) => c.ply === p.ply)?.id ?? null,
+        threatText: threatText(p.ply, p.threat_usi),
+        // The move ignored the threat: the opponent's best reply is exactly it.
+        missedThreat: !!p.threat_usi && p.threat_usi === p.best_usi,
       })),
     };
   }

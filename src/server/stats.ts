@@ -193,6 +193,18 @@ export function computeStats(lib: Library, filter: GameFilter = {}) {
   }
 
   const kindProfile = moveKindProfile(lib, sideById, firstBlack);
+  // Of my 悪手 and worse, those that ignored a threat the best reply then carries out.
+  const threats = { mistakes: 0, missed: 0 };
+  for (const r of lib.db.all<{ game_id: number; ply: number; threat_usi: string; best_usi: string }>(
+    "SELECT game_id, ply, threat_usi, best_usi FROM plies WHERE ply > 0 AND level >= 3",
+  )) {
+    const g = sideById.get(r.game_id);
+    if (!g) continue;
+    const moverBlack = (r.ply % 2 === 1) === (firstBlack.get(r.game_id) ?? true);
+    if ((g.mySide === "black") !== moverBlack) continue;
+    threats.mistakes++;
+    if (r.threat_usi && r.threat_usi === r.best_usi) threats.missed++;
+  }
 
   const analysed = mine.filter((g) => g.myAccuracy !== null).sort((a, b) => (a.date < b.date ? -1 : 1));
   return {
@@ -253,6 +265,8 @@ export function computeStats(lib: Library, filter: GameFilter = {}) {
     })),
     /** My graded moves by kind (drops, captures, checks…): how much each costs and how often it is a 悪手 or worse. */
     moveKinds: kindProfile,
+    /** My 悪手+ and how many of them were missed threats. */
+    threats,
     /** Mistake rate by how long I thought; empty when no game has move times. */
     thinkTime: timeBuckets.some((b) => b.losses.length)
       ? timeBuckets.map((b) => ({

@@ -127,6 +127,7 @@
               <span class="muted" style="font-family: var(--sans); font-size: 12px"> −{{ card.loss.toFixed(1) }} pts</span>
             </span>
           </div>
+          <div v-if="card.threatText" class="threat-note">狙いの見落とし · In the game you ignored the threat <b class="serif">{{ card.threatText }}</b>.</div>
           <div v-if="card.pvText" class="muted pv">読み筋 {{ card.pvText }}</div>
           <div class="row">
             <button type="button" class="btn small" @click="replay">{{ replaying ? "Stop" : "Replay line" }}</button>
@@ -456,6 +457,10 @@ const nextDue = computed(() => {
   align-items: flex-end;
   gap: 12px 18px;
   margin-bottom: 16px;
+}
+.threat-note {
+  font-size: 13px;
+  color: var(--loss);
 }
 .builder {
   display: flex;
