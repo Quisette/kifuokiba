@@ -309,6 +309,27 @@ try {
   await page.waitForSelector(".moves .umark");
   check((await api("GET", `/api/games/${recordedId}`)).plies[1].user_mark === "?!", "marking a move with ?! saves it");
 
+  // Set up a position by hand on the study board: tsume template, a piece from ☖'s stand to ☗'s, then onto 1九.
+  await page.goto(base + "/#/board");
+  await page.waitForSelector(".moves li");
+  await page.click("button:has-text('Edit position')");
+  await page.waitForSelector(".edit");
+  await page.selectOption(".edit select", { label: "詰将棋 Tsume (one king)" });
+  await page.waitForTimeout(300);
+  const handPointers = (i) => page.$$(`.hand.operation >> nth=${i} >> div`);
+  // The stand's touch area sits over its pieces for hit tests, so click the piece element itself.
+  await (await handPointers(1))[1].dispatchEvent("click");
+  await (await handPointers(0))[0].dispatchEvent("click");
+  await page.waitForTimeout(200);
+  await (await handPointers(0))[1].dispatchEvent("click");
+  await clickSquare(1, 9);
+  check((await page.$$(".problems li")).length === 0, "a hand-made position with one king passes the checks");
+  await shot("06e-board-edit");
+  await page.click(".edit button:has-text('Done')");
+  await page.waitForSelector(".lrow", { timeout: 20000 });
+  const editedSfen = new URLSearchParams((await page.evaluate(() => location.hash)).split("?")[1]).get("sfen") ?? "";
+  check(/^4k4\/9\/9\/9\/9\/9\/9\/9\/[A-Z]{1}8 b /.test(editedSfen) || /^4k4\/9\/9\/9\/9\/9\/9\/9\/8[A-Z] b /.test(editedSfen), `the edited position becomes the board's start (${editedSfen})`);
+
   // Guess the moves of the game just recorded: ☗7六歩 is what was played.
   await page.goto(base + `/#/guess?game=${recordedId}&side=black`);
   await page.waitForSelector(".board.operation", { state: "attached" });

@@ -14,11 +14,13 @@
       :candidates="candidateMoves"
       :flip="flip"
       :allow-move="allowMove"
+      :allow-edit="allowEdit"
       :hide-clock="true"
       :black-player-name="blackName"
       :white-player-name="whiteName"
-      :highlight-movable-squares="allowMove"
+      :highlight-movable-squares="allowMove && !allowEdit"
       @move="onMove"
+      @edit="(changes: PositionChange[]) => emit('edit', changes)"
     >
       <template #left-control><slot name="left-control"></slot></template>
       <template #right-control><slot name="right-control"></slot></template>
@@ -30,7 +32,7 @@
 // Thin wrapper around ShogiHome's BoardView (vendored, MIT): turns SFEN/USI
 // props into tsshogi objects and sizes the board to its container.
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import { Move, Position } from "tsshogi";
+import { Move, Position, PositionChange } from "tsshogi";
 import BoardView from "@/renderer/view/primitive/BoardView.vue";
 import { RectSize } from "@/common/assets/geometry";
 import { BoardImageType, BoardLabelType, KingPieceType, PieceStandImageType } from "@/common/settings/app";
@@ -43,14 +45,16 @@ const props = withDefaults(
     arrows?: { usi: string; score?: number }[];
     flip?: boolean;
     allowMove?: boolean;
+    /** Position editing: pieces are dragged freely and double-clicked to rotate; emits "edit". */
+    allowEdit?: boolean;
     blackName?: string;
     whiteName?: string;
     compact?: boolean;
     maxHeight?: number;
   }>(),
-  { lastMove: null, arrows: () => [], flip: false, allowMove: false, blackName: "先手", whiteName: "後手", compact: false, maxHeight: 0 },
+  { lastMove: null, arrows: () => [], flip: false, allowMove: false, allowEdit: false, blackName: "先手", whiteName: "後手", compact: false, maxHeight: 0 },
 );
-const emit = defineEmits<{ move: [usi: string, move: Move] }>();
+const emit = defineEmits<{ move: [usi: string, move: Move]; edit: [changes: PositionChange[]] }>();
 
 const host = ref<HTMLElement | null>(null);
 const width = ref(0);

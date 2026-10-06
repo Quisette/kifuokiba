@@ -273,3 +273,21 @@ describe("move tree", () => {
     expect(rec.moves.slice(1).map((n) => (n.move as { usi: string }).usi)).toEqual(["7g7f", "3c3d", "2g2f"]);
   });
 });
+
+describe("position setup checks", () => {
+  it("accepts real positions and names what's wrong with others", async () => {
+    const { setupProblems } = await import("../src/core/setup.js");
+    expect(setupProblems("lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1")).toEqual([]);
+    expect(setupProblems("4k4/9/9/9/9/9/9/9/9 b 2r2b4g4s4n4l18p 1")).toEqual([]);
+    expect(setupProblems("9/9/9/9/9/9/9/9/9 b - 1")).toEqual(["There is no king on the board."]);
+    expect(setupProblems("4k4/9/9/9/9/9/9/9/3KK4 b - 1")).toContain("☗ has more than one king.");
+    expect(setupProblems("P3k4/9/9/9/9/9/9/9/4K4 b - 1")[0]).toMatch(/☗歩 on 91 can never move/);
+    expect(setupProblems("4k4/9/9/9/9/9/9/9/n3K4 w - 1")[0]).toMatch(/☖桂 on 99 can never move/);
+    expect(setupProblems("4k4/9/9/9/P8/P8/9/9/4K4 b - 1")).toEqual(["☗ has two pawns on file 9 (二歩)."]);
+    expect(setupProblems("4k4/9/9/9/9/9/9/9/4K4 b 3R 1")).toEqual(["There are 3 飛; a set has 2."]);
+    expect(setupProblems("4k4/9/9/9/9/9/9/+R8/4K4 b 2R 1")).toEqual(["There are 3 飛; a set has 2."]);
+    // ☖'s king on 5a is attacked by the ☗ rook on 5i… with ☗ to move, ☖ left it in check.
+    expect(setupProblems("4k4/9/9/9/9/9/9/9/K3R4 b - 1")).toEqual(["☖'s king is in check but it is ☗ to move."]);
+    expect(setupProblems("4k4/9/9/9/9/9/9/9/K3R4 w - 1")).toEqual([]);
+  });
+});

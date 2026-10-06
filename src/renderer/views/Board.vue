@@ -28,10 +28,24 @@
             <span class="b" :style="{ flex: flip ? 100 - barPct : barPct }"></span>
           </div>
           <div style="flex: 1; min-width: 0">
-            <ShogiBoard :sfen="shown.sfen" :last-move="lastMove" :arrows="arrows" :flip="flip" :allow-move="true" :max-height="560" @move="play" />
+            <ShogiBoard
+              :sfen="editing ? editSfen : shown.sfen"
+              :last-move="editing ? null : lastMove"
+              :arrows="editing ? [] : arrows"
+              :flip="flip"
+              :allow-move="!editing"
+              :allow-edit="editing"
+              :max-height="560"
+              @move="play"
+              @edit="applyEdit"
+            />
           </div>
         </div>
-        <div class="nav">
+        <div v-if="editing" class="nav">
+          <button type="button" class="btn" @click="flip = !flip">Flip 反転</button>
+          <span class="here muted">Editing the position</span>
+        </div>
+        <div v-else class="nav">
           <button type="button" class="btn" aria-label="Start position" @click="cursor = 0">|◀</button>
           <button type="button" class="btn" aria-label="Previous move" @click="step(-1)">◀</button>
           <button type="button" class="btn" aria-label="Next move" @click="step(1)">▶</button>
@@ -60,14 +74,45 @@
             <span class="ev">{{ i && evalOf(p.sfen) ? evalText(evalOf(p.sfen)!.score ?? null, evalOf(p.sfen)!.mate ?? null) : "" }}</span>
           </li>
         </ol>
-        <div class="row pad">
+        <div v-if="!editing" class="row pad">
           <button type="button" class="btn small" :disabled="onMainLine" title="Make the line up to here the main line" @click="makeMain">Make main line</button>
           <button type="button" class="btn small" :disabled="cursor === 0" title="Delete this move and everything after it" @click="deleteVariation">Delete variation</button>
           <button type="button" class="btn small" :disabled="cursor >= line.length - 1" title="Delete the moves after this one" @click="cutHere">Delete after here</button>
         </div>
       </section>
 
-      <section class="side-col">
+      <section v-if="editing" class="side-col">
+        <div class="panel box edit">
+          <div class="cap">局面編集 Edit position</div>
+          <p class="muted small">
+            Drag pieces between the board and the stands. Double-click or right-click a piece to promote it or turn it to the other side. Pieces not in play wait on ☖'s stand.
+          </p>
+          <label class="field">
+            Start from
+            <select v-model="template" @change="applyTemplate">
+              <option value="">— keep the current position —</option>
+              <option v-for="t in TEMPLATES" :key="t.sfen" :value="t.sfen">{{ t.label }}</option>
+            </select>
+          </label>
+          <div class="field">
+            <span>To move</span>
+            <div class="row" role="group" aria-label="Side to move">
+              <button type="button" class="chip" :class="{ on: editColor === 'black' }" :aria-pressed="editColor === 'black'" @click="setColor('black')">☗ 先手</button>
+              <button type="button" class="chip" :class="{ on: editColor === 'white' }" :aria-pressed="editColor === 'white'" @click="setColor('white')">☖ 後手</button>
+            </div>
+          </div>
+          <ul v-if="problems.length" class="problems" role="alert">
+            <li v-for="p in problems" :key="p">{{ p }}</li>
+          </ul>
+          <div class="row">
+            <button type="button" class="btn primary" :disabled="problems.length > 0" @click="finishEdit">Done</button>
+            <button type="button" class="btn" @click="editing = false">Cancel</button>
+          </div>
+          <div class="muted small">Done starts a new study from this position; the moves on the board now are dropped.</div>
+        </div>
+      </section>
+
+      <section v-else class="side-col">
         <div class="panel box">
           <div class="cap">検討 Engine</div>
           <template v-if="!engineSet">
@@ -129,6 +174,7 @@
             <a class="btn" :href="practiceHref" title="Play this position out against the engine">Play it out</a>
             <a class="btn" :href="diagramHref" download>Diagram (.svg)</a>
             <button type="button" class="btn" @click="copyPosition">Copy position</button>
+            <button type="button" class="btn" @click="startEdit">Edit position</button>
           </div>
           <code class="sfen">{{ usiString }}</code>
         </div>
@@ -143,12 +189,13 @@
 // A free board for studying any position: not tied to a saved game. The line
 // (start position + moves + cursor) lives in the URL so it can be linked.
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import { InitialPositionSFEN, Position, Record as KRecord, RecordFormatType, detectRecordFormat, exportKIF, formatMove, importCSA, importJKFString, importKI2, importKIF } from "tsshogi";
+import { Color, InitialPositionSFEN, Position, PositionChange, Record as KRecord, RecordFormatType, detectRecordFormat, exportKIF, formatMove, importCSA, importJKFString, importKI2, importKIF } from "tsshogi";
 import { api, evalText, live, toast, winRate } from "../api";
 import { route } from "../router";
 import ShogiBoard from "../components/ShogiBoard.vue";
 import AddToNotebook from "../components/AddToNotebook.vue";
 import { liveSearch, LiveResult } from "../live";
+import { setupProblems } from "../../core/setup";
 import { MoveTree, emptyTree, formatTree, hasVariations, parseTree, pruneIllegal, recordToTree, selectedLine, treeToRecord } from "../../core/movetree";
 
 type Alt = { index: number; text: string };
@@ -248,6 +295,56 @@ function reset() {
   inputError.value = "";
 }
 
+// ---- editing a position by hand
+const TEMPLATES = [
+  { label: "平手 Even", sfen: STANDARD },
+  { label: "詰将棋 Tsume (one king)", sfen: InitialPositionSFEN.TSUME_SHOGI },
+  { label: "詰将棋 Tsume (both kings)", sfen: InitialPositionSFEN.TSUME_SHOGI_2KINGS },
+  { label: "香落ち Lance handicap", sfen: InitialPositionSFEN.HANDICAP_LANCE },
+  { label: "角落ち Bishop handicap", sfen: InitialPositionSFEN.HANDICAP_BISHOP },
+  { label: "飛車落ち Rook handicap", sfen: InitialPositionSFEN.HANDICAP_ROOK },
+  { label: "二枚落ち Two pieces", sfen: InitialPositionSFEN.HANDICAP_2PIECES },
+  { label: "四枚落ち Four pieces", sfen: InitialPositionSFEN.HANDICAP_4PIECES },
+  { label: "六枚落ち Six pieces", sfen: InitialPositionSFEN.HANDICAP_6PIECES },
+];
+const editing = ref(false);
+const editSfen = ref("");
+const template = ref("");
+const editColor = computed(() => (editSfen.value.split(" ")[1] === "w" ? "white" : "black"));
+const problems = computed(() => (editing.value ? setupProblems(editSfen.value) : []));
+// Move numbers restart at 1 for a position set up by hand.
+const withMoveOne = (sfen: string) => sfen.split(" ").slice(0, 3).join(" ") + " 1";
+function startEdit() {
+  cancel();
+  editSfen.value = withMoveOne(shown.value.sfen);
+  template.value = "";
+  editing.value = true;
+}
+function applyEdit(changes: PositionChange[]) {
+  const pos = Position.newBySFEN(editSfen.value);
+  if (!pos) return;
+  for (const c of changes) pos.edit(c);
+  editSfen.value = pos.sfen;
+}
+function applyTemplate() {
+  if (template.value) editSfen.value = template.value;
+}
+function setColor(c: "black" | "white") {
+  const pos = Position.newBySFEN(editSfen.value);
+  if (!pos) return;
+  pos.setColor(c === "black" ? Color.BLACK : Color.WHITE);
+  editSfen.value = pos.sfen;
+}
+function finishEdit() {
+  if (problems.value.length) return;
+  start.value = withMoveOne(editSfen.value);
+  tree.value = emptyTree();
+  path.value = [];
+  cursor.value = 0;
+  gameId.value = 0;
+  editing.value = false;
+}
+
 // ---- setting up from pasted text
 const input = ref("");
 const inputError = ref("");
@@ -329,7 +426,7 @@ function cancel() {
 }
 function analyse() {
   cancel();
-  if (!engineSet.value) return;
+  if (!engineSet.value || editing.value) return;
   const key = cacheKey(shown.value.sfen);
   if (cache.value.has(key)) return;
   engineError.value = "";
@@ -363,7 +460,7 @@ function restart() {
   analyse();
 }
 let timer: ReturnType<typeof setTimeout> | undefined;
-watch([() => shown.value.sfen, maxMs], () => {
+watch([() => shown.value.sfen, maxMs, editing], () => {
   clearTimeout(timer);
   cancel();
   // Wait a moment so stepping quickly through a line doesn't start a search per move.
@@ -427,6 +524,7 @@ async function copyPosition() {
 function onKey(e: KeyboardEvent) {
   const t = e.target as HTMLElement;
   if (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (editing.value && e.key !== "f") return;
   if (e.key === "ArrowRight") step(1);
   else if (e.key === "ArrowLeft") step(-1);
   else if (e.key === "Home") cursor.value = 0;
@@ -608,6 +706,18 @@ watch(cursor, (i) => {
 }
 .big .serif {
   font-size: 32px;
+}
+.edit p {
+  margin: 0;
+}
+.problems {
+  margin: 0;
+  padding-left: 1.2em;
+  color: var(--loss);
+  font-size: 13px;
+}
+.small {
+  font-size: 12px;
 }
 .depth {
   display: flex;

@@ -75,7 +75,7 @@ Ordered by value for the daily study loop. ✅ marks items that are built.
 2. ✅ **Mistakes by kind of move.** Stats shows how often each kind of my moves goes wrong: drops, captures, checks, king moves, promotions and quiet moves, with the average loss and how often each is a 悪手 or worse. "I blunder with drops" is something you can practise. "I lose points in the middlegame" is too vague to act on.
 3. ✅ **Streaming analysis.** Run `go infinite` and stream `info` lines over SSE, so the study board and the game view show the eval deepening live instead of after a fixed movetime. This needs one engine owner that can take a search away from the queue and give it back.
 4. ✅ **Variations in the study board.** Keep a move tree instead of a single line, and save it as KIF 変化 (`Record` in tsshogi already supports branches). Saving back into an existing game would add the line as a branch of that game.
-5. **Position setup.** A piece palette for the study board, so positions from books and magazines can be entered without typing SFEN.
+5. ✅ **Position setup.** A piece palette for the study board, so positions from books and magazines can be entered without typing SFEN.
 
 ### Later
 
@@ -102,6 +102,13 @@ Each feature gets a short plan here before it is built. The plan stays afterward
 - **Board.** The selection is a path of child indexes plus a cursor depth. Playing a move that differs from the next one adds a variation instead of cutting the line off. Rows where alternatives exist show 変 chips that switch to them. For the current move there are "Make main line" (moves it to the front at every level along the path), "Delete variation" and "Delete after here". The URL carries the tree text.
 - **In and out.** Pasting a KIF with 変化 brings the branches in. "Study board" from a game brings the game's stored variations along. "Save as game" writes KIF with 変化. A board opened from a game also offers "Save into the game": `POST /api/games/:id/variations` merges the tree's lines into the game's record as branches and rewrites the stored KIF. The main line, plies, analysis and dedup hash stay as they are, and the new branches show in the game view's move list.
 - **Tests.** Unit tests cover parsing, formatting and the Record round trip. An API test merges variations into a game and reads them back through `/branches`. The e2e test plays an alternative move, checks that the 変 chip appears and that the variation survives a reload, then saves it into the game.
+
+### Position setup (roadmap 5)
+
+- **Editing.** ShogiHome's `BoardView` already has an edit mode (`allow-edit`). Pieces are dragged between the board and the stands, and a double-click or right-click rotates a piece (promote, then turn it to the other side). `ShogiBoard` passes the prop through and re-emits the `edit` changes, and the study board applies them with tsshogi's `Position.edit`. As in ShogiHome, pieces that aren't on the board wait on gote's stand, which works as the piece box.
+- **Board.** "Edit position" switches the study board to an edit panel in place of the engine: a starting template (平手, 詰将棋 with one or two kings, 香/角/飛/二枚/四枚/六枚落ち, empty), the side to move, "Done" and "Cancel". "Done" checks the position, then makes it the new start with an empty move tree, ending any link to a game.
+- **Checks.** `core/setup.ts` lists what's wrong with a position: more than one king for a side or no king at all, more pieces than a set has, pawns, lances or knights with nowhere to move, 二歩, and the side not to move being in check. "Done" stays disabled while there are problems, and they're listed under the board.
+- **Tests.** Unit tests for each check. The e2e test edits a position (starts from the 詰将棋 template, drags a gold from the stand onto the board, sets the side to move), finishes, and sees the engine start on it.
 
 ### Tech debt
 
