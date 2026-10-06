@@ -76,3 +76,19 @@ it("merges a backup into another library, keeping analysis, cards, history and n
   const bad = await fetch(`${b.base}/api/restore`, { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: Buffer.alloc(500, 1) });
   expect(bad.status).toBe(400);
 }, 30000);
+
+it("merges variations from the backup's copy of a game into the one here", async () => {
+  const kif = makeKif({ moves: "7g7f 3c3d 2g2f 8c8d", black: "me", white: "v", date: "2026/09/08" });
+  const a = await start();
+  const ga = (await a.api("POST", "/api/import", { text: kif })).results[0].id;
+  await a.api("POST", `/api/games/${ga}/variations`, { tree: "7g7f 3c3d (8c8d)" });
+  const backup = Buffer.from(await (await fetch(`${a.base}/api/backup`)).arrayBuffer());
+
+  const b = await start();
+  const gb = (await b.api("POST", "/api/import", { text: kif })).results[0].id;
+  await b.api("POST", `/api/games/${gb}/variations`, { tree: "7g7f 3c3d 2g2f (5g5f)" });
+  const r = await fetch(`${b.base}/api/restore`, { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: backup });
+  expect(r.ok).toBe(true);
+  const branches = await b.api("GET", `/api/games/${gb}/branches`);
+  expect(branches.map((x: { usis: string[] }) => x.usis[0]).sort()).toEqual(["5g5f", "8c8d"]);
+}, 30000);
