@@ -168,6 +168,18 @@ Each feature gets a short plan here before it is built. The plan stays afterward
 - **Notebooks.** `:::shogi-study{id=12}` embeds a saved study: a stepper over the main line with 変 chips and comments. "Add to notebook" on a saved study inserts that directive.
 - **Tests.** Unit tests for the comment round trip through `Record`/KIF. API tests for study CRUD, for comment merging that never overwrites, and for restore. The e2e test comments a move, saves the study, reloads it by id and embeds it in a notebook.
 
+### Drilling saved studies
+
+- **What's asked.** For a study and a side, every position in the tree where that side is to move and the study has a next move. The study's moves there are the answers. The first one is the main move, and alternatives you wrote in as variations also count as right. Positions where the opponent is to move aren't asked about.
+- **Scheduling.** The `study_drill` table holds SM-2 state keyed by `(study_id, side, sfen_key)`, so editing a study's tree keeps the history of positions that are still in it. A position without a row is new, and new counts as due. A right answer is rated "good" and a wrong one "again", as on cards.
+- **Server.** `server/drill.ts` provides:
+  - `GET /api/studies/:id/drill?side=black[&all=1]`: the due (or all) positions, each with its last move, accepted answers, the main move's comment and its path in the study, ordered by due date and then depth
+  - `POST /api/studies/:id/drill { side, sfen, usi }`: checks the answer and reschedules
+  - `GET /api/drill/due`: due counts per study, for studies that have been drilled at least once
+  Phones may answer drills, as they may answer cards. Restore copies drill rows along with their studies.
+- **UI.** `#/drill/<id>?side=…` shows the position from the drilled side. You play your move, then see right or wrong, the accepted moves with the main one starred, and the study's comment, then go on. The header has the side switch, due and total counts, and "Practise all". The board offers "Drill this study" for a saved study, the studies list gets a "Drill" link, and Today lists the study with the most due positions.
+- **Tests.** API tests for the positions offered (side to move, accepted alternatives, the opponent's turns skipped), scheduling (right pushes the position back, wrong brings it back in ten minutes, and the drill screen re-asks it before the session ends), due counts, and a study edit that keeps history. The e2e test drills the study saved earlier in the run.
+
 ### Tech debt
 
 - `views/Game.vue` (~930 lines) and `server/library.ts` (~710 lines) do too much. Move the move list, the engine panel and the variation handling into components, and move the export code out of `Library`.

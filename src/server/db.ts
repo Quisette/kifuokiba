@@ -146,6 +146,18 @@ CREATE TABLE IF NOT EXISTS studies (
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS study_drill (
+  study_id INTEGER NOT NULL REFERENCES studies(id) ON DELETE CASCADE,
+  side TEXT NOT NULL,
+  sfen_key TEXT NOT NULL,
+  repetitions INTEGER NOT NULL DEFAULT 0,
+  interval_days REAL NOT NULL DEFAULT 0,
+  ease REAL NOT NULL DEFAULT 2.5,
+  due_at INTEGER NOT NULL,
+  lapses INTEGER NOT NULL DEFAULT 0,
+  last_review_at INTEGER,
+  PRIMARY KEY (study_id, side, sfen_key)
+);
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL

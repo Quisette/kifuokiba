@@ -398,6 +398,32 @@ try {
   await page.waitForFunction(() => document.querySelector(".study-block .comment")?.textContent?.includes("first choice"));
   check(true, "the embedded study steps through its moves with their comments");
 
+  // Drill a study: ☗7六歩 right, then a wrong move where the study plays ☗2六歩, which comes back at the end.
+  const drillStudy = await api("POST", "/api/studies", {
+    title: "e2e drill",
+    start_sfen: "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1",
+    tree: { usi: "", children: [{ usi: "7g7f", children: [{ usi: "3c3d", children: [{ usi: "2g2f", comment: "居飛車で", children: [] }] }] }] },
+  });
+  await page.goto(base + `/#/drill/${drillStudy.id}?side=black`);
+  await page.waitForSelector(".prompt");
+  await page.waitForTimeout(300);
+  check((await page.textContent(".spread")).includes("1 / 2"), "the drill asks each ☗ position of the study");
+  await clickSquare(7, 7);
+  await clickSquare(7, 6);
+  await page.waitForSelector(".verdict.good");
+  await page.click("button:has-text('Next')");
+  await page.waitForSelector(".prompt");
+  await page.waitForTimeout(300);
+  await clickSquare(5, 7);
+  await clickSquare(5, 6);
+  await page.waitForSelector(".verdict.bad");
+  check((await page.textContent(".box")).includes("居飛車で"), "a missed drill position shows the study's move and comment");
+  await shot("06h-drill");
+  await page.click("button:has-text('Next')");
+  await page.waitForFunction(() => document.querySelector(".spread")?.textContent?.includes("3 / 3"));
+  check(true, "a missed position is asked again before the session ends");
+  await api("DELETE", `/api/studies/${drillStudy.id}`);
+
   // Guess the moves of the game just recorded: ☗7六歩 is what was played.
   await page.goto(base + `/#/guess?game=${recordedId}&side=black`);
   await page.waitForSelector(".board.operation", { state: "attached" });

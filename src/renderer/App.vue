@@ -26,6 +26,7 @@
     <Stats v-else-if="route.name === 'stats'" />
     <Explorer v-else-if="route.name === 'explorer'" />
     <Board v-else-if="route.name === 'board'" :key="route.params[0] ?? ''" />
+    <StudyDrill v-else-if="route.name === 'drill'" :key="route.params[0]" />
     <RecordGame v-else-if="route.name === 'record'" />
     <Player v-else-if="route.name === 'player'" />
     <Repertoire v-else-if="route.name === 'repertoire'" />
@@ -58,6 +59,7 @@ import Review from "./views/Review.vue";
 import Stats from "./views/Stats.vue";
 import Explorer from "./views/Explorer.vue";
 import Board from "./views/Board.vue";
+import StudyDrill from "./views/StudyDrill.vue";
 import RecordGame from "./views/RecordGame.vue";
 import Player from "./views/Player.vue";
 import Notebooks from "./views/Notebooks.vue";
@@ -79,7 +81,7 @@ const nav = [
   { name: "notes", label: "研究 Notes" },
   { name: "settings", label: "設定 Settings" },
 ].filter((n) => !remote || (n.name !== "notes" && n.name !== "settings"));
-const active = (name: string) => route.name === name || (name === "library" && (route.name === "game" || route.name === "record" || route.name === "guess")) || (name === "stats" && route.name === "player") || (name === "review" && (route.name === "puzzles" || route.name === "practice")) || (name === "explorer" && route.name === "repertoire");
+const active = (name: string) => route.name === name || (name === "library" && (route.name === "game" || route.name === "record" || route.name === "guess")) || (name === "stats" && route.name === "player") || (name === "review" && (route.name === "puzzles" || route.name === "practice")) || (name === "explorer" && route.name === "repertoire") || (name === "board" && route.name === "drill");
 
 const due = ref(0);
 async function refreshDue() {

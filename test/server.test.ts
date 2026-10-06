@@ -783,3 +783,52 @@ describe("comments saved into a game", () => {
     await api("DELETE", `/api/games/${id}`);
   });
 });
+
+describe("drilling a study", () => {
+  it("asks the drilled side's positions, accepts variations and schedules answers", async () => {
+    const START = "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1";
+    // ☗7六歩 △3四歩 ☗2六歩 (or ☗6六歩) △8四歩, with a comment on the main ☗2六歩.
+    const tree = {
+      usi: "",
+      children: [{ usi: "7g7f", children: [{ usi: "3c3d", children: [
+        { usi: "2g2f", comment: "居飛車", children: [{ usi: "8c8d", children: [] }] },
+        { usi: "6g6f", children: [] },
+      ] }] }],
+    };
+    const st = await api("POST", "/api/studies", { title: "drill me", start_sfen: START, tree });
+    const black = await api("GET", `/api/studies/${st.id}/drill?side=black`);
+    expect(black).toMatchObject({ title: "drill me", total: 2, due: 2 });
+    expect(black.positions.map((p: { depth: number }) => p.depth)).toEqual([0, 2]);
+    const second = black.positions[1];
+    expect(second.accepted.map((a: { usi: string; main: boolean }) => [a.usi, a.main])).toEqual([["2g2f", true], ["6g6f", false]]);
+    expect(second.comment).toBe("居飛車");
+    expect(second.lastMove.usi).toBe("3c3d");
+    expect(second.path).toEqual([0, 0]);
+    // ☖ answers △3四歩 and △8四歩; after ☗6六歩 the study has no ☖ move, so nothing is asked there.
+    expect((await api("GET", `/api/studies/${st.id}/drill?side=white`)).total).toBe(2);
+
+    // A variation counts as right and pushes the position back; a wrong move keeps one due.
+    const ok = await api("POST", `/api/studies/${st.id}/drill`, { side: "black", sfen: second.sfen, usi: "6g6f" });
+    expect(ok).toMatchObject({ correct: true, main: false });
+    expect(ok.dueAt).toBeGreaterThan(Date.now() + 12 * 3600 * 1000);
+    const bad = await api("POST", `/api/studies/${st.id}/drill`, { side: "black", sfen: black.positions[0].sfen, usi: "2g2f" });
+    expect(bad.correct).toBe(false);
+    expect(bad.dueAt).toBeLessThan(Date.now() + 3600 * 1000);
+    // The missed one comes back in ten minutes (SM-2 relearning), so nothing is due this second.
+    const after = await api("GET", `/api/studies/${st.id}/drill?side=black`);
+    expect(after.due).toBe(0);
+    expect((await api("GET", `/api/studies/${st.id}/drill?side=black&all=1`)).positions).toHaveLength(2);
+    expect((await api("GET", "/api/drill/due")).find((d: { id: number }) => d.id === st.id)).toMatchObject({ side: "black", total: 2 });
+
+    // Editing the study keeps the history of positions that are still in it.
+    tree.children[0].children[0].children.push({ usi: "5g5f", children: [] });
+    await api("PUT", `/api/studies/${st.id}`, { tree });
+    const edited = await api("GET", `/api/studies/${st.id}/drill?side=black&all=1`);
+    expect(edited.positions.find((p: { depth: number }) => p.depth === 2).isNew).toBe(false);
+
+    await expect(api("GET", `/api/studies/${st.id}/drill?side=red`)).rejects.toThrow(/side/);
+    await expect(api("POST", `/api/studies/${st.id}/drill`, { side: "black", sfen: START.replace(" b ", " w "), usi: "3c3d" })).rejects.toThrow(/no such position/);
+    await api("DELETE", `/api/studies/${st.id}`);
+    expect((await api("GET", "/api/drill/due")).some((d: { id: number }) => d.id === st.id)).toBe(false);
+  });
+});

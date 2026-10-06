@@ -126,8 +126,21 @@ export function mergeBackup(lib: Library, backupPath: string): RestoreResult {
             "INSERT INTO studies (title, start_sfen, tree, game_id, created_at, updated_at) VALUES (?,?,?,?,?,?)",
             st.title, st.start_sfen, st.tree, st.game_id !== null ? (gameMap.get(st.game_id) ?? null) : null, st.created_at, st.updated_at,
           );
-          studyMap.set(st.id, Number(r.lastInsertRowid));
+          const newId = Number(r.lastInsertRowid);
+          studyMap.set(st.id, newId);
           result.studies++;
+          // Its drill history comes with it.
+          if (tables.has("study_drill")) {
+            for (const d of src.all<{ side: string; sfen_key: string; repetitions: number; interval_days: number; ease: number; due_at: number; lapses: number; last_review_at: number | null }>(
+              "SELECT * FROM study_drill WHERE study_id = ?",
+              st.id,
+            )) {
+              db.run(
+                "INSERT OR IGNORE INTO study_drill (study_id, side, sfen_key, repetitions, interval_days, ease, due_at, lapses, last_review_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                newId, d.side, d.sfen_key, d.repetitions, d.interval_days, d.ease, d.due_at, d.lapses, d.last_review_at,
+              );
+            }
+          }
         }
       });
     }

@@ -1,12 +1,13 @@
 // "Today": a short study plan built from what is waiting: due cards, recent
 // losses without a review note, mates you missed, and weak opening moves.
+import { Drill } from "./drill.js";
 import { Library } from "./library.js";
 import { Cards } from "./cards.js";
 import { findPuzzles } from "./puzzles.js";
 import { repertoire } from "./repertoire.js";
 import type { OpeningBook } from "./book.js";
 
-export function todayPlan(lib: Library, cards: Cards, book: OpeningBook | null, now = Date.now()) {
+export function todayPlan(lib: Library, cards: Cards, book: OpeningBook | null, now = Date.now(), drill?: Drill) {
   const counts = cards.counts(now);
   const since = new Date(now - 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   // A game counts as reviewed once a notebook page points a board at it (weekly reports don't count).
@@ -32,5 +33,8 @@ export function todayPlan(lib: Library, cards: Cards, book: OpeningBook | null, 
   // The saved deck with the most due cards, to suggest working through it.
   const top = cards.decks(now).sort((a, b) => b.due - a.due)[0];
   const deck = top?.due ? { id: top.id, name: top.name, due: top.due } : null;
-  return { due: counts.due, reviewedToday: counts.reviewedToday, losses, missedMates, weakOpenings, tsumeRetry, deck };
+  // The drilled study with the most positions due.
+  const topDrill = drill?.due(now)[0];
+  const study = topDrill?.due ? { id: topDrill.id, title: topDrill.title, side: topDrill.side, due: topDrill.due } : null;
+  return { due: counts.due, reviewedToday: counts.reviewedToday, losses, missedMates, weakOpenings, tsumeRetry, deck, study };
 }

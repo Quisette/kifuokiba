@@ -12,6 +12,7 @@ import { CardFilter, Cards } from "./cards.js";
 import { computeStats, playerProfile, similarGames } from "./stats.js";
 import { Pages } from "./pages.js";
 import { Studies, StudyInput } from "./studies.js";
+import { Drill, DrillSide } from "./drill.js";
 import { reviewNote } from "./review-note.js";
 import { weeklyNote } from "./weekly.js";
 import { prepNote } from "./prep.js";
@@ -108,6 +109,7 @@ export function createApp(opts: AppOptions) {
   const secondOpinion = new SecondOpinion(lib);
   const pages = new Pages(db);
   const studies = new Studies(db);
+  const drill = new Drill(db, studies);
   const backups = new AutoBackup(db, opts.dbPath, () => lib.settings.autoBackupKeep);
   if (opts.autoBackup !== false) backups.start();
   const sseClients = new Set<http.ServerResponse>();
@@ -468,7 +470,7 @@ export function createApp(opts: AppOptions) {
     const maxPly = Number(url.searchParams.get("maxPly")) || 24;
     return lib.cached(`repertoire:${side}:${maxPly}:${book?.mtimeMs ?? ""}`, () => repertoire(lib, { side, maxPly, book }));
   });
-  route("GET", "/api/today", async () => todayPlan(lib, cards, await loadBook().catch(() => null)));
+  route("GET", "/api/today", async () => todayPlan(lib, cards, await loadBook().catch(() => null), Date.now(), drill));
   route("GET", "/api/puzzles", (_r, url) => {
     const mineOnly = url.searchParams.get("mine") !== "0";
     const all = lib.cached(mineOnly ? "puzzles:mine" : "puzzles:all", () => findPuzzles(lib, { mineOnly }));
@@ -524,6 +526,18 @@ export function createApp(opts: AppOptions) {
     studies.delete(id(p));
     return { ok: true };
   });
+  const drillSide = (v: unknown): DrillSide => {
+    if (v !== "black" && v !== "white") throw new HttpError(400, "side must be black or white");
+    return v;
+  };
+  route("GET", "/api/studies/:id/drill", (_r, url, p) =>
+    drill.positions(id(p), drillSide(url.searchParams.get("side")), { all: url.searchParams.get("all") === "1" }) ?? Promise.reject(new HttpError(404, "study not found")),
+  );
+  route("POST", "/api/studies/:id/drill", (_r, _u, p, body) => {
+    const b = body as { side?: string; sfen?: string; usi?: string };
+    return drill.answer(id(p), drillSide(b.side), String(b.sfen ?? ""), String(b.usi ?? "")) ?? Promise.reject(new HttpError(404, "no such position in this study"));
+  });
+  route("GET", "/api/drill/due", () => drill.due());
   route("GET", "/api/pages", () => pages.list());
   route("GET", "/api/pages/:id", (_r, _u, p) => pages.get(id(p)) ?? Promise.reject(new HttpError(404, "page not found")));
   route("POST", "/api/pages", (_r, _u, _p, body) => pages.create(body as { title: string; notebook?: string; body?: string }));

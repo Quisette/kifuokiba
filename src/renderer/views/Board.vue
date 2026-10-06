@@ -190,6 +190,7 @@
             <a class="btn" :href="diagramHref" download>Diagram (.svg)</a>
             <button type="button" class="btn" @click="copyPosition">Copy position</button>
             <button type="button" class="btn" @click="startEdit">Edit position</button>
+            <a v-if="studyId" class="btn" :href="`#/drill/${studyId}?side=${drillSide}`" title="Practise the study's moves for one side, spaced over days">Drill this study</a>
           </div>
           <code class="sfen">{{ usiString }}</code>
         </div>
@@ -202,6 +203,7 @@
         <li v-for="st in studies" :key="st.id" :class="{ on: st.id === studyId }">
           <a :href="`#/board/${st.id}`" class="serif">{{ st.title }}</a>
           <span class="muted small">{{ st.moves }} move{{ st.moves === 1 ? "" : "s" }} · {{ new Date(st.updated_at).toLocaleDateString() }}</span>
+          <a class="btn small" :href="`#/drill/${st.id}?side=${st.start_sfen.split(' ')[1] === 'w' ? 'white' : 'black'}`">Drill</a>
           <button type="button" class="btn small" :aria-label="`Delete the study ${st.title}`" @click="deleteStudy(st)">Delete</button>
         </li>
       </ul>
@@ -535,6 +537,11 @@ const comment = computed({
   },
 });
 const anyComments = computed(() => hasComments(tree.value));
+// Drill the side that moves first in the study unless the board is flipped to the other one.
+const drillSide = computed(() => {
+  const first = start.value.split(" ")[1] === "w" ? "white" : "black";
+  return flip.value ? (first === "black" ? "white" : "black") : first;
+});
 
 // ---- engine: one streamed search at a time; finished (or stopped) results are kept per position
 const engineSet = ref(true);
