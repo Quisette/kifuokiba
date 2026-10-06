@@ -1,0 +1,92 @@
+# 棋譜帖 Kifu Study: design
+
+This is how the app is put together and what to build next. The README says what the app does for a user. This file is for whoever changes the code.
+
+## Goals
+
+1. **Study your own games.** Each feature starts from games you played and the mistakes you made in them. Pro games and tsume are extras.
+2. **Local and private.** Everything stays in one SQLite file. Nothing is sent anywhere unless you ask (Lishogi fetch). No accounts, no telemetry.
+3. **The engine does the tedious part.** It grades every move, finds mates and checks its own flags. You spend your time thinking about positions.
+4. **Short daily loop.** The Today page should always say what to do next: due cards, unreviewed losses, missed mates, weak openings.
+
+Non-goals: playing online, being a full kifu editor like ShogiHome or KifuForWindows, cloud sync.
+
+## Architecture
+
+```
+            ┌──────────── Electron main (src/electron) ────────────┐
+            │ starts the server, opens a BrowserWindow, dock badge │
+            └──────────────────────────┬───────────────────────────┘
+ browser / phone ──HTTP+SSE──►  src/server/app.ts  (127.0.0.1:3210, LAN gate for phones)
+                                       │
+          ┌───────────────┬────────────┼──────────────┬────────────────┐
+     library.ts      analysis.ts    cards.ts      stats.ts …      engine/usi.ts
+     import, plies   queue, cache   SM-2/FSRS     aggregations    USI child process
+          └───────────────┴──── db.ts (node:sqlite, one file) ───────┘
+                                       ▲
+                     src/core: parsing, grading, classifier, schedulers (no I/O)
+```
+
+- **`src/core`** is pure TypeScript with no I/O, so unit tests run without the server: record import/export (tsshogi), grading thresholds (from ShogiHome), the 戦型/castle/tactic classifier (generated from HiraganaSuisho and sylwi-kifu-vue rules by `tools/convert-classifier-rules.py`), SM-2, FSRS and the SVG diagram.
+- **`src/server`** owns the database and the engine. `app.ts` is a small router (`route(method, path, handler)`) over `node:http`. Handlers return JSON, and `HttpError` sets the status. Live updates (analysis progress, library changes) go out over one SSE stream, `/api/events`.
+- **`src/renderer`** is a Vue 3 single-page app with a hash router (`router.ts`: `#/name/param?query`). Each screen is one file in `views/`. `api.ts` holds the fetch wrapper, shared types and the reactive `live` store fed by SSE. The board is ShogiHome's `BoardView`, vendored under `vendor/shogihome` and wrapped by `components/ShogiBoard.vue`, which takes an SFEN, arrows and a last move and emits USI moves.
+- **`src/electron`** only starts the server and opens a window. The same build also runs in a browser with `npm run serve`.
+
+### Data model
+
+| table | what it holds |
+| --- | --- |
+| `games` | one row per imported record: original text (re-exported as is), players, result, classification, analysis summary (accuracy, turning ply, first clearly-won ply per side) |
+| `plies` | one row per position in a game's main line: USI, Japanese move text, SFEN, comment, think time, eval (black's view), loss, level, missed mate/win, the user's mark |
+| `evals` | eval cache keyed by `(sfen without move number, engine, limit)`, so transpositions and re-imports cost nothing |
+| `cards` | review cards (mistakes, guesses, manual) with SM-2 and FSRS state; `reviews` is their history |
+| `tags`, `collections` | game tags and saved library filters |
+| `pages` | notebook pages (Markdown with `:::shogi-view` and `:kifu[]` directives) |
+| `tsume` | imported mate problems and how each attempt went |
+| `settings` | JSON values by key (`settings.ts` has the defaults) |
+
+New columns are added in `Db`'s constructor with `ensureColumn`, so old library files upgrade in place. Restore (`restore.ts`) merges by game hash and never deletes, so every new table needs a merge rule there and a round-trip test in `test/restore.test.ts`.
+
+### Analysis pipeline
+
+1. Import stores the plies and classifies the game. If auto-analyse is on and an engine is set, the game is queued.
+2. `AnalysisQueue` walks each position with the configured limit and reuses `evals` hits.
+3. `core/grading.ts` turns evals into win-rate loss per move and grades each move (緩手 → 大悪手), plus missed mates and missed wins.
+4. Each flagged move is searched again with `verifyFactor`× the limit, and flags that don't hold up are dropped (with their unreviewed cards).
+5. Cards are made for the user's moves at or above `cardMinLevel`, and the game summary columns are filled in.
+
+Ad-hoc searches (candidate moves, Play it out, guesses, card answers) go through `analysis.searchPosition`. It uses the same engine process between queue items, so the UI never starts a second engine.
+
+### Conventions
+
+- UI text is short and bilingual where it names a shogi concept (`復習 Review`). Shogi terms stay in Japanese.
+- Evals are always stored from black's point of view and turned into the mover's view only for display.
+- Any write a phone may need must be allowed explicitly in `lan.ts`. By default the LAN gate is read-only.
+- Each feature gets at least one API test in `test/` and one step in `test/e2e/run.mjs`, which also takes the screenshot the README describes. Run `npm run typecheck && npm test && npm run e2e` before pushing.
+- Cloud sessions install dependencies through `.claude/hooks/session-start.sh`.
+
+## Roadmap
+
+Ordered by value for the daily study loop. ✅ marks items that are built.
+
+### Next
+
+1. ✅ **Study board (検討盤)** at `#/board`. A free board that isn't tied to a saved game. Start from the initial position, a pasted SFEN/USI string, or any game position ("Study board" in the game view). Play both sides; going back and playing a new move cuts the line off there. The engine looks at each new position automatically (multi-PV 3, arrows on the board), and its results are kept per position so stepping back and forth costs nothing. The line lives in the URL, so it can be bookmarked or linked from a note. From the board you can save the line as a game, add the position to a notebook, play it out, download a diagram and copy the SFEN.
+2. ✅ **Mistakes by kind of move.** Stats shows how often each kind of my moves goes wrong: drops, captures, checks, king moves, promotions and quiet moves, with the average loss and how often each is a 悪手 or worse. "I blunder with drops" is something you can practise. "I lose points in the middlegame" is too vague to act on.
+3. **Streaming analysis.** Run `go infinite` and stream `info` lines over SSE, so the study board and the game view show the eval deepening live instead of after a fixed movetime. This needs one engine owner that can take a search away from the queue and give it back.
+4. **Variations in the study board.** Keep a move tree instead of a single line, and save it as KIF 変化 (`Record` in tsshogi already supports branches). Saving back into an existing game would add the line as a branch of that game.
+5. **Position setup.** A piece palette for the study board, so positions from books and magazines can be entered without typing SFEN.
+
+### Later
+
+- **Custom review decks.** Review only cards from one opening, tag, opponent or kind of move (this would reuse the move kinds from item 2).
+- **Opponent prep sheet.** A notebook page made from a player profile: their openings against you, the positions where you score badly, and your usual mistakes against them.
+- **Paste several games at once.** `/api/import` with `text` imports only one record today. Split pasted text on record boundaries (KIF headers, CSA `V2` lines, one SFEN per line).
+- **Light theme.** The palette is in CSS variables in `styles.css`. Add a light set and follow `prefers-color-scheme`, with a setting to override it.
+- **Compare engines.** Analyse one game with a second engine and show where the two disagree.
+
+### Tech debt
+
+- `views/Game.vue` (~930 lines) and `server/library.ts` (~710 lines) do too much. Move the move list, the engine panel and the variation handling into components, and move the export code out of `Library`.
+- `app.ts` registers all routes in one function. Group them by area (`routes/cards.ts` and so on) once it gets past ~800 lines.
+- The mock engine only counts material, so grading quality is tested only by hand against a real engine.

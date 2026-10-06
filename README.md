@@ -21,6 +21,7 @@ Everything stays on your machine, in one SQLite file.
   - Variations stored in the file (変化) are marked in the move list; clicking one plays it out on the board with its comment and the engine's view.
   - Mark moves yourself with !!, !, !?, ?!, ? or ??. They show in the move list, survive backups and restores, and a move you mark ? or ?? goes into the review note even if the engine missed it.
   - You can try your own move and get an engine verdict, edit comments, search for the same position across games, and export KIF/CSA with the evals written as ShogiHome-style comments.
+- **Study board (検討盤).** A free board for any position: the initial position, a pasted SFEN, USI or kifu, or a game's line ("Study board" in the game view). Play both sides and the engine shows its top three lines with arrows on the board; click a line to play it. The line stays in the URL, so a bookmark or a link reopens it. From there you can save the line as a game, add the position to a notebook, play it out, download a diagram or copy the position.
 - **Mistake cards.** Your 悪手 and worse become cards automatically. You can also make one from any position.
   - In review you play your answer on the board. The best move, or any move the engine says is within the tolerance, counts as correct. You can replay the engine line.
   - Scheduling is SM-2, or FSRS v4.5 if you pick it in Settings. A card missed four times becomes a leech, and the review screen then asks you to write down the idea or study the game.
@@ -29,7 +30,7 @@ Everything stays on your machine, in one SQLite file.
 - **Tsume collections.** Import mate problems from tsume KIF/KI2/CSA files, SFEN lines (`<sfen> moves G*1b`) or JSON/NDJSON (as shogimap-crawler writes them) and solve them against the engine; failed ones come back first.
 - **Guess the moves.** Replay any game, your own or a pro's, and guess each move for one side. Every guess is graded by the engine against the move actually played, with a running score of matches and average loss. A bad guess can become a review card.
 - **Mates from my games.** Every analysed position where the side to move had a forced mate becomes a puzzle, with the ones you missed listed first. You solve it on the board while the engine defends, and it tells you the moment a move lets the king escape.
-- **Stats.** Win rate by side, opening, opponent's opening, castle, matchup, time control and opponent, plus a monthly trend, where in the game you lose points, whether fast moves go wrong more often, and how often you convert clearly won positions (with the games you let slip).
+- **Stats.** Win rate by side, opening, opponent's opening, castle, matchup, time control and opponent, plus a monthly trend, where in the game you lose points, whether fast moves go wrong more often, which kinds of move go wrong (drops, captures, checks, promotions, king moves, quiet moves), and how often you convert clearly won positions (with the games you let slip).
 - **Opening book.** Point Settings at a YaneuraOu-format book (.db) and games show which moves were book moves and where you left the book, with the book's choices there.
 - **Explorer.** Walk the opening tree of your own games: each next move with how often you played it, your score after it, your average loss, and the engine's best move. From a player's profile, "Openings against them" narrows the tree to your games with that opponent, to prepare for the next one.
 - **Opening drill.** The opening positions you reach most often with you to move, as a quiz. A move counts as correct if it's a book move, the engine's choice, or one you play there without losing points. It can filter to the positions where your usual move is weak.
@@ -102,6 +103,8 @@ src/electron/   Electron shell: starts the server and opens a window
 src/renderer/   Vue 3 UI; vendor/shogihome holds the board component
 tools/          build, mock engine, classifier rule converter, self-play generator
 ```
+
+For the architecture and the roadmap, see [docs/DESIGN.md](docs/DESIGN.md).
 
 ## Licenses
 
