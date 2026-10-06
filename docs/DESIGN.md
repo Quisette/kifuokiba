@@ -73,7 +73,7 @@ Ordered by value for the daily study loop. ✅ marks items that are built.
 
 1. ✅ **Study board (検討盤)** at `#/board`. A free board that isn't tied to a saved game. Start from the initial position, a pasted SFEN/USI string, or any game position ("Study board" in the game view). Play both sides; going back and playing a new move cuts the line off there. The engine looks at each new position automatically (multi-PV 3, arrows on the board), and its results are kept per position so stepping back and forth costs nothing. The line lives in the URL, so it can be bookmarked or linked from a note. From the board you can save the line as a game, add the position to a notebook, play it out, download a diagram and copy the SFEN.
 2. ✅ **Mistakes by kind of move.** Stats shows how often each kind of my moves goes wrong: drops, captures, checks, king moves, promotions and quiet moves, with the average loss and how often each is a 悪手 or worse. "I blunder with drops" is something you can practise. "I lose points in the middlegame" is too vague to act on.
-3. **Streaming analysis.** Run `go infinite` and stream `info` lines over SSE, so the study board and the game view show the eval deepening live instead of after a fixed movetime. This needs one engine owner that can take a search away from the queue and give it back.
+3. ✅ **Streaming analysis.** Run `go infinite` and stream `info` lines over SSE, so the study board and the game view show the eval deepening live instead of after a fixed movetime. This needs one engine owner that can take a search away from the queue and give it back.
 4. **Variations in the study board.** Keep a move tree instead of a single line, and save it as KIF 変化 (`Record` in tsshogi already supports branches). Saving back into an existing game would add the line as a branch of that game.
 5. **Position setup.** A piece palette for the study board, so positions from books and magazines can be entered without typing SFEN.
 
@@ -84,6 +84,17 @@ Ordered by value for the daily study loop. ✅ marks items that are built.
 - **Paste several games at once.** `/api/import` with `text` imports only one record today. Split pasted text on record boundaries (KIF headers, CSA `V2` lines, one SFEN per line).
 - **Light theme.** The palette is in CSS variables in `styles.css`. Add a light set and follow `prefers-color-scheme`, with a setting to override it.
 - **Compare engines.** Analyse one game with a second engine and show where the two disagree.
+
+## Feature plans
+
+Each feature gets a short plan here before it is built. The plan stays afterwards as a record of what was decided.
+
+### Streaming analysis (roadmap 3)
+
+- **Engine.** `UsiEngine.search` takes `{ infinite: true }`, which sends `go infinite`, and an `AbortSignal`. Aborting a search that hasn't started yet drops it from the engine queue. Aborting a running search sends `stop`, and the engine still answers with `bestmove`, so the queue stays in order. The background game queue keeps its place: it waits for the live search to finish, as it already does for one-off searches.
+- **Server.** `GET /api/live?sfen=…&moves=…&multipv=3&maxMs=…` is an SSE stream for one search. It sends a `lines` event at most 5 times a second, with the lines in black's view plus Japanese text, depth, nodes and elapsed time, then `done` with the best move. The server sends `stop` at `maxMs`, capped at 5 minutes. If the client closes the stream, the search is aborted. It's a GET, so phones may use it like `analyze-position`.
+- **Client.** `renderer/live.ts` has a small `liveSearch()` helper around `EventSource`. The study board uses it in place of the fixed-time search. Its time setting becomes a maximum (3 s, 10 s, 30 s, 5 min), a "Stop" button ends the search early, and the eval shows its depth as it climbs. Completed searches are still cached per position. The game view's "Candidate moves" streams the same way.
+- **Tests.** The mock engine answers `go infinite` with an `info` line every 50 ms at rising depth until `stop`. An API test reads the stream, checks that depth rises and that closing the stream frees the engine for the next search. The e2e test checks that the study board shows a depth.
 
 ### Tech debt
 

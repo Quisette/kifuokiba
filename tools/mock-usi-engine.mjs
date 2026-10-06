@@ -75,13 +75,32 @@ function setPosition(args) {
   position = pos;
 }
 
-function go() {
+// "go infinite": the same answer as go(), sent again every 50 ms at a rising
+// depth until "stop", like a real engine deepening its search.
+let infinite = null;
+function goInfinite() {
   const moves = legalMoves(position);
-  if (!moves.length) {
-    send("info depth 1 score mate -0 pv");
-    send("bestmove resign");
-    return;
-  }
+  if (!moves.length) return go();
+  let depth = 1;
+  const lines = scoreMoves(moves);
+  const tick = () => {
+    for (let k = 0; k < Math.min(multipv, lines.length); k++) {
+      const { m, score } = lines[k];
+      send(`info depth ${depth} seldepth ${depth} multipv ${k + 1} score cp ${score} nodes ${depth * moves.length * 40} pv ${m.usi}`);
+    }
+    depth++;
+  };
+  tick();
+  infinite = { timer: setInterval(tick, 50), best: lines[0].m.usi };
+}
+function stopInfinite() {
+  if (!infinite) return;
+  clearInterval(infinite.timer);
+  send(`bestmove ${infinite.best}`);
+  infinite = null;
+}
+
+function scoreMoves(moves) {
   const scored = moves.map((m) => {
     const p = position.clone();
     p.doMove(m);
@@ -94,7 +113,17 @@ function go() {
     }
     return { m, score: -oppBest };
   });
-  scored.sort((a, b) => b.score - a.score);
+  return scored.sort((a, b) => b.score - a.score);
+}
+
+function go() {
+  const moves = legalMoves(position);
+  if (!moves.length) {
+    send("info depth 1 score mate -0 pv");
+    send("bestmove resign");
+    return;
+  }
+  const scored = scoreMoves(moves);
   for (let k = 0; k < Math.min(multipv, scored.length); k++) {
     const { m, score } = scored[k];
     send(`info depth 2 seldepth 2 multipv ${k + 1} score cp ${score} nodes ${moves.length * 40} pv ${m.usi}`);
@@ -144,8 +173,15 @@ rl.on("line", (raw) => {
         goMate();
         break;
       }
+      if (args.startsWith("infinite")) {
+        goInfinite();
+        break;
+      }
       if (delayMs) setTimeout(go, delayMs);
       else go();
+      break;
+    case "stop":
+      stopInfinite();
       break;
     case "quit":
       process.exit(0);

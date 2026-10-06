@@ -7,7 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import { Db } from "./db.js";
 import { Library, GameFilter } from "./library.js";
-import { AnalysisQueue } from "./analysis.js";
+import { AnalysisQueue, toBlackView } from "./analysis.js";
 import { Cards } from "./cards.js";
 import { computeStats, playerProfile, similarGames } from "./stats.js";
 import { Pages } from "./pages.js";
@@ -22,7 +22,7 @@ import { mergeBackup } from "./restore.js";
 import { positionSvg } from "../core/diagram.js";
 import { loadSettings, saveSettings, AppSettings } from "./settings.js";
 import { RecordFileFormat } from "../core/recordFile.js";
-import { UsiEngine } from "./engine/usi.js";
+import { SearchLine, UsiEngine } from "./engine/usi.js";
 import { InitialPositionSFEN, Position } from "tsshogi";
 import { explore } from "./explorer.js";
 import { syncLishogi } from "./fetchers/sync.js";
@@ -544,6 +544,70 @@ export function createApp(opts: AppOptions) {
     req.on("close", () => sseClients.delete(res));
   };
 
+  // One streamed search: "lines" events while the engine thinks, then "done".
+  // Closing the stream stops the search.
+  const LIVE_MAX_MS = 5 * 60_000;
+  const handleLive = async (res: http.ServerResponse, url: URL) => {
+    const q = url.searchParams;
+    const pos = Position.newBySFEN(q.get("sfen") ?? "");
+    const moves = (q.get("moves") ?? "").split(/\s+/).filter(Boolean);
+    let ok = !!pos;
+    for (const u of moves) {
+      const m = ok ? pos!.createMoveByUSI(u) : null;
+      if (!m || !pos!.doMove(m)) ok = false;
+    }
+    if (!ok) throw new HttpError(400, "bad position");
+    const sign = pos!.color === "black" ? 1 : -1;
+    const sfenAfter = pos!.sfen;
+    const position = `sfen ${q.get("sfen")}` + (moves.length ? ` moves ${moves.join(" ")}` : "");
+    const view = (lines: SearchLine[]) =>
+      lines.map((l) => ({
+        multipv: l.multipv,
+        pv: l.pv,
+        depth: l.depth,
+        nodes: l.nodes,
+        scoreCP: l.scoreCP,
+        score: l.scoreCP !== undefined ? sign * l.scoreCP : undefined,
+        mate: l.scoreMate !== undefined ? sign * l.scoreMate : undefined,
+        text: Library.pvText(sfenAfter, l.pv.join(" ")),
+      }));
+    const abort = new AbortController();
+    res.on("close", () => abort.abort());
+    res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
+    const send = (event: string, data: unknown) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    const t0 = Date.now();
+    // At most five updates a second; the last one is always sent with "done".
+    let last = 0;
+    let pending: SearchLine[] | null = null;
+    let flushTimer: ReturnType<typeof setTimeout> | undefined;
+    const flush = () => {
+      flushTimer = undefined;
+      if (!pending) return;
+      send("lines", { lines: view(pending), elapsedMs: Date.now() - t0 });
+      pending = null;
+      last = Date.now();
+    };
+    try {
+      const r = await analysis.liveSearch(position, {
+        multipv: Math.min(Math.max(Number(q.get("multipv")) || 1, 1), 5),
+        maxMs: Math.min(Math.max(Number(q.get("maxMs")) || 10_000, 100), LIVE_MAX_MS),
+        signal: abort.signal,
+        onLines: (lines) => {
+          pending = lines;
+          if (!flushTimer) flushTimer = setTimeout(flush, Math.max(0, 200 - (Date.now() - last)));
+        },
+      });
+      clearTimeout(flushTimer);
+      pending = null;
+      send("done", { ...toBlackView(sfenAfter, r), lines: view(r.lines), elapsedMs: Date.now() - t0 });
+    } catch (e) {
+      clearTimeout(flushTimer);
+      if (!abort.signal.aborted) send("failed", { error: e instanceof Error ? e.message : String(e) });
+    } finally {
+      res.end();
+    }
+  };
+
   const serveStatic = async (url: URL, res: http.ServerResponse) => {
     if (!opts.staticDir) {
       res.writeHead(404).end();
@@ -569,6 +633,7 @@ export function createApp(opts: AppOptions) {
     const url = new URL(req.url ?? "/", "http://localhost");
     try {
       if (url.pathname === "/api/events") return handleEvents(req, res);
+      if (url.pathname === "/api/live" && req.method === "GET") return await handleLive(res, url);
       if (!url.pathname.startsWith("/api/")) return await serveStatic(url, res);
       for (const [method, re, h] of routes) {
         const m = re.exec(url.pathname);

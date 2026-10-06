@@ -530,3 +530,66 @@ describe("derived-result cache", () => {
     db.close();
   });
 });
+
+describe("streamed analysis", () => {
+  // Reads SSE events from /api/live until `until` says stop (then aborts) or the stream ends.
+  const stream = async (q: string, until?: (event: string, data: any) => boolean) => {
+    const ctl = new AbortController();
+    const r = await fetch(`${base}/api/live?${q}`, { signal: ctl.signal });
+    expect(r.headers.get("content-type")).toContain("text/event-stream");
+    const events: { event: string; data: any }[] = [];
+    const reader = r.body!.getReader();
+    let buf = "";
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += new TextDecoder().decode(value);
+        let i;
+        while ((i = buf.indexOf("\n\n")) >= 0) {
+          const chunk = buf.slice(0, i);
+          buf = buf.slice(i + 2);
+          const event = /^event: (.*)$/m.exec(chunk)?.[1] ?? "";
+          const data = JSON.parse(/^data: (.*)$/m.exec(chunk)?.[1] ?? "null");
+          events.push({ event, data });
+          if (until?.(event, data)) {
+            ctl.abort();
+            return events;
+          }
+        }
+      }
+    } catch (e) {
+      if (!ctl.signal.aborted) throw e;
+    }
+    return events;
+  };
+  const START = encodeURIComponent("lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1");
+
+  it("streams deepening lines and finishes at the time limit", async () => {
+    const ev = await stream(`sfen=${START}&moves=7g7f&multipv=2&maxMs=600`);
+    const lines = ev.filter((e) => e.event === "lines");
+    expect(lines.length).toBeGreaterThanOrEqual(2);
+    const depths = lines.map((e) => e.data.lines[0].depth);
+    expect(depths.at(-1)).toBeGreaterThan(depths[0]);
+    expect(lines[0].data.lines).toHaveLength(2);
+    expect(lines[0].data.lines[0].text).toMatch(/^△/);
+    const done = ev.at(-1)!;
+    expect(done.event).toBe("done");
+    expect(done.data.best).toMatch(/^[1-9][a-i]/);
+    expect(done.data.elapsedMs).toBeGreaterThanOrEqual(500);
+  });
+
+  it("stops the engine when the stream is closed", async () => {
+    const t0 = Date.now();
+    await stream(`sfen=${START}&maxMs=60000`, (event, data) => event === "lines" && data.lines[0].depth >= 3);
+    // The engine is free again: a normal search answers long before the 60 s limit.
+    const r = await api("POST", "/api/analyze-position", { sfen: decodeURIComponent(START), movetimeMs: 50 });
+    expect(r.best).toBeTruthy();
+    expect(Date.now() - t0).toBeLessThan(10_000);
+  });
+
+  it("rejects a bad position", async () => {
+    const r = await fetch(`${base}/api/live?sfen=nonsense`);
+    expect(r.status).toBe(400);
+  });
+});

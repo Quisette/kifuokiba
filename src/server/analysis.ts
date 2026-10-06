@@ -4,7 +4,7 @@
 import { EventEmitter } from "node:events";
 import { Position } from "tsshogi";
 import { Library } from "./library.js";
-import { UsiEngine, SearchLimit, SearchResult } from "./engine/usi.js";
+import { UsiEngine, SearchLimit, SearchLine, SearchResult } from "./engine/usi.js";
 import { EngineSettings } from "./settings.js";
 
 export type AnalysisStatus = {
@@ -116,6 +116,26 @@ export class AnalysisQueue extends EventEmitter {
     const e = await this.getEngine();
     const r = await e.search(position, limit ?? (s.nodes ? { nodes: s.nodes } : { movetimeMs: s.movetimeMs }), { multipv });
     return { ...toBlackView(sfenAfter, r), lines: r.lines, engine: e.name };
+  }
+
+  /**
+   * A search that runs until `maxMs` or until the signal aborts it, reporting
+   * its lines (side to move's view) as the engine deepens.
+   */
+  async liveSearch(position: string, opts: { multipv: number; maxMs: number; signal: AbortSignal; onLines: (lines: SearchLine[]) => void }) {
+    const e = await this.getEngine();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await e.search(position, { infinite: true }, {
+        multipv: opts.multipv,
+        signal: opts.signal,
+        // The time limit counts from when the engine starts, not from the wait in its queue.
+        onStart: () => (timer = setTimeout(() => e.stop(), opts.maxMs)),
+        onLines: opts.onLines,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   /**

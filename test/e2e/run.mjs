@@ -134,6 +134,10 @@ try {
   await page.waitForTimeout(300);
   await page.click("text=詰みチェック");
   await page.waitForSelector(".mate-result", { timeout: 20000 });
+  await page.click("button:has-text('Candidate moves')");
+  await page.waitForFunction(() => /depth [2-9]/.test(document.querySelector(".mdepth")?.textContent ?? ""), null, { timeout: 20000 });
+  check((await page.$$(".multipv .mrow")).length >= 1, "candidate moves stream with a rising depth");
+  await page.click("button:has-text('Stop')");
   check(/手詰|No forced mate|no mate search|without an answer/.test(await page.textContent(".mate-result")), "mate check answers");
   await shot("03-game");
   check((await page.textContent(".here")).includes("手目"), "keyboard jumps to a mistake");
@@ -219,6 +223,11 @@ try {
   await page.click(".moves li[data-index=\"2\"]");
   await page.waitForSelector(".lrow", { timeout: 20000 });
   check((await page.$$(".lrow")).length >= 1, "study board shows engine lines");
+  await page.waitForFunction(() => /depth [2-9]/.test(document.querySelector(".depth")?.textContent ?? ""), null, { timeout: 20000 });
+  check(true, "study board streams a deepening search");
+  await page.click(".depth button:has-text('Stop')");
+  await page.waitForSelector(".depth button:has-text('Think again')");
+  check(true, "stopping the search keeps its lines");
   await page.click(".lrow >> nth=0");
   await page.waitForFunction(() => document.querySelector(".moves li.on")?.getAttribute("data-index") === "3");
   check(/[?&]moves=/.test(await page.evaluate(() => location.hash)), "playing on the study board keeps the line in the URL");

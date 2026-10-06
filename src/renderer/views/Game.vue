@@ -165,11 +165,11 @@
               <span>{{ l.multipv }}. {{ l.text.split(" ")[0] }}</span>
               <span class="muted">{{ evalText(l.score ?? null, l.mate ?? null) }}</span>
             </div>
+            <div v-if="multiDepth" class="muted mdepth">depth {{ multiDepth }}{{ multiBusy ? " · thinking…" : "" }}</div>
           </div>
           <div class="row" style="margin-top: 10px">
-            <button type="button" class="btn small" :disabled="multiBusy" @click="candidates">
-              {{ multiBusy ? "Thinking…" : "Candidate moves" }}
-            </button>
+            <button v-if="multiBusy" type="button" class="btn small" @click="stopCandidates">Stop</button>
+            <button v-else type="button" class="btn small" @click="candidates">Candidate moves</button>
             <button type="button" class="btn small" :disabled="mateBusy" title="Ask the engine for a forced mate from this position" @click="mateCheck">
               {{ mateBusy ? "Searching…" : "詰みチェック Mate?" }}
             </button>
@@ -274,6 +274,7 @@ import { go, route } from "../router";
 import ShogiBoard from "../components/ShogiBoard.vue";
 import EvalGraph from "../components/EvalGraph.vue";
 import AddToNotebook from "../components/AddToNotebook.vue";
+import { liveSearch } from "../live";
 
 const props = defineProps<{ id: number }>();
 const game = ref<GameDetail | null>(null);
@@ -372,7 +373,9 @@ const hasEvals = computed(() => game.value!.plies.some((p) => p.score !== null |
 watch(cursor, () => {
   commentDraft.value = cur.value?.comment ?? "";
   variation.value = [];
+  stopCandidates();
   multi.value = [];
+  multiDepth.value = 0;
   posHits.value = null;
   void nextTick(() => moveList.value?.querySelector(".on")?.scrollIntoView({ block: "nearest" }));
 });
@@ -513,17 +516,36 @@ async function mateCheck() {
   }
 }
 
-async function candidates() {
-  multiBusy.value = true;
-  try {
-    const r = await api.post<{ lines: (Line & { scoreCP?: number })[] }>("/api/analyze-position", { sfen: cur.value.sfen, multipv: 3 });
-    multi.value = r.lines.map((l) => ({ ...l, scoreSide: l.scoreCP }));
-  } catch (e) {
-    toast(String(e));
-  } finally {
-    multiBusy.value = false;
-  }
+// Streamed for up to CANDIDATE_MS; the lines deepen on screen until then or until Stop.
+const CANDIDATE_MS = 10_000;
+const multiDepth = ref(0);
+let stopMulti: (() => void) | null = null;
+function stopCandidates() {
+  stopMulti?.();
+  stopMulti = null;
+  multiBusy.value = false;
 }
+function candidates() {
+  stopCandidates();
+  multiBusy.value = true;
+  const sfen = cur.value.sfen;
+  stopMulti = liveSearch(
+    { sfen, multipv: 3, maxMs: CANDIDATE_MS },
+    {
+      update: (r) => {
+        if (cur.value.sfen !== sfen) return;
+        multi.value = r.lines.map((l) => ({ ...l, scoreSide: l.scoreCP }));
+        multiDepth.value = r.lines[0]?.depth ?? 0;
+        if (r.done) stopCandidates();
+      },
+      error: (msg) => {
+        toast(msg);
+        stopCandidates();
+      },
+    },
+  );
+}
+onUnmounted(stopCandidates);
 
 const resultText = computed(() => {
   const g = game.value!;
@@ -888,6 +910,9 @@ async function findPosition() {
   font-size: 13px;
   color: var(--muted);
   line-height: 1.6;
+}
+.mdepth {
+  font-size: 12px;
 }
 .multipv .mrow {
   display: flex;

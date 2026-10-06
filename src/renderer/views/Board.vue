@@ -64,9 +64,15 @@
           <template v-else>
             <div v-if="current" class="big">
               <span class="serif">{{ moverWin }}%</span>
-              <span class="muted">{{ evalText(current.score ?? null, current.mate ?? null) }} · {{ sideToMove === "black" ? "☗" : "☖" }} to move</span>
+              <span class="muted">{{ evalText(topScore ?? null, topMate ?? null) }} · {{ sideToMove === "black" ? "☗" : "☖" }} to move</span>
             </div>
-            <div v-else class="muted">{{ thinking ? "Thinking…" : "No evaluation yet." }}</div>
+            <div v-else class="muted">{{ running ? "Thinking…" : "No evaluation yet." }}</div>
+            <div class="depth muted">
+              <template v-if="current?.lines[0]?.depth">depth {{ current.lines[0].depth }} · {{ (current.elapsedMs / 1000).toFixed(1) }}s</template>
+              <span v-if="running" class="pulse" aria-hidden="true"></span>
+              <button v-if="running" type="button" class="btn small" @click="stopSearch">Stop</button>
+              <button v-else-if="current && !current.done" type="button" class="btn small" @click="restart">Think again</button>
+            </div>
             <div v-if="current?.lines.length" class="lines">
               <button
                 v-for="l in current.lines"
@@ -81,12 +87,12 @@
               </button>
             </div>
             <label class="field">
-              Time per position
-              <select v-model.number="movetimeMs">
-                <option :value="500">0.5 s</option>
-                <option :value="1000">1 s</option>
+              Think for up to
+              <select v-model.number="maxMs">
                 <option :value="3000">3 s</option>
                 <option :value="10000">10 s</option>
+                <option :value="30000">30 s</option>
+                <option :value="300000">5 min</option>
               </select>
             </label>
             <div v-if="engineError" class="error">{{ engineError }}</div>
@@ -120,9 +126,8 @@ import { api, evalText, live, toast, winRate } from "../api";
 import { route } from "../router";
 import ShogiBoard from "../components/ShogiBoard.vue";
 import AddToNotebook from "../components/AddToNotebook.vue";
+import { liveSearch, LiveResult } from "../live";
 
-type Line = { multipv: number; pv: string[]; text: string; score?: number; mate?: number; scoreCP?: number };
-type Search = { score?: number; mate?: number; lines: Line[] };
 type Step = { sfen: string; usi: string; text: string; ply: number; prevSfen: string };
 
 const STANDARD = InitialPositionSFEN.STANDARD;
@@ -233,50 +238,78 @@ watch([start, moves, cursor, flip], () => {
   history.replaceState(null, "", "#/board" + (s ? "?" + s : ""));
 });
 
-// ---- engine: one search at a time, results kept per position and time
+// ---- engine: one streamed search at a time; finished (or stopped) results are kept per position
 const engineSet = ref(true);
-const movetimeMs = ref(1000);
-const cache = ref(new Map<string, Search>());
-const thinking = ref(false);
+const maxMs = ref(10_000);
+const cache = ref(new Map<string, LiveResult>());
+const partial = ref<{ key: string; result: LiveResult } | null>(null);
+const running = ref(false);
 const engineError = ref("");
-const cacheKey = (sfen: string) => `${movetimeMs.value}|${sfen.split(" ").slice(0, 3).join(" ")}`;
+const cacheKey = (sfen: string) => `${maxMs.value}|${sfen.split(" ").slice(0, 3).join(" ")}`;
 const evalOf = (sfen: string) => cache.value.get(cacheKey(sfen));
-const current = computed(() => evalOf(shown.value.sfen));
+const current = computed<LiveResult | undefined>(() => {
+  const key = cacheKey(shown.value.sfen);
+  return cache.value.get(key) ?? (partial.value?.key === key ? partial.value.result : undefined);
+});
+const topScore = computed(() => current.value?.score ?? current.value?.lines[0]?.score);
+const topMate = computed(() => current.value?.mate ?? current.value?.lines[0]?.mate);
 
-async function analyse() {
-  if (!engineSet.value || thinking.value) return;
-  const sfen = shown.value.sfen;
-  const key = cacheKey(sfen);
+let stopStream: (() => void) | null = null;
+function cancel() {
+  stopStream?.();
+  stopStream = null;
+  running.value = false;
+}
+function analyse() {
+  cancel();
+  if (!engineSet.value) return;
+  const key = cacheKey(shown.value.sfen);
   if (cache.value.has(key)) return;
-  thinking.value = true;
   engineError.value = "";
-  try {
-    const r = await api.post<Search>("/api/analyze-position", { sfen, multipv: 3, movetimeMs: movetimeMs.value });
-    cache.value.set(key, r);
-  } catch (e) {
-    engineError.value = String(e instanceof Error ? e.message : e);
-  } finally {
-    thinking.value = false;
-  }
-  // The user may have moved on while the engine was thinking.
-  if (!engineError.value && cacheKey(shown.value.sfen) !== key) void analyse();
+  running.value = true;
+  // The whole line goes to the engine so it can see repetitions.
+  stopStream = liveSearch(
+    { sfen: start.value, moves: moves.value.slice(0, cursor.value), multipv: 3, maxMs: maxMs.value },
+    {
+      update: (r) => {
+        partial.value = { key, result: r };
+        if (r.done) {
+          cache.value.set(key, r);
+          running.value = false;
+          stopStream = null;
+        }
+      },
+      error: (msg) => {
+        engineError.value = msg;
+        running.value = false;
+        stopStream = null;
+      },
+    },
+  );
+}
+// Stopping early keeps what the engine found so far, shown with "Think again".
+function stopSearch() {
+  cancel();
+}
+function restart() {
+  cache.value.delete(cacheKey(shown.value.sfen));
+  analyse();
 }
 let timer: ReturnType<typeof setTimeout> | undefined;
-watch([() => shown.value.sfen, movetimeMs], () => {
+watch([() => shown.value.sfen, maxMs], () => {
   clearTimeout(timer);
-  // Wait a moment so stepping quickly through a line doesn't queue a search per move.
-  timer = setTimeout(() => void analyse(), 250);
+  cancel();
+  // Wait a moment so stepping quickly through a line doesn't start a search per move.
+  timer = setTimeout(analyse, 250);
 });
 
 const moverWin = computed(() => {
-  const c = current.value;
-  const r = c ? winRate(c.score ?? null, c.mate ?? null) : null;
+  const r = current.value ? winRate(topScore.value ?? null, topMate.value ?? null) : null;
   if (r === null) return "–";
   return Math.round(sideToMove.value === "black" ? r : 100 - r);
 });
 const barPct = computed(() => {
-  const c = current.value;
-  return (c ? winRate(c.score ?? null, c.mate ?? null) : null) ?? 50;
+  return (current.value ? winRate(topScore.value ?? null, topMate.value ?? null) : null) ?? 50;
 });
 const arrows = computed(() => (current.value?.lines ?? []).filter((l) => l.pv[0]).map((l) => ({ usi: l.pv[0], score: l.scoreCP })));
 
@@ -330,11 +363,12 @@ onMounted(async () => {
   } catch {
     engineSet.value = false;
   }
-  void analyse();
+  analyse();
 });
 onUnmounted(() => {
   window.removeEventListener("keydown", onKey);
   clearTimeout(timer);
+  cancel();
 });
 
 // Keep the current move in view in a long line.
@@ -476,6 +510,30 @@ watch(cursor, (i) => {
 }
 .big .serif {
   font-size: 32px;
+}
+.depth {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  min-height: 28px;
+}
+.pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--gold);
+  animation: pulse 1s ease-in-out infinite;
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pulse {
+    animation: none;
+  }
 }
 .lines {
   display: flex;
